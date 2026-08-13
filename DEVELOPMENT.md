@@ -2,7 +2,7 @@
 
 This repository is the long-term development source for the Retail Performance Dashboard.
 
-- Development website: <https://retail-performance-dashboard.vercel.app>
+- Development website: <https://retail-performance-dashboard-dev.vercel.app>
 - Hosting: Vercel
 - Source repository: <https://github.com/ellaaaa2023-sys/retail-performance-dashboard> (private)
 
