@@ -1,0 +1,14 @@
+.DS_Store
+.vercel/
+node_modules/
+dist/
+*.log
+*.zip
+SHA256SUMS.txt
+
+# Never commit real company workbooks. Only the named mock workbook is allowed.
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+!sample_data/Mock_Counter_PnL.xlsx

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Counter Performance Dashboard</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script defer src="./libs/xlsx.full.min.js"></script>
+  <script defer src="./libs/echarts.min.js"></script>
+  <script defer src="./js/app.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="brand-rail" aria-label="Dashboard navigation">
+    <div class="brand-block">
+      <div class="brand-name">L'ORÉAL</div>
+      <div class="brand-unit">Finance Analytics</div>
+    </div>
+    <nav class="rail-nav" aria-label="Analysis flow">
+      <button class="rail-link active" data-tab="overview" type="button"><span>01</span><strong>Executive Overview</strong><small>What changed?</small></button>
+      <button class="rail-link" data-tab="variance" type="button"><span>02</span><strong>P&amp;L Variance</strong><small>Why did it change?</small></button>
+      <button class="rail-link" data-tab="portfolio" type="button"><span>03</span><strong>Store Portfolio</strong><small>Where did it happen?</small></button>
+      <button class="rail-link" data-tab="detail" type="button"><span>04</span><strong>Store Detail</strong><small>What happened?</small></button>
+    </nav>
+    <div class="analysis-flow" aria-label="Analysis path">
+      <span>OVERVIEW</span><i></i><span>DRIVER</span><i></i><span>STORE</span><i></i><span>DETAIL</span>
+    </div>
+    <div class="rail-status"><span class="secure-dot"></span><div><strong>Local mode</strong><small>No data upload</small></div></div>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <div class="title">
+        <div class="page-path">FINANCE <span>/</span> COUNTER P&amp;L REVIEW</div>
+        <h1>Counter Performance Dashboard</h1>
+        <p>Half-year performance review · Overview to store-level P&amp;L <span class="dev-chip">Development · Mock Data Only</span></p>
+      </div>
+      <div class="topbar-tools">
+        <div class="local-badge"><span class="secure-dot"></span><div><strong>Offline workspace</strong><small>Browser-only processing</small></div></div>
+        <div class="actions">
+          <button class="button secondary" id="settingsBtn" type="button">Data Settings</button>
+          <button class="button secondary" id="clearBtn" type="button" disabled>Clear Data</button>
+          <label class="upload-dropzone" id="uploadDropZone" for="fileInput" tabindex="0" aria-label="Drop a mock Excel workbook here or click to choose a file">
+            <span class="upload-drop-icon" aria-hidden="true">↓</span>
+            <span class="upload-drop-copy"><strong>Drop Mock Excel here</strong><small>Development only · no real company data</small></span>
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.csv">
+          </label>
+        </div>
+      </div>
+    </header>
+
+    <section class="notice info" id="notice" aria-live="polite">
+      <div><strong>No workbook loaded</strong><span>Select a local Excel file. Workbook values stay in this browser session.</span></div>
+    </section>
+
+    <section class="context-bar is-disabled" id="contextBar" aria-label="Review context">
+      <div class="context-primary">
+        <div class="field period-field"><label for="yearSelect">Year</label><select id="yearSelect" disabled><option>—</option></select></div>
+        <div class="field period-field"><label for="reviewSelect">Review Period</label><select id="reviewSelect" disabled><option>—</option></select></div>
+        <div class="field comparison-field"><label for="comparisonSelect">Comparison</label><select id="comparisonSelect" disabled><option value="ly">vs Last Year</option><option value="previous">vs Previous Review</option></select></div>
+        <div class="period-summary" id="periodSummary"><span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong></div>
+      </div>
+      <div class="context-filters">
+        <div class="field"><label for="regionFilter">Region</label><select id="regionFilter" disabled><option value="">All Regions</option></select></div>
+        <div class="field"><label for="cityFilter">City</label><select id="cityFilter" disabled><option value="">All Cities</option></select></div>
+        <div class="field"><label for="channelFilter">Channel</label><select id="channelFilter" disabled><option value="">All Channels</option></select></div>
+        <div class="field"><label for="typeFilter">Store Type</label><select id="typeFilter" disabled><option value="">All Types</option></select></div>
+        <div class="field"><label for="statusFilter">Status</label><select id="statusFilter" disabled><option value="">All Status</option></select></div>
+        <button class="button secondary compact" id="resetFiltersBtn" type="button" disabled>Reset</button>
+      </div>
+    </section>
+
+    <section class="tab-panel active" id="tab-overview" data-panel="overview">
+      <div class="page-heading"><div><span class="section-kicker">01 · EXECUTIVE OVERVIEW</span><h2>Portfolio performance at a glance</h2></div><p>Current review versus the selected comparison period</p></div>
+      <section class="kpi-grid primary-kpis" id="primaryKpis" aria-label="Primary financial KPIs"></section>
+      <section class="kpi-grid secondary-kpis" id="secondaryKpis" aria-label="Supporting KPIs"></section>
+      <section class="overview-grid">
+        <article class="card timeline-card">
+          <div class="card-head">
+            <div><div class="card-title">Review Timeline</div><div class="card-sub" id="timelineSub">Discrete half-year reviews; selected comparison is highlighted</div></div>
+            <div class="segmented" id="timelineMetric" aria-label="Timeline metric">
+              <button class="active" data-value="netSales" type="button">Net Sales</button><button data-value="grossMargin" type="button">Gross Margin</button><button data-value="contribution" type="button">Customer Contribution</button><button data-value="operatingProfit" type="button">Operating Profit</button>
+            </div>
+          </div>
+          <div id="timelineChart" class="chart chart-timeline"><div class="chart-empty">Upload a workbook to view analysis</div></div>
+        </article>
+        <article class="card insight-card">
+          <div class="card-head"><div><div class="card-title">Management Signals</div><div class="card-sub">Rule-based observations from the selected review</div></div><span class="rule-badge">NO AI</span></div>
+          <div class="insight-list" id="overviewInsights"><div class="empty-state">No analysis available</div></div>
+        </article>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="tab-variance" data-panel="variance">
+      <div class="page-heading"><div><span class="section-kicker">02 · P&amp;L VARIANCE ANALYSIS</span><h2>Identify the accounts driving performance</h2></div><p>Click a driver to locate the responsible stores</p></div>
+      <div class="metric-selector"><span>Analyze</span><div class="segmented" id="varianceMetric"><button data-value="netSales" type="button">Net Sales</button><button data-value="grossMargin" type="button">Gross Margin</button><button data-value="contribution" type="button">Customer Contribution</button><button class="active" data-value="operatingProfit" type="button">Operating Profit</button></div></div>
+      <section class="variance-top">
+        <article class="card bridge-card"><div class="card-head"><div><div class="card-title">Operating Profit Variance Bridge</div><div class="card-sub" id="bridgeSub">Reconciled P&amp;L movements from LY OP to Current OP</div></div><div class="reconcile" id="bridgeReconcile">—</div></div><div id="bridgeChart" class="chart chart-bridge"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+        <article class="card insight-card"><div class="card-head"><div><div class="card-title">Variance Readout</div><div class="card-sub" id="varianceInsightSub">Selected KPI context</div></div></div><div class="insight-list" id="varianceInsights"><div class="empty-state">No analysis available</div></div></article>
+      </section>
+      <section class="driver-grid">
+        <article class="card driver-table-card">
+          <div class="card-head"><div><div class="card-title" id="driverTitle">Operating Profit Driver Analysis</div><div class="card-sub">Amounts in KRMB · click a row to continue to Store Portfolio</div></div></div>
+          <div class="table-wrap"><table class="data-table driver-table"><thead><tr><th>Driver</th><th>Current</th><th>Comparison</th><th>Variance</th><th>Variance %</th><th>Share of Movement</th><th></th></tr></thead><tbody id="driverTableBody"></tbody></table></div>
+        </article>
+        <div class="driver-rank-stack">
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Positive Drivers</div><div class="card-sub">Largest positive P&amp;L impacts</div></div></div><div class="rank-list" id="positiveDrivers"></div></article>
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Negative Drivers</div><div class="card-sub">Largest negative P&amp;L impacts</div></div></div><div class="rank-list" id="negativeDrivers"></div></article>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="tab-portfolio" data-panel="portfolio">
+      <div class="page-heading"><div><span class="section-kicker">03 · STORE PORTFOLIO</span><h2>Locate where the variance happened</h2></div><p id="portfolioContext">Current portfolio view</p></div>
+      <section class="portfolio-toolbar">
+        <div class="segmented" id="portfolioView"><button class="active" data-value="quadrants" type="button">Quadrants</button><button data-value="productivity" type="button">Productivity</button><button data-value="concentration" type="button">Variance Concentration</button></div>
+        <div class="toolbar-right">
+          <div class="segmented small" id="snapshotToggle"><button class="active" data-value="current" type="button">Current</button><button data-value="comparison" type="button">LY</button></div>
+          <div class="field search-field"><label for="storeSearch">Search Store</label><input id="storeSearch" type="search" placeholder="Store name or Store ID" disabled></div>
+        </div>
+      </section>
+      <section class="portfolio-panel active" data-portfolio-panel="quadrants">
+        <div class="grid-two">
+          <article class="card"><div class="card-head"><div><div class="card-title">Customer Contribution × Net Sales</div><div class="card-sub">One point per store · filtered portfolio medians</div></div><div class="benchmark" id="ccBench">—</div></div><div id="ccChart" class="chart"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+          <article class="card"><div class="card-head"><div><div class="card-title">Gross Margin % × Net Sales</div><div class="card-sub">Margin quality versus store scale</div></div><div class="benchmark" id="gmBench">—</div></div><div id="gmChart" class="chart"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+        </div>
+      </section>
+      <section class="portfolio-panel" data-portfolio-panel="productivity">
+        <article class="card"><div class="card-head"><div><div class="card-title">Store Productivity Overview</div><div class="card-sub">Net Sales × Customer Transactions · bubble size = Net Sales</div></div></div><div id="bubbleChart" class="chart chart-wide"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+      </section>
+      <section class="portfolio-panel" data-portfolio-panel="concentration">
+        <div class="ranking-header"><div class="field"><label for="rankingMetric">Rank Stores By</label><select id="rankingMetric" disabled><option value="netSales">Net Sales</option><option value="grossMargin">Gross Margin</option><option value="contribution">Customer Contribution</option><option value="operatingProfit">Operating Profit</option></select></div><div class="ranking-note" id="rankingNote">Ranked by YoY P&amp;L impact</div></div>
+        <div class="concentration-grid">
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Positive Stores</div><div class="card-sub">Largest favorable impacts</div></div></div><div class="rank-list store-ranks" id="positiveStores"></div></article>
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Negative Stores</div><div class="card-sub">Largest adverse impacts</div></div></div><div class="rank-list store-ranks" id="negativeStores"></div></article>
+          <article class="card pareto-card"><div class="card-head"><div><div class="card-title">Variance Pareto</div><div class="card-sub" id="paretoSub">Cumulative share of adverse variance</div></div><div class="concentration-badge" id="paretoBadge">—</div></div><div id="paretoChart" class="chart chart-pareto"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="tab-detail" data-panel="detail">
+      <div class="page-heading detail-heading"><div><span class="section-kicker">04 · STORE DETAIL</span><h2 id="detailTitle">Select a store to review</h2><p id="detailMeta">Current versus comparison period</p></div><div class="detail-selector"><label for="detailStoreSelect">Select Store</label><select id="detailStoreSelect" disabled><option>No data</option></select></div></div>
+      <section class="kpi-grid store-kpis" id="storeKpis"></section>
+      <section class="detail-layout">
+        <article class="card pnl-card">
+          <div class="card-head"><div><div class="card-title">Store P&amp;L</div><div class="card-sub">Signed P&amp;L values in KRMB; margin rows use aggregated ratios</div></div><div class="reconcile" id="storeReconcile">—</div></div>
+          <div class="table-wrap pnl-wrap"><table class="data-table pnl-table"><thead><tr><th>P&amp;L Line</th><th>Current</th><th>Comparison</th><th>Variance</th><th>Variance %</th><th>% of Net Sales</th></tr></thead><tbody id="storePnlBody"></tbody></table></div>
+        </article>
+        <article class="card insight-card store-insight-card"><div class="card-head"><div><div class="card-title">Store Signals</div><div class="card-sub">Rule-based review prompts</div></div><span class="rule-badge">NO AI</span></div><div class="insight-list" id="storeInsights"><div class="empty-state">No store selected</div></div></article>
+      </section>
+      <section class="ap-grid">
+        <article class="card"><div class="card-head"><div><div class="card-title">A&amp;P Expense Comparison</div><div class="card-sub">Expense amounts shown as positive values</div></div></div><div id="apComparisonChart" class="chart chart-ap"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+        <article class="card"><div class="card-head"><div><div class="card-title">A&amp;P Expense Variance</div><div class="card-sub">LY Total A&amp;P + component changes = Current Total A&amp;P</div></div><div class="reconcile" id="apReconcile">—</div></div><div id="apWaterfallChart" class="chart chart-ap"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+      </section>
+    </section>
+
+    <footer><span>L'ORÉAL Finance Analytics · Local Counter P&amp;L Review</span><span id="footerMeta">Files are processed locally and are not transmitted to an external server</span></footer>
+  </main>
+</div>
+
+<dialog id="mappingDialog" aria-labelledby="mappingTitle">
+  <form method="dialog" class="dialog-shell" id="mappingForm">
+    <div class="dialog-head"><div><h2 id="mappingTitle">Data Settings / Field Mapping</h2><p>Map semantic fields to detected Excel headers. Dashboard calculations never depend on fixed column positions.</p></div><button class="icon-button" value="cancel" aria-label="Close settings" type="submit">×</button></div>
+    <div class="source-settings">
+      <div class="field"><label for="sheetSelect">Worksheet</label><select id="sheetSelect"></select></div>
+      <div class="field narrow"><label for="headerRow">Header row</label><input id="headerRow" type="number" min="1" max="100" value="1"></div>
+      <div class="schema-meta" id="schemaMeta">Upload a workbook first</div>
+    </div>
+    <div class="mapping-alert" id="mappingAlert"></div>
+    <div class="mapping-table-wrap"><table class="mapping-table"><thead><tr><th>Dashboard field</th><th>Requirement</th><th>Excel column</th><th>Purpose</th></tr></thead><tbody id="mappingBody"></tbody></table></div>
+    <div class="privacy-box"><strong>Privacy:</strong> Save Mapping stores only schema assignments in this browser. Workbook values are never written to localStorage.</div>
+    <div class="dialog-actions"><button class="button secondary" id="importMappingBtn" type="button">Import Mapping</button><input id="mappingFileInput" type="file" accept=".json"><button class="button secondary" id="exportMappingBtn" type="button">Export Mapping</button><span class="spacer"></span><button class="button secondary" id="saveMappingBtn" type="button">Save Mapping</button><button class="button primary" id="applyMappingBtn" type="button">Apply &amp; Load Data</button></div>
+  </form>
+</dialog>
+</body>
+</html>

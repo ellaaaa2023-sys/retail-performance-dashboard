@@ -1,0 +1,14 @@
+{
+  "name": "counter-performance-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development website for the Counter P&L Dashboard using mock data only.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "check": "node --check js/app.js"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}
