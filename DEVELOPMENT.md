@@ -2,6 +2,10 @@
 
 This repository is the long-term development source for the Counter Performance Dashboard.
 
+- Development website: <https://counter-performance-dashboard.vercel.app>
+- Hosting: Vercel
+- Source repository: <https://github.com/ellaaaa2023-sys/counter-performance-dashboard> (private)
+
 ## Data boundary
 
 - Use only `sample_data/Mock_Counter_PnL.xlsx` or other fully synthetic data.
@@ -28,6 +32,8 @@ local edit → git commit → git push origin main → Vercel automatic deployme
 ```
 
 Feature branches may receive separate Vercel preview deployments when Git integration is enabled.
+
+Vercel Git integration is enabled for this repository. A push to `main` updates the fixed Development Website URL automatically after the deployment reaches `Ready`.
 
 ## Safe update checklist
 
