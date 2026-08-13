@@ -1,10 +1,10 @@
 # Development Website
 
-This repository is the long-term development source for the Counter Performance Dashboard.
+This repository is the long-term development source for the Retail Performance Dashboard.
 
-- Development website: <https://counter-performance-dashboard.vercel.app>
+- Development website: managed in the connected Vercel project
 - Hosting: Vercel
-- Source repository: <https://github.com/ellaaaa2023-sys/counter-performance-dashboard> (private)
+- Source repository: private GitHub repository connected to Vercel
 
 ## Data boundary
 

@@ -1,8 +1,8 @@
 {
-  "name": "counter-performance-dashboard",
+  "name": "retail-performance-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Development website for the Counter P&L Dashboard using mock data only.",
+  "description": "Development website for the Retail Performance Dashboard using mock data only.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",

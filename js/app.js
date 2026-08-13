@@ -3,7 +3,7 @@
 
 const $ = id => document.getElementById(id);
 const UNIT_SCALE = 1000; // Workbook values are KRMB; reader-facing money is RMB.
-const STORAGE_KEY = 'counter-dashboard-field-mappings-v2';
+const STORAGE_KEY = 'retail-dashboard-field-mappings-v2';
 const THEME = {
   blue: '#2f6da9', navy: '#244f82', blueLight: '#dce9f5', gold: '#b7965b',
   goldDark: '#846a39', green: '#347c68', orange: '#c7773e', red: '#b64f4f',
@@ -878,7 +878,7 @@ function saveMapping() {
 function exportMapping() {
   if(!state.book)return;state.mapping=mappingFromUI();
   const payload={version:2,created:new Date().toISOString().slice(0,10),mapping:currentMappingNames()};
-  const anchor=document.createElement('a');anchor.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));anchor.download='counter-dashboard-field-mapping.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+  const anchor=document.createElement('a');anchor.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));anchor.download='retail-dashboard-field-mapping.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
 }
 function importMappingFile(file) {
   const reader=new FileReader();reader.onload=()=>{try{const object=JSON.parse(reader.result),mapping=object.mapping||object;state.mapping=savedToIndexes(mapping,state.headers);renderMapping();showMappingAlert('success','Mapping imported. Click Apply & Load Data.');}catch(_){showMappingAlert('error','Invalid mapping JSON file.');}};reader.readAsText(file);

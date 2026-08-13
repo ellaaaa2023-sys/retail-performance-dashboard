@@ -1,4 +1,4 @@
-# Counter Performance Dashboard — Offline P&L Review Edition
+# Retail Performance Dashboard — Offline P&L Review Edition
 
 > Development website source. Mock data only. See `DEVELOPMENT.md` for Hot Reload and continuous deployment.
 
@@ -26,7 +26,7 @@ Executive Overview → P&L Variance → Store Portfolio → Store Detail
 
 ## 推荐使用方式
 
-1. 将整个 `Counter_Performance_Dashboard` 文件夹复制到公司电脑的受控目录。
+1. 将整个 `Retail_Performance_Dashboard` 文件夹复制到公司电脑的受控目录。
 2. 保持 `index.html`、`assets`、`js`、`libs` 和 `config` 的相对位置不变。
 3. 使用公司批准的最新版 Microsoft Edge 或 Google Chrome 双击打开 `index.html`。
 4. 将 Excel 直接拖入 **Drop Excel here** 区域，或点击该区域选择保存在公司电脑上的文件。
@@ -38,7 +38,7 @@ Executive Overview → P&L Variance → Store Portfolio → Store Detail
 
 ## 迁移到另一台电脑
 
-1. 复制完整文件夹，或复制 `Counter_PnL_Dashboard.zip`。
+1. 复制完整文件夹，或复制 `Retail_Performance_Dashboard.zip`。
 2. 在目标电脑上解压，不要单独取出 `index.html`。
 3. 双击解压后的 `index.html`。
 4. 从 `sample_data/Mock_Counter_PnL.xlsx` 开始验证；真实 Excel 可位于公司电脑上的任意受控目录，不需要放入 Dashboard 文件夹。
@@ -91,7 +91,7 @@ Dashboard 会拒绝重复的 `Store ID × Period` 组合，避免重复汇总。
 ## 发布文件结构
 
 ```text
-Counter_PnL_Dashboard/
+Retail_Performance_Dashboard/
 ├── index.html
 ├── assets/
 │   ├── styles.css
@@ -121,8 +121,8 @@ Counter_PnL_Dashboard/
 建议将整个文件夹作为一个版本发布，例如：
 
 ```text
-Counter_Performance_Dashboard_v1.0/
-Counter_Performance_Dashboard_v1.1/
+Retail_Performance_Dashboard_v1.0/
+Retail_Performance_Dashboard_v1.1/
 ```
 
 更新时不要把真实 Excel 放入发布包。字段映射可在 **Data Settings** 中导出为 JSON，再导入新版本。
