@@ -47,10 +47,10 @@ check(5, 'Comparison period is Y25 S1', () => {
 
 check(6, 'Actual Adj. is preferred', () => {
   const total = service.getPortfolioMetrics();
-  assert.equal(total.current.posNo, 150);
+  assert.equal(total.current.posNo, 196);
   assert.equal(total.sourceDetails.current.posNo.scope, 'actualAdjusted');
-  assert.equal(model.summary.byKey.posNo.current.actual.value, 160);
-  assert.equal(model.summary.byKey.posNo.current.actualAdjusted.value, 150);
+  assert.equal(model.summary.byKey.posNo.current.actual.value, 196);
+  assert.equal(model.summary.byKey.posNo.current.actualAdjusted.value, 196);
 });
 
 check(7, '160 current stores parsed', () => {
@@ -171,6 +171,25 @@ check(18, 'Store matching handles new and missing stores', () => {
   assert.deepEqual(synthetic.existing.map(item => item.method).sort(), ['store-name-fallback', 'terminal']);
 });
 
+check(19, 'Summary POS no. reconciles with active Detail cityPosNo', () => {
+  const isClosed = store => /关店|暂停|停业|关闭|闭店|closed|pause|closure/i.test(String(store.status || ''));
+  const sumActiveCityPosNo = stores => stores
+    .filter(store => !isClosed(store))
+    .reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
+  const currentSum = sumActiveCityPosNo(model.detail.current.stores);
+  const comparisonSum = sumActiveCityPosNo(model.detail.comparison.stores);
+  const currentActual = model.summary.byKey.posNo.current.actual.value;
+  const currentAdj = model.summary.byKey.posNo.current.actualAdjusted.value;
+  const comparisonActual = model.summary.byKey.posNo.comparison.actual.value;
+  const comparisonAdj = model.summary.byKey.posNo.comparison.actualAdjusted.value;
+  if (currentActual !== currentSum || currentAdj !== currentSum) {
+    throw new Error(`SUMMARY_POS_RECONCILIATION_ERROR: current Summary POS no. (Actual=${currentActual}, Adj=${currentAdj}) != active Detail cityPosNo sum ${currentSum}`);
+  }
+  if (comparisonActual !== comparisonSum || comparisonAdj !== comparisonSum) {
+    throw new Error(`SUMMARY_POS_RECONCILIATION_ERROR: comparison Summary POS no. (Actual=${comparisonActual}, Adj=${comparisonAdj}) != active Detail cityPosNo sum ${comparisonSum}`);
+  }
+});
+
 const filteredBridgeError = service.getBridgeData('grossMargin', { region: selectedRegion });
 assert.equal(filteredBridgeError.reconciliation.ok, false);
 assert.equal(filteredBridgeError.error.code, 'BRIDGE_RECONCILIATION_ERROR');
@@ -201,6 +220,6 @@ assert.throws(
 );
 
 console.log(results.join('\n'));
-console.log(`\n${results.length}/18 validation checks passed.`);
+console.log(`\n${results.length}/19 validation checks passed.`);
 console.log('Filtered Bridge error handling PASS - non-zero residual is reported without a residual driver.');
 console.log('Period detection edge cases PASS - Full Year and missing prior-year handling verified.');

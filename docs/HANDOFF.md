@@ -44,6 +44,14 @@ Store Detail
 - `sample_data/Mock_Counter_PnL.xlsx` 为 legacy，仅保留，不再作为兼容目标；未经用户明确要求不得读取。
 - 若本文后续旧审计记录与本节冲突，以本节和 `docs/DATA_MODEL.md` 为准。
 
+#### Mock Workbook 版本控制与 POS 勾稽（2026-08-16 起生效）
+
+- `sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx` 是项目标准 Source of Truth Mock Workbook，**已显式加入 Git 版本控制**（`.gitignore` 白名单 `!sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx`）。
+- 其他 `.xlsx` / `.xls` / `.xlsm` / `.csv` 默认继续 ignored；`.gitignore` 另加 `~$*.xlsx` 规则，Excel 的 `~$` 临时锁文件不进入 Git（如 `~$Retail_Performance_Dashboard_Mock_Data.xlsx`）。
+- **Summary POS no. 必须与 Detail 中有效营业门店的 `cityPosNo`（H 列 `城市POS数`）汇总勾稽**；已关店（Closed）门店的 POS 不计入 Summary POS no.。
+- 当前 Mock 无 Closed store（Status 仅 `1正常`），因此：Current Summary POS no. = **196**、Comparison Summary POS no. = **186**（与 Detail 有效 `cityPosNo` 汇总一致）。
+- 上述勾稽已固化为 consistency test，位于 `tests/core-data.test.js`（失败抛 `SUMMARY_POS_RECONCILIATION_ERROR`）。
+
 ## 2. 当前状态摘要
 
 ### Phase 5 — Core Data Refactor（已完成）

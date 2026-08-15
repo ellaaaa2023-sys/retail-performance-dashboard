@@ -6,11 +6,14 @@ dist/
 *.zip
 SHA256SUMS.txt
 
-# Never commit real company workbooks. Only the named mock workbook is allowed.
+# Never commit real company workbooks. Only the named mock workbooks are allowed.
 *.xlsx
 *.xls
 *.xlsm
 *.csv
+# Excel lock/temp files must stay ignored even next to whitelisted workbooks.
+~$*.xlsx
 !sample_data/Mock_Counter_PnL.xlsx
+!sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx
 .vercel
 .workbuddy/
