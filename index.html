@@ -118,27 +118,23 @@
     <section class="tab-panel" id="tab-portfolio" data-panel="portfolio">
       <div class="page-heading"><div><span class="section-kicker">03 · STORE PORTFOLIO</span><h2>Locate where the variance happened</h2></div><p id="portfolioContext">Current portfolio view</p></div>
       <section class="portfolio-toolbar">
-        <div class="segmented" id="portfolioView"><button class="active" data-value="quadrants" type="button">Quadrants</button><button data-value="productivity" type="button">Productivity</button><button data-value="concentration" type="button">Variance Concentration</button></div>
+        <div class="segmented" id="portfolioView"><button class="active" data-value="productivity" type="button">Productivity</button><button data-value="ranking" type="button">Store Variance Ranking</button></div>
         <div class="toolbar-right">
           <div class="segmented small" id="snapshotToggle"><button class="active" data-value="current" type="button">Current</button><button data-value="comparison" type="button">LY</button></div>
           <div class="field search-field"><label for="storeSearch">Search Store</label><input id="storeSearch" type="search" placeholder="Store name or Store ID" disabled></div>
         </div>
       </section>
-      <section class="portfolio-panel active" data-portfolio-panel="quadrants">
-        <div class="grid-two">
-          <article class="card"><div class="card-head"><div><div class="card-title">Customer Contribution × Net Sales</div><div class="card-sub">One point per store · filtered portfolio medians</div></div><div class="benchmark" id="ccBench">—</div></div><div id="ccChart" class="chart"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
-          <article class="card"><div class="card-head"><div><div class="card-title">Gross Margin % × Net Sales</div><div class="card-sub">Margin quality versus store scale</div></div><div class="benchmark" id="gmBench">—</div></div><div id="gmChart" class="chart"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
-        </div>
+      <section class="portfolio-panel active" data-portfolio-panel="productivity">
+        <article class="card">
+          <div class="card-head"><div><div class="card-title">Store Productivity</div><div class="card-sub">Customer Contribution × Gross Margin · bubble size = Store Productivity</div></div><div class="tier-summary" id="tierSummary"></div></div>
+          <div id="bubbleChart" class="chart chart-wide"><div class="chart-empty">Upload a workbook to view analysis</div></div>
+        </article>
       </section>
-      <section class="portfolio-panel" data-portfolio-panel="productivity">
-        <article class="card"><div class="card-head"><div><div class="card-title">Store Productivity Overview</div><div class="card-sub">Net Sales × Customer Transactions · bubble size = Net Sales</div></div></div><div id="bubbleChart" class="chart chart-wide"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
-      </section>
-      <section class="portfolio-panel" data-portfolio-panel="concentration">
-        <div class="ranking-header"><div class="field"><label for="rankingMetric">Rank Stores By</label><select id="rankingMetric" disabled><option value="netSales">Net Sales</option><option value="grossMargin">Gross Margin</option><option value="contribution">Customer Contribution</option><option value="operatingProfit">Operating Profit</option></select></div><div class="ranking-note" id="rankingNote">Ranked by YoY P&amp;L impact</div></div>
+      <section class="portfolio-panel" data-portfolio-panel="ranking">
+        <div class="ranking-header"><div class="field"><label for="rankingMetric">Rank Stores By</label><select id="rankingMetric" disabled><option value="grossSales">Gross Sales</option><option value="netSales">CONSO Net Sales</option><option value="grossMargin">Gross Margin</option><option value="customerContribution">Customer Contribution</option></select></div><div class="ranking-note" id="rankingNote">Ranked by Current vs Comparison variance</div></div>
         <div class="concentration-grid">
-          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Positive Stores</div><div class="card-sub">Largest favorable impacts</div></div></div><div class="rank-list store-ranks" id="positiveStores"></div></article>
-          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Negative Stores</div><div class="card-sub">Largest adverse impacts</div></div></div><div class="rank-list store-ranks" id="negativeStores"></div></article>
-          <article class="card pareto-card"><div class="card-head"><div><div class="card-title">Variance Pareto</div><div class="card-sub" id="paretoSub">Cumulative share of adverse variance</div></div><div class="concentration-badge" id="paretoBadge">—</div></div><div id="paretoChart" class="chart chart-pareto"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Positive Stores</div><div class="card-sub">Largest favorable Current vs Comparison</div></div></div><div class="rank-list store-ranks" id="positiveStores"></div></article>
+          <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Negative Stores</div><div class="card-sub">Largest adverse Current vs Comparison</div></div></div><div class="rank-list store-ranks" id="negativeStores"></div></article>
         </div>
       </section>
     </section>

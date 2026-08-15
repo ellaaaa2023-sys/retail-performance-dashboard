@@ -530,10 +530,12 @@
         status: values.status,
         productivityTier: values.productivityTier,
         storeProductivity: values.storeProductivity,
+        cityPosNo: values.cityPosNo,
         posNo: values.posNo,
         metrics: {
           posNo: values.posNo,
           storeProductivity: values.storeProductivity,
+          cityPosNo: values.cityPosNo,
           grossSales: values.grossSales,
           totalMinorations: values.totalMinorations,
           totalMinorationsPct: values.totalMinorationsPct,

@@ -96,6 +96,23 @@ Store Detail
 - 验证：Core Data 18/18 PASS；三个 Summary Bridge 均 reconcile；浏览器 Mock upload、3 指标切换、Region/Tier Filtered scope、City 联动、Filtered 正常/错误 Bridge、01→02 下钻均通过；无 console error。
 - 03 Store Portfolio / 04 Store Detail 仍未迁移。下一步为 Phase 6C — 03 Store Portfolio Migration。
 
+### Phase 6C — 03 Store Portfolio Migration（已完成，2026-08-16）
+
+- 03 Store Portfolio 已迁移到新版 `RetailDashboardData` Data Service，仅消费 `service.getStores(role, filters)`，未在页面复刻 store 级解析 / 筛选 / 计算逻辑。
+- 已删除旧模块：两个 Quadrant Charts（Customer Contribution × Net Sales、Gross Margin % × Net Sales）与 Variance Pareto（含 UI、render 逻辑、event 逻辑及仅服务这些图的无用 state / `DRIVER_SETS` / `DRIVER_META`）。
+- 03 最终保留两个模式：
+  - **Productivity（Bubble）**：X = Customer Contribution **amount**（`store.metrics.customerContribution`）；Y = Gross Margin **amount**（`store.metrics.grossMargin`）；Bubble Size = `store.storeProductivity`（门店总单产，非 Net Sales / AUP / Net Sales÷POS），sqrt scaling（10~41px）。
+  - **Store Variance Ranking**（原 Variance Concentration 改名）：Rank Stores By 支持 Gross Sales / CONSO Net Sales / Gross Margin / Customer Contribution 四核心指标；variance = current − comparison（按 terminal 匹配）；Top Positive / Top Negative 各 8 条；**恒为 Current vs Comparison**，不受 Current/Comparison toggle 影响（toggle 仅 Productivity 模式显示）。
+- Store Productivity Tier 来自 Excel `门店单产等级` 字段，不前端重算、不写死区间（0~30K / 30~60K / 60~70K / 70~80K / 80~93K / 93~136K / >136K）。All Tier 允许展示全部门店（透明度 + hover + search 高亮，避免不可读）。
+- **Selected Tier Summary**（Bubble 上方轻量条）：Store Count / POS Count / Avg Gross Margin % / Avg Customer Contribution % / Avg Store Productivity。Avg GM%/CC% 为 ratio-of-sums（ΣGM÷ΣNS、ΣCC÷ΣNS）；Avg Store Productivity 为简单平均（不叫 AUP）。
+- **POS Count 使用真实 `cityPosNo` 字段**（Detail Sheet H 列 `城市POS数`，header mapping 读取，非固定列号）：`sum(store.cityPosNo)`，不再用 distinct terminal、不默认 1 店 = 1 POS。`cityPosNo` 已在 `parseDetailSheet` 中作为 normalized store 顶层与 `metrics` 字段最小暴露（`core-data.js` 仅 +2 行，未改 mapping / Summary `posNo` / AUP / storeProductivity）。
+- 实测：Current **160 stores / 196 POS**；Comparison **150 stores / 186 POS**（Store Count ≠ POS Count，字段真实；TOTAL 行已被 `isTotalOrBlankRow` 过滤）。
+- Productivity 支持 Current / Comparison 切换（各自当期真实门店，门店数可不同）；Store Search 保留（命中高亮、其余降透明度）。
+- 02→03 `selectedDriver` 导航上下文保留；driver 属四核心指标则自动切 Rank Stores By，否则回退 Customer Contribution。03→04 `selectedStore` drill-down 保留（04 未迁移）。
+- 已知限制（非 Data API 硬缺口）：非核心 P&L Driver（Summary bridge 的细分 driver field 如 specificDevelopment / stdCos）与 Detail 字段名非一一对应，暂不能直接映射到 store-level ranking；仅四核心指标可用，其余回退 Customer Contribution 并保留 `selectedDriver` 供未来。
+- 验证：Core Data 18/18 PASS；`git diff --check` PASS；无头验证 Bubble X/Y/size 字段、Tier / Region+Tier 联动门店数、四指标 ranking Top± 与 sum variance、cityPosNo 求和均正确。
+- 04 Store Detail 仍未迁移。下一步为 Phase 6D — 04 Store Detail Migration。
+
 ### 2.1 已完成并在代码中存在
 
 #### Mock P&L 数据与数据模型

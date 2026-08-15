@@ -100,31 +100,6 @@ const METRICS = {
   avgSales: { label: 'Average Sales per Store', type: 'money', direction: 'up', aggregate: 'avgSales' }
 };
 
-const DRIVER_SETS = {
-  netSales: [
-    ['grossSales','Gross Sales','income'], ['discount','Discount','expense'], ['rebates','Rebates','expense'],
-    ['promotionalAllowance','Promotional Allowance','expense'], ['returns','Returns','expense'], ['oca','OCA','expense'], ['coupon','Coupon','expense']
-  ],
-  grossMargin: [
-    ['netSales','Net Sales','income'], ['stdCos','Std COS','expense'], ['royal','Royal / TA / MS','expense'],
-    ['specialOps','Special Operations Cost','expense'], ['obsolete','Obsolete / Slow Moving / Return','expense'], ['physicalDistribution','Physical Distribution','expense']
-  ],
-  contribution: [
-    ['grossMargin','Gross Margin','income'], ['samples','Customer Samples','expense'], ['gifts','Promotional Gifts','expense'],
-    ['animations','Animations','expense'], ['posAdvertising','POS Advertising','expense'], ['development','Specific Development','expense'],
-    ['specificAP','Specific A&P','expense'], ['specificSga','Specific SG&A','expense']
-  ],
-  operatingProfit: [
-    ['contribution','Customer Contribution','income'], ['nonSpecificCosts','Non-specific Costs','expense']
-  ]
-};
-const DRIVER_META = {};
-Object.values(DRIVER_SETS).flat().forEach(([fieldKey,label,kind]) => { DRIVER_META[fieldKey] = { field: fieldKey, label, kind }; });
-Object.assign(DRIVER_META, {
-  netSales: {field:'netSales',label:'Net Sales',kind:'income'}, grossMargin:{field:'grossMargin',label:'Gross Margin',kind:'income'},
-  contribution:{field:'contribution',label:'Customer Contribution',kind:'income'}, operatingProfit:{field:'operatingProfit',label:'Operating Profit',kind:'income'}
-});
-
 const AP_COMPONENTS = [
   ['samples','Customer Samples'], ['gifts','Promotional Gifts'], ['animations','Animations'],
   ['posAdvertising','POS Advertising'], ['development','Specific Development'], ['specificAP','Specific A&P']
@@ -158,8 +133,8 @@ const PNL_LINES = [
 const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
-  portfolioView: 'quadrants', snapshot: 'current',
-  portfolioMetric: 'operatingProfit', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
+  portfolioView: 'productivity', snapshot: 'current',
+  portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
   model: null, service: null, selectedVarianceKpi: 'grossMargin', selectedDriver: ''
 };
 
@@ -666,25 +641,6 @@ function renderPnlSnapshot(metrics) {
 }
 
 function apInvestment(rows) { return Math.abs(sum(rows,'daCost')) + Math.abs(sum(rows,'specificAP')); }
-function storePairs(metricRef = state.portfolioMetric) {
-  const {currentRows,comparisonRows} = scope();
-  const currentMap = new Map(currentRows.map(record=>[record.terminal,record]));
-  const comparisonMap = new Map(comparisonRows.map(record=>[record.terminal,record]));
-  const ids = unique([...currentMap.keys(),...comparisonMap.keys()]);
-  const meta = measureMeta(metricRef);
-  return ids.map(id => {
-    const current = currentMap.get(id), ly = comparisonMap.get(id);
-    const rawCurrent = current ? finite(current[meta.field]) : 0, rawLy = ly ? finite(ly[meta.field]) : 0;
-    const displayCurrent = meta.kind === 'expense' ? Math.abs(rawCurrent) : rawCurrent;
-    const displayLy = meta.kind === 'expense' ? Math.abs(rawLy) : rawLy;
-    return {id,current,ly,record:current||ly,displayCurrent,displayLy,displayDelta:displayCurrent-displayLy,impact:rawCurrent-rawLy,status:current&&ly?'Comparable':current?'New Store':'Missing Current'};
-  });
-}
-function adverseConcentration(metricRef) {
-  const adverse = storePairs(metricRef).filter(pair=>pair.impact<0).sort((a,b)=>a.impact-b.impact);
-  const total = adverse.reduce((s,p)=>s+Math.abs(p.impact),0);
-  return total ? adverse.slice(0,10).reduce((s,p)=>s+Math.abs(p.impact),0)/total : 0;
-}
 function insightHtml(items) {
   if (!items.length) return '<div class="empty-state">No material signals for the selected scope</div>';
   return items.map(item => {
@@ -1076,77 +1032,109 @@ function renderVarianceInsights(bridge) {
   $('varianceInsights').innerHTML = summary + insightHtml(items);
 }
 
-function measureMeta(reference) {
-  if (reference.startsWith('field:')) {
-    const key=reference.slice(6), meta=DRIVER_META[key] || {field:key,label:FIELDS[key]?.label||key,kind:'income'};
-    return {...meta,reference};
-  }
-  const core=DRIVER_META[reference] || {field:METRICS[reference]?.field||reference,label:METRICS[reference]?.label||reference,kind:'income'};
-  return {...core,reference};
+const RANKING_METRICS = Object.freeze({
+  grossSales: { label: 'Gross Sales', key: 'grossSales' },
+  netSales: { label: 'CONSO Net Sales', key: 'netSales' },
+  grossMargin: { label: 'Gross Margin', key: 'grossMargin' },
+  customerContribution: { label: 'Customer Contribution', key: 'customerContribution' }
+});
+
+function portfolioStores(role) {
+  if (!state.service) return [];
+  return state.service.getStores(role === 'comparison' ? 'comparison' : 'current', activeFilters());
+}
+function storeVariancePairs() {
+  const currentStores = portfolioStores('current');
+  const comparisonStores = portfolioStores('comparison');
+  const comparisonMap = new Map(comparisonStores.map(store => [store.terminal, store]));
+  return currentStores.map(current => ({ terminal: current.terminal, store: current.store, current, comparison: comparisonMap.get(current.terminal) || null }));
+}
+function rankingMetricKey() {
+  return RANKING_METRICS[state.portfolioMetric] ? state.portfolioMetric : 'customerContribution';
 }
 function setPortfolioMetric(reference) {
-  state.portfolioMetric=reference;
-  const select=$('rankingMetric'), meta=measureMeta(reference);
-  if (![...select.options].some(option=>option.value===reference)) select.add(new Option(meta.label,reference));
-  select.value=reference;
-  $('portfolioContext').textContent=`Store-level ${meta.label} analysis · Current vs comparison`;
-  $('rankingNote').textContent=`Ranked by ${meta.label} P&L impact`;
+  state.portfolioMetric = RANKING_METRICS[reference] ? reference : 'customerContribution';
+  const select = $('rankingMetric');
+  if (select) select.value = state.portfolioMetric;
+  $('rankingNote').textContent = `Ranked by ${RANKING_METRICS[state.portfolioMetric].label} · Current vs Comparison`;
 }
 function renderPortfolio() {
+  if (!state.service) { renderPortfolioEmpty(); return; }
   setPortfolioMetric(state.portfolioMetric);
-  setSegment('portfolioView',state.portfolioView);
-  document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));
-  const meta=measureMeta(state.portfolioMetric);
-  $('portfolioContext').textContent=state.portfolioView==='concentration' ? `Store-level ${meta.label} variance · Current vs comparison` : state.portfolioView==='quadrants' ? `Portfolio position · selected driver context: ${meta.label}` : `Store productivity · selected driver context: ${meta.label}`;
-  if (state.portfolioView==='quadrants') { renderScatter('ccChart','cc'); renderScatter('gmChart','gm'); }
-  else if (state.portfolioView==='productivity') renderBubble();
-  else renderConcentration();
+  setSegment('portfolioView', state.portfolioView);
+  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioView));
+  const inRanking = state.portfolioView === 'ranking';
+  const toggle = $('snapshotToggle');
+  if (toggle) toggle.style.display = inRanking ? 'none' : '';
+  $('portfolioContext').textContent = inRanking
+    ? 'Store Variance Ranking · Current vs Comparison'
+    : 'Store Productivity · Customer Contribution × Gross Margin';
+  if (inRanking) renderStoreRanking();
+  else renderBubble();
 }
-function snapshotRows() {
-  const s=scope(); return state.snapshot==='comparison'?s.comparisonRows:s.currentRows;
+function renderPortfolioEmpty() {
+  $('tierSummary').innerHTML = '';
+  $('positiveStores').innerHTML = '';
+  $('negativeStores').innerHTML = '';
+  $('portfolioContext').textContent = 'Current portfolio view';
+  const c = chart('bubbleChart');
+  c.clear();
 }
-function median(values) { const sorted=values.filter(Number.isFinite).slice().sort((a,b)=>a-b),n=sorted.length; return n?n%2?sorted[(n-1)/2]:(sorted[n/2-1]+sorted[n/2])/2:0; }
-function searchHit(record) { const text=state.search.trim().toLowerCase(); return text&&(record.store.toLowerCase().includes(text)||record.terminal.toLowerCase().includes(text)); }
-function pointOpacity(record) { return state.search ? (searchHit(record)?1:.08) : .68; }
-function pointColor(record) { return record.terminal===state.selectedStore||searchHit(record)?THEME.gold:THEME.blue; }
-function portfolioTooltip(record,kind) {
-  return `<b>${esc(record.store)}</b><br>${esc(record.city)} · ${esc(record.terminal)}<br>Period: ${esc(record.periodKey)}<br>POS: ${formatInt(record.pos)}<br>Net Sales: ${formatMoney(record.netSales)}<br>${kind==='cc'?`Customer Contribution: ${formatMoney(record.contribution)} (${formatPct(record.contributionPct)})`:`Gross Margin: ${formatMoney(record.grossMargin)} (${formatPct(record.grossMarginPct)})`}<br>Operating Profit: ${formatMoney(record.operatingProfit)}`;
+function searchHit(store) { const text = state.search.trim().toLowerCase(); return text && (store.store.toLowerCase().includes(text) || store.terminal.toLowerCase().includes(text)); }
+function pointOpacity(store) { return state.search ? (searchHit(store) ? 1 : .08) : .68; }
+function pointColor(store) { return store.terminal === state.selectedStore || searchHit(store) ? THEME.gold : THEME.blue; }
+function bubbleTooltip(store) {
+  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>Status: ${esc(store.status)} · Tier: ${esc(store.productivityTier)}<br>Store Productivity: ${formatMoney(store.storeProductivity)}<br>POS no.: ${formatInt(store.cityPosNo)}<br>Gross Margin: ${formatMoney(store.metrics.grossMargin)} (${formatPct(store.metrics.grossMarginPct)})<br>Customer Contribution: ${formatMoney(store.metrics.customerContribution)} (${formatPct(store.metrics.customerContributionPct)})`;
 }
-function bindStoreClick(c) { c.off('click'); c.on('click',params=>{ if(params.data?.record) openStoreDetail(params.data.record.terminal); }); }
-function renderScatter(id,kind) {
-  const rows=snapshotRows(); const c=chart(id);
-  if (!rows.length) { c.clear(); return; }
-  const xKey=kind==='cc'?'contribution':'grossMarginPct', xm=median(rows.map(r=>r[xKey])), ym=median(rows.map(r=>r.netSales));
-  $(kind==='cc'?'ccBench':'gmBench').innerHTML=`Median X <b>${kind==='cc'?formatMoney(xm):formatPct(xm)}</b><br>Median Sales <b>${formatMoney(ym)}</b>`;
-  const data=rows.map(record=>({value:[record[xKey],record.netSales],record,itemStyle:{color:pointColor(record),opacity:pointOpacity(record),borderColor:record.terminal===state.selectedStore?THEME.goldDark:'#fff',borderWidth:record.terminal===state.selectedStore?2:1}}));
-  const quadrantNames=kind==='cc'?['Low Contribution / Low Sales','High Contribution / Low Sales','Low Contribution / High Sales','High Contribution / High Sales']:['Low Margin / Low Sales','High Margin / Low Sales','Low Margin / High Sales','High Margin / High Sales'];
-  c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:72,right:28,top:35,bottom:58},tooltip:{...tooltipStyle(),trigger:'item',formatter:p=>portfolioTooltip(p.data.record,kind)},xAxis:{type:'value',scale:true,name:kind==='cc'?'Customer Contribution':'Gross Margin %',nameLocation:'middle',nameGap:38,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:kind==='cc'?formatMoney:formatPct},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'value',scale:true,name:'Net Sales',nameLocation:'middle',nameGap:56,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'scatter',data,symbolSize:(v,p)=>p.data.record.terminal===state.selectedStore?15:10,emphasis:{scale:1.3,itemStyle:{opacity:1}},markLine:{silent:true,symbol:'none',lineStyle:{color:'#a9a69f',type:'dashed',width:1},label:{show:false},data:[{xAxis:xm},{yAxis:ym}]},markArea:{silent:true,itemStyle:{color:'rgba(47,109,169,.025)'},label:{show:true,color:'#9a9b96',fontSize:8,position:'insideTop'},data:[[{name:quadrantNames[0],xAxis:'min',yAxis:'min'},{xAxis:xm,yAxis:ym}],[{name:quadrantNames[1],xAxis:xm,yAxis:'min'},{xAxis:'max',yAxis:ym}],[{name:quadrantNames[2],xAxis:'min',yAxis:ym},{xAxis:xm,yAxis:'max'}],[{name:quadrantNames[3],xAxis:xm,yAxis:ym},{xAxis:'max',yAxis:'max'}]]}}]},{notMerge:true});
-  bindStoreClick(c);
+function renderTierSummary(stores, role) {
+  const el = $('tierSummary');
+  if (!el) return;
+  const n = stores.length;
+  if (!n) { el.innerHTML = `<span class="tier-summary-label">${role === 'comparison' ? 'Comparison' : 'Current'}</span><span>No stores in scope</span>`; return; }
+  const netSales = stores.reduce((a, s) => a + s.metrics.netSales, 0);
+  const grossMargin = stores.reduce((a, s) => a + s.metrics.grossMargin, 0);
+  const contribution = stores.reduce((a, s) => a + s.metrics.customerContribution, 0);
+  const avgProd = stores.reduce((a, s) => a + (s.storeProductivity || 0), 0) / n;
+  const posCount = stores.reduce((a, s) => a + (Number(s.cityPosNo) || 0), 0);
+  const gmPct = netSales ? grossMargin / netSales : null;
+  const ccPct = netSales ? contribution / netSales : null;
+  el.innerHTML = `<span class="tier-summary-label">${role === 'comparison' ? 'Comparison' : 'Current'}</span><span><b>${n}</b> Stores</span><span><b>${posCount}</b> POS</span><span>Avg Gross Margin <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>Avg Customer Contribution <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
 }
+function bindStoreClick(c) { c.off('click'); c.on('click', params => { if (params.data?.store) openStoreDetail(params.data.store.terminal); }); }
 function renderBubble() {
-  const rows=snapshotRows(), c=chart('bubbleChart'); if(!rows.length){c.clear();return;}
-  const values=rows.map(r=>r.netSales), min=Math.min(...values), max=Math.max(...values), size=value=>10+31*Math.sqrt(Math.max(0,(value-min)/(max-min||1)));
-  const hasCustomers=rows.some(r=>r.customers>0);
-  const data=rows.map(record=>({value:[record.netSales,hasCustomers?record.customers:record.pos,record.netSales],record,symbolSize:size(record.netSales),itemStyle:{color:pointColor(record),opacity:Math.min(.7,pointOpacity(record)),borderColor:record.terminal===state.selectedStore?THEME.goldDark:'#fff',borderWidth:record.terminal===state.selectedStore?2:1}}));
-  c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:78,right:30,top:35,bottom:60},tooltip:{...tooltipStyle(),trigger:'item',formatter:p=>{const r=p.data.record;return `<b>${esc(r.store)}</b><br>${esc(r.city)} · ${esc(r.terminal)}<br>Period: ${esc(r.periodKey)}<br>Net Sales: ${formatMoney(r.netSales)}<br>${hasCustomers?'Customer Transactions':'POS fallback'}: ${formatInt(hasCustomers?r.customers:r.pos)}<br>Net Sales / POS: ${formatMoney(r.netSalesPerPos)}<br>Gross Margin: ${formatPct(r.grossMarginPct)}<br>Customer Contribution: ${formatPct(r.contributionPct)}<br>Operating Profit: ${formatMoney(r.operatingProfit)}`;}},xAxis:{type:'value',scale:true,name:'Net Sales',nameLocation:'middle',nameGap:40,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'value',scale:true,name:hasCustomers?'Customer Transactions':'POS (fallback)',nameLocation:'middle',nameGap:58,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatInt},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'scatter',data,emphasis:{scale:1.16,itemStyle:{opacity:1}}}]},{notMerge:true});
+  const role = state.snapshot === 'comparison' ? 'comparison' : 'current';
+  const stores = portfolioStores(role);
+  const c = chart('bubbleChart');
+  renderTierSummary(stores, role);
+  if (!stores.length) { c.clear(); return; }
+  const prodValues = stores.map(s => s.storeProductivity).filter(Number.isFinite);
+  const pMin = prodValues.length ? Math.min(...prodValues) : 0;
+  const pMax = prodValues.length ? Math.max(...prodValues) : 1;
+  const size = value => 10 + 31 * Math.sqrt(Math.max(0, (value - pMin) / (pMax - pMin || 1)));
+  const data = stores.map(store => ({
+    value: [store.metrics.customerContribution, store.metrics.grossMargin],
+    store,
+    symbolSize: size(store.storeProductivity),
+    itemStyle: { color: pointColor(store), opacity: Math.min(.7, pointOpacity(store)), borderColor: store.terminal === state.selectedStore ? THEME.goldDark : '#fff', borderWidth: store.terminal === state.selectedStore ? 2 : 1 }
+  }));
+  c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:78,right:30,top:35,bottom:60},tooltip:{...tooltipStyle(),trigger:'item',formatter:p=>bubbleTooltip(p.data.store)},xAxis:{type:'value',scale:true,name:'Customer Contribution',nameLocation:'middle',nameGap:40,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'value',scale:true,name:'Gross Margin',nameLocation:'middle',nameGap:58,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'scatter',data,emphasis:{scale:1.16,itemStyle:{opacity:1}}}]},{notMerge:true});
   bindStoreClick(c);
 }
-function renderConcentration() {
-  const meta=measureMeta(state.portfolioMetric), pairs=storePairs(state.portfolioMetric);
-  const positive=pairs.filter(p=>p.impact>0).sort((a,b)=>b.impact-a.impact).slice(0,6), negative=pairs.filter(p=>p.impact<0).sort((a,b)=>a.impact-b.impact).slice(0,6);
-  $('positiveStores').innerHTML=rankStoreHtml(positive,'positive'); $('negativeStores').innerHTML=rankStoreHtml(negative,'negative');
-  const adverse=pairs.filter(p=>p.impact<0).sort((a,b)=>a.impact-b.impact), total=adverse.reduce((s,p)=>s+Math.abs(p.impact),0);
-  const top10=total?adverse.slice(0,10).reduce((s,p)=>s+Math.abs(p.impact),0)/total:0;
-  $('paretoBadge').textContent=total?`Top 10 · ${formatPct(top10)}`:'No adverse variance';
-  $('paretoSub').textContent=`${meta.label} · cumulative share of adverse P&L impact`;
-  const c=chart('paretoChart'); if(!adverse.length){c.clear();return;}
-  const shown=adverse.slice(0,20), bars=shown.map(p=>Math.abs(p.impact)); let running=0; const cumulative=shown.map(value=>{running+=Math.abs(value.impact);return total?running/total:0;});
-  c.setOption({textStyle:baseText(),...chartNavigation({y:false}),grid:{left:62,right:58,top:30,bottom:105},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const i=params[0].dataIndex,p=shown[i];return `<b>${esc(p.record.store)}</b><br>Adverse impact: ${formatMoney(Math.abs(p.impact))}<br>Cumulative: ${formatPct(cumulative[i])}`;}},xAxis:{type:'category',data:shown.map(p=>p.record.store),axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{interval:0,rotate:43,color:THEME.muted,fontSize:8,formatter:value=>value.length>10?`${value.slice(0,10)}…`:value}},yAxis:[{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},{type:'value',min:0,max:1,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.goldDark,fontSize:8,formatter:formatPct},splitLine:{show:false}}],series:[{type:'bar',data:bars,barMaxWidth:25,itemStyle:{color:THEME.orange,borderRadius:[3,3,0,0]}},{type:'line',yAxisIndex:1,data:cumulative,symbolSize:5,lineStyle:{color:THEME.gold,width:2},itemStyle:{color:THEME.gold},markLine:{silent:true,symbol:'none',lineStyle:{color:'#aaa69e',type:'dashed'},label:{formatter:'80%',color:THEME.muted,fontSize:8},data:[{yAxis:.8}]}}]},{notMerge:true});
-  c.off('click'); c.on('click',params=>{const p=shown[params.dataIndex];if(p)openStoreDetail(p.record.terminal);});
+function renderStoreRanking() {
+  const key = rankingMetricKey();
+  const pairs = storeVariancePairs().map(pair => ({
+    ...pair,
+    variance: pair.comparison ? pair.current.metrics[key] - pair.comparison.metrics[key] : null
+  }));
+  const comparable = pairs.filter(p => p.variance != null);
+  const positive = comparable.filter(p => p.variance > 0).sort((a, b) => b.variance - a.variance).slice(0, 8);
+  const negative = comparable.filter(p => p.variance < 0).sort((a, b) => a.variance - b.variance).slice(0, 8);
+  $('positiveStores').innerHTML = rankStoreHtml(positive, 'positive');
+  $('negativeStores').innerHTML = rankStoreHtml(negative, 'negative');
 }
-function rankStoreHtml(rows,tone) {
-  if(!rows.length)return '<div class="empty-state">No stores in this direction</div>';
-  return rows.map((pair,index)=>`<button class="rank-row" type="button" data-store="${esc(pair.id)}"><span>${String(index+1).padStart(2,'0')}</span><strong title="${esc(pair.record.store)}">${esc(pair.record.store)}</strong><em class="${tone==='positive'?'cell-positive':'cell-negative'}">${formatSignedMoney(pair.impact)}</em></button>`).join('');
+function rankStoreHtml(rows, tone) {
+  if (!rows.length) return '<div class="empty-state">No stores in this direction</div>';
+  return rows.map((pair, index) => `<button class="rank-row" type="button" data-store="${esc(pair.terminal)}"><span>${String(index + 1).padStart(2, '0')}</span><strong title="${esc(pair.store)}">${esc(pair.store)}</strong><em class="${tone === 'positive' ? 'cell-positive' : 'cell-negative'}">${formatSignedMoney(pair.variance)}</em></button>`).join('');
 }
 
 function ensureSelectedStore() {
@@ -1244,7 +1232,7 @@ function clearData() {
   state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
   state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedDriver=''; state.search=''; state.warnings=[]; state.dataStats=null;
   Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
-  ['bridgeChart','ccChart','gmChart','bubbleChart','paretoChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
+  ['bridgeChart','bubbleChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
   ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores'].forEach(id=>{$(id).innerHTML='';});
   $('snapshotBody').innerHTML='<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
   $('overviewInsights').innerHTML='<div class="empty-state">No analysis available</div>';
@@ -1254,7 +1242,7 @@ function clearData() {
   $('reviewPeriodValue').textContent='—';
   $('periodSummary').innerHTML='<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>';
   $('footerMeta').textContent='Files are processed locally and are not transmitted to an external server';
-  $('ccBench').textContent='—';$('gmBench').textContent='—';$('paretoBadge').textContent='—';$('bridgeReconcile').textContent='—';$('apReconcile').textContent='—';$('storeReconcile').textContent='—';
+  $('tierSummary').innerHTML='';$('bridgeReconcile').textContent='—';$('apReconcile').textContent='—';$('storeReconcile').textContent='—';
   $('storeSearch').value='';$('fileInput').value='';
   $('detailStoreSelect').innerHTML='<option>No data</option>';
   [['regionFilter','All Regions'],['cityFilter','All Cities'],['statusFilter','All Status'],['tierFilter','All Tiers']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
@@ -1281,9 +1269,9 @@ function importMappingFile(file) {
 document.querySelectorAll('.rail-link').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.tab)));
 document.addEventListener('click',event=>{
   const kpi=event.target.closest('[data-kpi]'); if(kpi){selectVarianceKpi(kpi.dataset.kpi);switchTab('variance');return;}
-  const driver=event.target.closest('[data-driver]'); if(driver){state.selectedDriver=driver.dataset.driver;setPortfolioMetric(`field:${state.selectedDriver}`);state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');return;}
+  const driver=event.target.closest('[data-driver]'); if(driver){state.selectedDriver=driver.dataset.driver;state.portfolioMetric=RANKING_METRICS[state.selectedDriver]?state.selectedDriver:'customerContribution';state.portfolioView='ranking';setSegment('portfolioView','ranking');switchTab('portfolio');return;}
   const store=event.target.closest('[data-store]'); if(store){openStoreDetail(store.dataset.store);return;}
-  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){selectVarianceKpi(action.dataset.metric);switchTab('variance');}else if(action.dataset.action==='portfolio'){state.selectedDriver=action.dataset.driver||'';if(state.selectedDriver)setPortfolioMetric(`field:${state.selectedDriver}`);else setPortfolioMetric(action.dataset.metric||'operatingProfit');state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');}}
+  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){selectVarianceKpi(action.dataset.metric);switchTab('variance');}else if(action.dataset.action==='portfolio'){state.selectedDriver=action.dataset.driver||'';state.portfolioMetric=state.selectedDriver&&RANKING_METRICS[state.selectedDriver]?state.selectedDriver:'customerContribution';state.portfolioView='ranking';setSegment('portfolioView','ranking');switchTab('portfolio');}}
 });
 
 document.querySelectorAll('#varianceMetric button[data-value]').forEach(button=>button.addEventListener('click',event=>{
@@ -1293,8 +1281,8 @@ document.querySelectorAll('#varianceMetric button[data-value]').forEach(button=>
 }));
 $('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
 $('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
-$('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='quadrants'||state.portfolioView==='productivity')renderPortfolio();});
-$('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderConcentration();});
+$('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='productivity')renderBubble();});
+$('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderStoreRanking();});
 $('detailStoreSelect').addEventListener('change',event=>{state.selectedStore=event.target.value;renderDetail();});
 
 $('regionFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
