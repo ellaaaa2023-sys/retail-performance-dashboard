@@ -1158,6 +1158,7 @@ function renderBubble() {
   }));
   c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:78,right:30,top:35,bottom:60},tooltip:{...tooltipStyle(),trigger:'item',formatter:p=>bubbleTooltip(p.data.store)},xAxis:{type:'value',scale:true,name:'Customer Contribution',nameLocation:'middle',nameGap:40,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'value',scale:true,name:'Gross Margin',nameLocation:'middle',nameGap:58,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'scatter',data,emphasis:{scale:1.16,itemStyle:{opacity:1}}}]},{notMerge:true});
   bindStoreClick(c);
+  requestAnimationFrame(() => c.resize());
 }
 function renderStoreRanking() {
   const key = rankingMetricKey();
