@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Codex Handoff
 
-> 更新时间：2026-08-14（Asia/Shanghai）  
+> 更新时间：2026-08-15（Asia/Shanghai）
 > 交接目的：让新的 Codex 对话窗口在不依赖聊天历史的情况下，安全地继续维护本项目。  
 > 事实边界：本文基于当前仓库、`js/app.js`、HTML/CSS、现有文档、Git 状态及 Mock 工作簿的实际审计结果编写。本文不代表 Enterprise Release 已完成。
 
@@ -32,17 +32,49 @@ Store Detail
 - AI、Codex、GitHub、Vercel 和开发预览站只允许接触 Mock Data。
 - 真实公司 Excel 只能在公司电脑上由用户主动选择，并在本地浏览器内读取和计算。
 - 不要要求用户将真实 Excel、真实截图、真实金额、门店明细或内部链接发送给 AI。
+- 真实公司数据禁止放入项目目录或进入 Git；Git、GitHub、Vercel 与 AI 仅允许 Mock Data。
+
+### 当前标准 Mock Dataset（2026-08-15 起生效）
+
+- 唯一 Source of Truth：`sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx`。
+- 新功能开发、Parser 重构、Field Mapping 和 Dashboard 测试默认只使用该 Workbook。
+- Workbook 同时包含 Summary P&L 与 Store-level P&L detail。
+- Review Period 数据契约为 `S1` / `Full Year`；Comparison 固定为 `Prior Year Same Period`。
+- 当前 Workbook 提供 S1 示例；Full Year 后续按同一数据契约接入。
+- `sample_data/Mock_Counter_PnL.xlsx` 为 legacy，仅保留，不再作为兼容目标；未经用户明确要求不得读取。
+- 若本文后续旧审计记录与本节冲突，以本节和 `docs/DATA_MODEL.md` 为准。
 
 ## 2. 当前状态摘要
+
+### Phase 5 — Core Data Refactor（已完成）
+
+- 新增 `js/data/core-data.js` 和 `tests/core-data.test.js`。
+- 新数据架构：
+
+  ```text
+  Workbook
+    → Sheet Discovery
+    → Review Period Detection
+    → Summary / Detail Parsing
+    → Exact Field Mapping
+    → Normalized Dual-layer Model
+    → Portfolio / Filter / Bridge APIs
+  ```
+
+- 已确认：Current = `2026 S1`，Comparison = `2025 S1`；Summary 默认使用 `Actual Adj.`；Total Portfolio 使用 Summary，Filtered Portfolio 使用 Detail aggregation；AUP 始终使用 Summary，不随筛选变化；Tier 直接读取 Excel，不写死；Nature / Channel 已从后续分析维度删除。
+- 实测：18/18 PASS；160 家 Current stores；150 家 Comparison stores；3 个 Summary Bridges 均 reconcile。
+- 尚未迁移：01 Executive Overview、02 P&L Variance、03 Store Portfolio、04 Store Detail。
+- 已知事项：部分 Filtered Bridge slice 会因 Detail KRMB 取整触发 `BRIDGE_RECONCILIATION_ERROR`；不添加 residual 柱，留到 02 阶段处理。
+- 下一步：迁移 01 Executive Overview。页面必须消费现有 `RetailDashboardData` API，不得重新实现 parser 或 calculation logic。
 
 ### 2.1 已完成并在代码中存在
 
 #### Mock P&L 数据与数据模型
 
-- `sample_data/Mock_Counter_PnL.xlsx` 已生成并纳入仓库白名单。
-- 事实粒度为 `Store ID × Review Period`，不是一店一行，也不是月度数据。
-- 当前 Mock 数据包含 160 家门店、4 个半年度期间、640 条 P&L 事实记录。
-- 工作簿包含驱动表、逐行检查、总检查及数据字典；模型检查页显示 `MODEL STATUS = PASS`。
+- `sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx` 是当前唯一标准 Mock Dataset。
+- Workbook 包含 Summary P&L 与 Store-level P&L detail；当前样本覆盖 2026 S1 及 2025 S1 同期对比。
+- Review Period 契约为 `S1` / `Full Year`，Comparison 为 `Prior Year Same Period`。
+- 旧 Workbook 的结构、行数和检查结果不构成新版 Parser 或 Dashboard 的兼容要求。
 - P&L 采用收入/利润为正、扣减/费用为负的符号约定。
 
 #### Dashboard 页面和信息架构
@@ -130,7 +162,7 @@ Store Detail
 
 ### 2.2 审计和测试证据
 
-- 2026-08-14 对 `Mock_Counter_PnL.xlsx` 的实际审计：
+- 以下为 2026-08-14 对 legacy `Mock_Counter_PnL.xlsx` 的历史审计，不代表当前 Source of Truth，也不是兼容要求：
   - 6 个工作表：`README`、`Counter_PnL`、`Drivers`、`Checks`、`Row_Checks`、`Data_Dictionary`。
   - `Counter_PnL` 范围为 `A1:BP641`，即 68 列、640 条事实记录。
   - 160 个 distinct Store ID；4 个期间；0 个重复 Store-Period 主键；主表 0 个空值。
@@ -207,9 +239,11 @@ Retail_Performance_Dashboard/
 ├── config/
 │   └── default-mapping.json           # 人工参考映射；页面不会 fetch 此文件
 ├── sample_data/
-│   ├── Mock_Counter_PnL.xlsx          # 唯一允许提交的模拟工作簿
+│   ├── Retail_Performance_Dashboard_Mock_Data.xlsx # 当前唯一标准 Mock Dataset
+│   ├── Mock_Counter_PnL.xlsx          # legacy；保留但默认不读取
 │   └── README.md                      # Mock 文件用途说明
 ├── docs/
+│   ├── DATA_MODEL.md                  # 当前 Source of Truth、期间与比较口径
 │   └── HANDOFF.md                     # 本交接文档
 ├── README.md                          # 使用、离线运行、图表操作和常见问题
 ├── ARCHITECTURE.md                    # 本地数据流、语义层、比较期和 Drill-down 设计
@@ -230,12 +264,10 @@ Retail_Performance_Dashboard/
 
 ### 5.1 时间与粒度
 
-- 当前业务周期：**半年度 Review Period**。
-- 当前 Mock 期间：`2025 S1`、`2025 S2`、`2026 S1`、`2026 S2`。
-- 主键：规范化后的 `Store ID + Period Key`。
-- 粒度：一行 = 一家门店 × 一个半年度 Review Period。
-- Dashboard 不写死当前四个期间；未来增加 `2027 S1/S2` 可由选择器和 Timeline 动态读取。
-- `vs Last Year`：上一年度同名 Review Period；`vs Previous Review`：排序后的上一个期间。
+- Review Period 数据契约：`S1` / `Full Year`。
+- 当前 Mock 期间：`2025 S1`、`2026 S1`。
+- 门店明细粒度：一行 = 一家门店在一个 Review Period 下的 P&L。
+- Comparison 固定为 `Prior Year Same Period`；不再以 `Previous Review` 作为新版默认口径。
 
 ### 5.2 Mock 工作簿结构
 
@@ -358,12 +390,12 @@ KPI click
 
 ## 7. 已确认的重要业务与产品决策
 
-1. 分析周期是半年度 S1/S2，不做月度主模型。
+1. Review Period 为 S1 / Full Year，不做月度主模型。
 2. Dashboard 必须遵循 `Overview → Variance → Driver → Store → Detail`，不能退回为一页堆满门店散点图。
 3. 一行 = Store × Review Period；不再使用“一行 = 一个门店”的旧数据模型。
 4. Bubble size 使用 Net Sales，不使用 Net Sales / POS。
 5. P&L 和同比关系必须可核对，不能为了视觉效果写死数字。
-6. 年份与 Review Period 动态读取，不写死 2025/2026/S1/S2。
+6. 年份动态读取；Review Period 按 S1 / Full Year 识别。
 7. 真实数据不得离开公司电脑；AI 只负责使用模拟数据开发工具。
 8. 真实 Excel 不能自动按路径加载，只能由用户主动 Upload / Drop。
 9. 需要保留 Field Mapping，以适配真实 Excel 的列名、列顺序、Sheet 和 Header row 变化。
@@ -546,6 +578,6 @@ npm run check
 
 ```text
 请先阅读 docs/HANDOFF.md，并只读检查 git status、当前文件结构和与本次任务相关的代码。
-不要假设真实公司数据可以提供给你；所有开发和测试只能使用 sample_data/Mock_Counter_PnL.xlsx。
+不要假设真实公司数据可以提供给你；所有开发和测试只能使用 sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx。
 在我确认范围之前，不要改变 P&L 口径、信息架构、离线边界或执行 Git commit/push。
 ```
