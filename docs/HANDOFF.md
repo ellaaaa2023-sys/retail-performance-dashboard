@@ -63,9 +63,24 @@ Store Detail
 
 - 已确认：Current = `2026 S1`，Comparison = `2025 S1`；Summary 默认使用 `Actual Adj.`；Total Portfolio 使用 Summary，Filtered Portfolio 使用 Detail aggregation；AUP 始终使用 Summary，不随筛选变化；Tier 直接读取 Excel，不写死；Nature / Channel 已从后续分析维度删除。
 - 实测：18/18 PASS；160 家 Current stores；150 家 Comparison stores；3 个 Summary Bridges 均 reconcile。
-- 尚未迁移：01 Executive Overview、02 P&L Variance、03 Store Portfolio、04 Store Detail。
+- 尚未迁移：02 P&L Variance、03 Store Portfolio、04 Store Detail。
 - 已知事项：部分 Filtered Bridge slice 会因 Detail KRMB 取整触发 `BRIDGE_RECONCILIATION_ERROR`；不添加 residual 柱，留到 02 阶段处理。
-- 下一步：迁移 01 Executive Overview。页面必须消费现有 `RetailDashboardData` API，不得重新实现 parser 或 calculation logic。
+
+### Phase 6A — 01 Executive Overview Migration（已完成，2026-08-15）
+
+- 01 Executive Overview 已迁移到新版 `RetailDashboardData` + `createDataService`（`service.getPortfolioMetrics` / `service.getFilterOptions`），未在页面复刻 parser / calculation / filter 逻辑。
+- 顶部 Key Figures 共 10 个：
+  - 第一行 4 个大卡：Store Count / POS no. / AUP / Gross Sales
+  - 第二行 6 个小卡：Total Minorations % / CONSO Net Sales / Gross Margin / Gross Margin % / Customer Contribution / Customer Contribution %
+- Store Count 来自 `service.getStores('current', filters).length`，随 Region/City/Status/Tier 筛选动态变化（Total Portfolio 下 = 160）。
+- Total Portfolio 使用 Summary `Actual Adj.`；Filtered Portfolio 使用 Detail aggregation；页面标题右侧有轻量 Total / Filtered Portfolio 状态提示。
+- AUP 始终来自 Summary P&L，不随筛选变化（AUP ≠ 门店单产）。
+- City 已支持 Region / Status / Tier 级联（`service.getFilterOptions` 驱动，无效选中自动回落 All）。
+- 顶部筛选器保留 Review Period（静态显示）/ Region / City / Status / 门店单产等级；Year / Comparison / Store Type / Channel 已删除。
+- Review Timeline 已删除，替换为 P&L Snapshot，最终列结构：`P&L Line | Current | % of Net Sales | Comparison | % of Net Sales | Variance %`。
+- Management Signals 已改为两层：有 Material Signal 时显示显著异常；否则显示 2–3 个 Key Movements（不再出现无信息量空状态）。
+- 02 / 03 / 04 尚未迁移（仍走旧 `state.records`，新 workbook 下优雅降级为空态）。
+- 下一步：02 P&L Variance Migration（消费 Summary/Filtered Bridge API）。
 
 ### 2.1 已完成并在代码中存在
 

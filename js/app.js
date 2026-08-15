@@ -158,8 +158,9 @@ const PNL_LINES = [
 const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
-  timelineMetric: 'netSales', varianceMetric: 'operatingProfit', portfolioView: 'quadrants', snapshot: 'current',
-  portfolioMetric: 'operatingProfit', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null
+  varianceMetric: 'operatingProfit', portfolioView: 'quadrants', snapshot: 'current',
+  portfolioMetric: 'operatingProfit', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
+  model: null, service: null, selectedVarianceKpi: 'grossMargin'
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -294,6 +295,7 @@ function mappingFromUI() {
 }
 function showMappingAlert(type,text) { $('mappingAlert').className = `mapping-alert ${type}`; $('mappingAlert').textContent = text; }
 function openSettings() {
+  if (state.model) { setNotice('info','Automatic field mapping','This workbook is mapped automatically by the data layer. Manual field mapping is no longer required.'); return; }
   if (!$('mappingDialog').open) $('mappingDialog').showModal();
   if (!state.book) showMappingAlert('error','Upload a workbook before configuring fields.');
 }
@@ -343,6 +345,7 @@ function pnlTieErrors(record) {
 }
 
 function buildRecords() {
+  if (state.model) { showMappingAlert('success','This workbook uses automatic semantic field mapping. Manual field mapping is not required.'); return; }
   const missing = validateMapping();
   if (missing.length) {
     showMappingAlert('error',`Missing required field: ${missing.map(key => FIELDS[key].label).join(', ')}.`);
@@ -399,7 +402,6 @@ function buildRecords() {
   const missingRecommended = Object.keys(FIELDS).filter(key => FIELDS[key].level === 'recommended' && !mapped(key));
   if (missingRecommended.length) state.warnings.push(`${missingRecommended.length} recommended field(s) unmapped`);
   state.dataStats = {records:records.length,stores:unique(records.map(r=>r.terminal)).length,periods:periods.length,tieErrorRows,duplicateKeys:duplicateKeys.length};
-  refreshPeriodControls();
   populateGlobalFilters();
   enableDashboard(true);
   ensureSelectedStore();
@@ -441,7 +443,12 @@ function comparisonPeriod() {
   return candidates.at(-1) || null;
 }
 function activeFilters() {
-  return {region:$('regionFilter').value,city:$('cityFilter').value,channel:$('channelFilter').value,storeType:$('typeFilter').value,status:$('statusFilter').value};
+  return {
+    region: $('regionFilter').value,
+    city: $('cityFilter').value,
+    status: $('statusFilter').value,
+    productivityTier: $('tierFilter').value
+  };
 }
 function rowsForPeriod(periodKey) {
   if (!periodKey) return [];
@@ -461,37 +468,34 @@ function setOptions(id, values, label) {
   element.innerHTML = `<option value="">${esc(label)}</option>` + values.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
   if (values.includes(old)) element.value = old;
 }
-function refreshPeriodControls() {
-  const current = currentPeriod();
-  const years = unique(state.periods.map(period => period.year)).sort((a,b)=>Number(a)-Number(b) || String(a).localeCompare(String(b)));
-  $('yearSelect').innerHTML = years.map(year => `<option value="${esc(year)}"${year === current?.year ? ' selected' : ''}>${esc(year)}</option>`).join('');
-  refreshReviewOptions(current?.reviewPeriod);
-  $('comparisonSelect').value = state.comparisonMode;
-  updatePeriodSummary();
-}
-function refreshReviewOptions(preferred) {
-  const year = $('yearSelect').value || currentPeriod()?.year;
-  const options = state.periods.filter(period => period.year === year).sort(periodSort);
-  const target = options.find(period => period.reviewPeriod === preferred) || options.at(-1);
-  $('reviewSelect').innerHTML = options.map(period => `<option value="${esc(period.key)}"${period.key === target?.key ? ' selected' : ''}>${esc(period.reviewPeriod)}</option>`).join('');
-  if (target) state.currentPeriodKey = target.key;
-}
 function updatePeriodSummary() {
-  const current = currentPeriod(), comparison = comparisonPeriod();
-  $('periodSummary').innerHTML = `<span>Current</span><strong>${esc(current?.key || '—')}</strong><i>vs</i><span>${state.comparisonMode === 'ly' ? 'Last Year' : 'Previous'}</span><strong>${esc(comparison?.key || 'N/A')}</strong>`;
+  if (state.model) {
+    const md = state.model.metadata;
+    $('reviewPeriodValue').textContent = md.reviewPeriod;
+    $('periodSummary').innerHTML = `<span>Current</span><strong>${esc(md.currentPeriodKey)}</strong><i>vs</i><span>Comparison</span><strong>${esc(md.comparisonPeriodKey)}</strong>`;
+  } else {
+    $('reviewPeriodValue').textContent = '—';
+    $('periodSummary').innerHTML = `<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>`;
+  }
   const snapshotComparison = document.querySelector('#snapshotToggle [data-value="comparison"]');
-  if (snapshotComparison) snapshotComparison.textContent = state.comparisonMode === 'ly' ? 'LY' : 'Previous';
+  if (snapshotComparison) snapshotComparison.textContent = 'LY';
 }
 function populateGlobalFilters() {
-  setOptions('regionFilter',unique(state.records.map(r=>r.region)).sort(),'All Regions');
-  setOptions('cityFilter',unique(state.records.map(r=>r.city)).sort((a,b)=>a.localeCompare(b,'zh-CN')),'All Cities');
-  setOptions('channelFilter',unique(state.records.map(r=>r.channel)).sort(),'All Channels');
-  setOptions('typeFilter',unique(state.records.map(r=>r.storeType)).sort(),'All Types');
-  setOptions('statusFilter',unique(state.records.map(r=>r.status)).sort(),'All Status');
+  if (!state.service) return;
+  const options = state.service.getFilterOptions({});
+  setOptions('regionFilter', options.region, 'All Regions');
+  setOptions('cityFilter', options.city, 'All Cities');
+  setOptions('statusFilter', options.status, 'All Status');
+  setOptions('tierFilter', options.productivityTier, 'All Tiers');
+}
+function refreshCityOptions() {
+  if (!state.service) return;
+  const options = state.service.getFilterOptions(activeFilters());
+  setOptions('cityFilter', options.city, 'All Cities');
 }
 function enableDashboard(on) {
   $('contextBar').classList.toggle('is-disabled',!on);
-  ['yearSelect','reviewSelect','comparisonSelect','regionFilter','cityFilter','channelFilter','typeFilter','statusFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect','clearBtn'].forEach(id => { $(id).disabled = !on; });
+  ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect','clearBtn'].forEach(id => { if ($(id)) $(id).disabled = !on; });
 }
 
 function metricValue(rows,key) {
@@ -535,12 +539,71 @@ function kpiCardHtml(key,stats,clickable = true) {
   return `<${tag} class="kpi-card ${directionClass(key,stats.delta)}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(metric.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current">${formatMetric(stats.current,key)}</div><div class="kpi-compare"><span>Comparison</span><strong>${formatMetric(stats.ly,key)}</strong><span>${state.comparisonMode === 'ly' ? 'YoY Change' : 'Change'}</span><strong class="${goodBadClass(key,stats.delta)}">${yoy}</strong></div></${tag}>`;
 }
 
+const OVERVIEW_KPIS_PRIMARY = [
+  { key: 'storeCount', label: 'Store Count', type: 'count', drill: null },
+  { key: 'posNo', label: 'POS no.', type: 'count', drill: null },
+  { key: 'aup', label: 'AUP', type: 'money', drill: null },
+  { key: 'grossSales', label: 'Gross Sales', type: 'money', drill: null }
+];
+const OVERVIEW_KPIS_SECONDARY = [
+  { key: 'totalMinorationsPct', label: 'Total Minorations %', type: 'percent', drill: 'minorations' },
+  { key: 'netSales', label: 'CONSO Net Sales', type: 'money', drill: null },
+  { key: 'grossMargin', label: 'Gross Margin', type: 'money', drill: 'grossMargin' },
+  { key: 'grossMarginPct', label: 'Gross Margin %', type: 'percent', drill: 'grossMargin' },
+  { key: 'customerContribution', label: 'Customer Contribution', type: 'money', drill: 'contribution' },
+  { key: 'customerContributionPct', label: 'Customer Contribution %', type: 'percent', drill: 'contribution' }
+];
+function overviewMetricFormat(value, type) {
+  if (type === 'percent') return formatPct(value);
+  if (type === 'count') return formatInt(value);
+  return formatMoney(value);
+}
+function overviewMetricDelta(current, comparison, type) {
+  if (!Number.isFinite(current) || !Number.isFinite(comparison)) return null;
+  const variance = current - comparison;
+  if (type === 'percent') return formatPp(variance);
+  if (type === 'count') return formatSignedNumber(variance);
+  const rel = Math.abs(comparison) > 1e-9 ? variance / Math.abs(comparison) : null;
+  return Number.isFinite(rel) ? `${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%` : null;
+}
+function overviewKpiCard(def, metrics) {
+  const current = metrics.current[def.key];
+  const comparison = metrics.comparison[def.key];
+  const deltaText = overviewMetricDelta(current, comparison, def.type);
+  const variance = (Number.isFinite(current) && Number.isFinite(comparison)) ? current - comparison : null;
+  const tone = (variance == null || Math.abs(variance) < 1e-9) ? 'neutral' : variance > 0 ? 'favorable' : 'adverse';
+  const tag = def.drill ? 'button' : 'article';
+  const attrs = tag === 'button' ? ` type="button" data-kpi="${def.drill}"` : '';
+  const comparisonText = Number.isFinite(comparison) ? overviewMetricFormat(comparison, def.type) : '—';
+  const currentText = Number.isFinite(current) ? overviewMetricFormat(current, def.type) : '—';
+  return `<${tag} class="kpi-card ${tone}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current">${currentText}</div><div class="kpi-compare"><span>Comparison</span><strong>${comparisonText}</strong><span>Variance</span><strong class="${deltaText == null ? 'flat' : variance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
+}
+function updateScopeStatus(metrics) {
+  const el = $('scopeStatus');
+  if (!el) return;
+  const filtered = metrics && metrics.mode === 'filtered';
+  el.className = 'scope-status' + (filtered ? ' filtered' : '');
+  el.innerHTML = `<span class="scope-dot"></span><span>${esc(metrics ? metrics.label : 'Total Portfolio')}</span>`;
+}
+function renderOverviewEmpty() {
+  updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
+  $('primaryKpis').innerHTML = '';
+  $('secondaryKpis').innerHTML = '';
+  $('snapshotBody').innerHTML = '<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
+  $('overviewInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
+}
 function renderOverview() {
-  const {currentRows,comparisonRows} = scope();
-  $('primaryKpis').innerHTML = ['netSales','grossMargin','contribution','operatingProfit'].map(key => kpiCardHtml(key,metricStats(key,currentRows,comparisonRows),true)).join('');
-  $('secondaryKpis').innerHTML = ['grossMarginPct','contributionPct','operatingMargin','storeCount','posCount','avgSales'].map(key => kpiCardHtml(key,metricStats(key,currentRows,comparisonRows),Boolean(METRICS[key].drill))).join('');
-  renderTimeline();
-  renderOverviewInsights();
+  if (!state.service) { renderOverviewEmpty(); return; }
+  const filters = activeFilters();
+  const metrics = state.service.getPortfolioMetrics(filters);
+  const view = { ...metrics, current: { ...metrics.current }, comparison: { ...metrics.comparison } };
+  view.current.storeCount = state.service.getStores('current', filters).length;
+  view.comparison.storeCount = state.service.getStores('comparison', filters).length;
+  updateScopeStatus(view);
+  $('primaryKpis').innerHTML = OVERVIEW_KPIS_PRIMARY.map(def => overviewKpiCard(def, view)).join('');
+  $('secondaryKpis').innerHTML = OVERVIEW_KPIS_SECONDARY.map(def => overviewKpiCard(def, view)).join('');
+  renderPnlSnapshot(view);
+  renderOverviewInsights(view);
 }
 
 function chart(id) {
@@ -568,19 +631,38 @@ function chartNavigation({x=true,y=true,xAxisIndex=0,yAxisIndex=0}={}) {
     dataZoom
   };
 }
-function renderTimeline() {
-  const key = state.timelineMetric;
-  const values = state.periods.map(period => metricValue(rowsForPeriod(period.key),key));
-  const comparison = comparisonPeriod();
-  $('timelineSub').textContent = `${METRICS[key].label} across ${state.periods.length} discrete review periods · ${currentPeriod()?.key || '—'} vs ${comparison?.key || 'N/A'}`;
-  const c = chart('timelineChart');
-  c.setOption({
-    textStyle:baseText(), ...chartNavigation(), grid:{left:66,right:22,top:30,bottom:50},
-    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const p=params[0];return `<b>${esc(p.name)}</b><br>${esc(METRICS[key].label)}: ${formatMetric(p.value,key)}`;}},
-    xAxis:{type:'category',data:state.periods.map(p=>p.key),axisTick:{show:false},axisLine:{lineStyle:{color:THEME.axis}},axisLabel:{color:THEME.muted,fontSize:10}},
-    yAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:value=>formatMetric(value,key)},splitLine:{lineStyle:{color:THEME.grid}}},
-    series:[{type:'bar',barMaxWidth:54,data:values.map((value,index)=>({value,itemStyle:{color:state.periods[index].key===state.currentPeriodKey?THEME.blue:state.periods[index].key===comparison?.key?THEME.gold:THEME.blueLight,borderColor:state.periods[index].key===comparison?.key?THEME.gold:'transparent',borderWidth:1,borderRadius:[4,4,0,0]}})),label:{show:true,position:'top',color:THEME.muted,fontSize:9,formatter:p=>formatMetric(p.value,key)}}]
-  },{notMerge:true});
+const SNAPSHOT_ROWS = [
+  { key: 'posNo', label: 'POS no.', type: 'count', ratio: null, major: false },
+  { key: 'aup', label: 'AUP', type: 'money', ratio: null, major: false },
+  { key: 'grossSales', label: 'Gross Sales', type: 'money', ratio: null, major: true },
+  { key: 'totalMinorations', label: 'Total Minorations', type: 'money', ratio: 'totalMinorationsPct', major: true },
+  { key: 'netSales', label: 'CONSO Net Sales', type: 'money', ratio: null, major: true },
+  { key: 'grossMargin', label: 'Gross Margin', type: 'money', ratio: 'grossMarginPct', major: true },
+  { key: 'customerContribution', label: 'Customer Contribution', type: 'money', ratio: 'customerContributionPct', major: true }
+];
+function snapshotCell(value, type) {
+  if (!Number.isFinite(value)) return '—';
+  if (type === 'count') return formatInt(value);
+  if (type === 'money') return formatKrmb(value);
+  return formatPct(value);
+}
+function snapshotVariancePct(current, comparison) {
+  if (!Number.isFinite(current) || !Number.isFinite(comparison) || Math.abs(comparison) < 1e-9) return '—';
+  const rel = (current - comparison) / comparison;
+  return `${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
+}
+function renderPnlSnapshot(metrics) {
+  const md = state.model.metadata;
+  $('snapshotSub').textContent = `Summary P&L · Actual Adj. · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
+  $('snapshotBody').innerHTML = SNAPSHOT_ROWS.map(row => {
+    const current = metrics.current[row.key];
+    const comparison = metrics.comparison[row.key];
+    const variance = (Number.isFinite(current) && Number.isFinite(comparison)) ? current - comparison : null;
+    const currentRatio = row.ratio ? metrics.current[row.ratio] : null;
+    const comparisonRatio = row.ratio ? metrics.comparison[row.ratio] : null;
+    const varianceCls = variance == null || Math.abs(variance) < 1e-9 ? '' : variance > 0 ? 'cell-positive' : 'cell-negative';
+    return `<tr class="${row.major ? 'major' : ''}"><td>${esc(row.label)}</td><td>${snapshotCell(current, row.type)}</td><td>${snapshotCell(currentRatio, 'percent')}</td><td>${snapshotCell(comparison, row.type)}</td><td>${snapshotCell(comparisonRatio, 'percent')}</td><td class="${varianceCls}">${snapshotVariancePct(current, comparison)}</td></tr>`;
+  }).join('');
 }
 
 function apInvestment(rows) { return Math.abs(sum(rows,'daCost')) + Math.abs(sum(rows,'specificAP')); }
@@ -611,20 +693,134 @@ function insightHtml(items) {
     return `<${tag} class="insight-item ${item.tone || ''}"${attrs}><strong>${esc(item.title)}</strong><span>${esc(item.detail)}</span></${tag}>`;
   }).join('');
 }
-function renderOverviewInsights() {
-  const {currentRows,comparisonRows} = scope();
-  if (!comparisonRows.length) { $('overviewInsights').innerHTML = insightHtml([{title:'Comparison period unavailable',detail:'Choose a review period with a matching LY or previous review.'}]); return; }
-  const ns=metricStats('netSales',currentRows,comparisonRows), cc=metricStats('contribution',currentRows,comparisonRows), op=metricStats('operatingProfit',currentRows,comparisonRows), gm=metricStats('grossMarginPct',currentRows,comparisonRows);
-  const apCur=apInvestment(currentRows), apLy=apInvestment(comparisonRows), apPct=apLy?(apCur-apLy)/apLy:0;
-  const concentration=adverseConcentration('operatingProfit');
-  const items=[];
-  if (cc.pct < -.05) items.push({tone:'critical',title:'Customer Contribution decreased significantly',detail:`${formatMoney(cc.current)} versus ${formatMoney(cc.ly)} (${formatPct(cc.pct)} versus comparison).`,action:'variance',metric:'contribution'});
-  if (ns.delta > 0 && op.delta < 0) items.push({tone:'warning',title:'Sales growth did not translate into profit growth',detail:`Net Sales ${formatPct(ns.pct)} while Operating Profit ${formatPct(op.pct)}.`,action:'variance',metric:'operatingProfit'});
-  if (apPct > .15) items.push({tone:'warning',title:'Promotional investment increased significantly',detail:`DA Cost + Specific A&P increased ${formatPct(apPct)} to ${formatMoney(apCur)}.`,action:'variance',metric:'contribution'});
-  if (gm.delta < -.02) items.push({tone:'warning',title:'Gross Margin rate compressed',detail:`Gross Margin % changed ${formatPp(gm.delta)} versus the comparison period.`,action:'variance',metric:'grossMargin'});
-  if (concentration > .7) items.push({tone:'warning',title:'Adverse OP variance is highly concentrated',detail:`Top 10 stores account for ${formatPct(concentration)} of total adverse OP movement.`,action:'portfolio',metric:'operatingProfit'});
-  if (!items.length) items.push({tone:'positive',title:'No material rule threshold was triggered',detail:'Review the KPI cards and driver analysis for smaller movements.'});
-  $('overviewInsights').innerHTML = insightHtml(items.slice(0,5));
+const SIGNAL_METRICS = [
+  { key: 'grossSales', label: 'Gross Sales', kind: 'money', drill: null },
+  { key: 'netSales', label: 'CONSO Net Sales', kind: 'money', drill: null },
+  { key: 'grossMargin', label: 'Gross Margin', kind: 'money', drill: 'grossMargin' },
+  { key: 'customerContribution', label: 'Customer Contribution', kind: 'money', drill: 'contribution' },
+  { key: 'totalMinorationsPct', label: 'Total Minorations %', kind: 'pp', drill: 'minorations' },
+  { key: 'grossMarginPct', label: 'Gross Margin %', kind: 'pp', drill: 'grossMargin' },
+  { key: 'customerContributionPct', label: 'Customer Contribution %', kind: 'pp', drill: 'contribution' }
+];
+const MATERIAL_TITLES = {
+  grossSales: 'Gross Sales declined significantly',
+  totalMinorationsPct: 'Total Minorations deteriorated materially',
+  customerContribution: 'Customer Contribution decreased significantly',
+  customerContributionPct: 'Customer Contribution % decreased significantly',
+  grossMarginPct: 'Gross Margin rate compressed'
+};
+function signalMovement(def, c, p) {
+  const cur = c[def.key], cmp = p[def.key];
+  if (!Number.isFinite(cur) || !Number.isFinite(cmp)) return null;
+  const variance = cur - cmp;
+  const magnitude = def.kind === 'money'
+    ? (Math.abs(cmp) > 1e-9 ? variance / Math.abs(cmp) : null)
+    : variance;
+  if (!Number.isFinite(magnitude)) return null;
+  return { ...def, variance, magnitude, favorable: magnitude >= 0 };
+}
+function describeMovement(m) {
+  if (m.kind === 'money') {
+    const pct = `${m.magnitude >= 0 ? '+' : ''}${(m.magnitude * 100).toFixed(1)}%`;
+    return m.favorable
+      ? { title: `${m.label} increased`, detail: `${m.label} rose ${pct} versus the comparison period.` }
+      : { title: `${m.label} declined`, detail: `${m.label} fell ${pct} versus the comparison period.` };
+  }
+  const pp = `${m.magnitude >= 0 ? '+' : ''}${(m.magnitude * 100).toFixed(1)}pp`;
+  if (m.key === 'totalMinorationsPct') {
+    return m.favorable
+      ? { title: 'Total Minorations narrowed', detail: `Total Minorations % narrowed ${pp}, easing commercial deductions against Gross Sales.` }
+      : { title: 'Total Minorations deteriorated', detail: `Total Minorations % widened ${pp}, deepening commercial deductions against Gross Sales.` };
+  }
+  return m.favorable
+    ? { title: `${m.label} improved`, detail: `${m.label} improved ${pp} versus the comparison period.` }
+    : { title: `${m.label} declined`, detail: `${m.label} declined ${pp} versus the comparison period.` };
+}
+function materialSignals(movements) {
+  const byKey = {};
+  movements.forEach(m => { byKey[m.key] = m; });
+  const out = [];
+  const pushIf = (key, cond, tone) => {
+    const m = byKey[key];
+    if (m && cond(m)) out.push({ ...m, material: true, tone });
+  };
+  pushIf('grossSales', m => m.magnitude <= -0.05, 'critical');
+  pushIf('totalMinorationsPct', m => m.magnitude <= -0.02, 'warning');
+  pushIf('customerContribution', m => m.magnitude <= -0.05, 'critical');
+  pushIf('customerContributionPct', m => m.magnitude <= -0.02, 'warning');
+  pushIf('grossMarginPct', m => m.magnitude <= -0.02, 'warning');
+  const ns = byKey.netSales, gm = byKey.grossMarginPct;
+  if (ns && gm && ns.magnitude > 0 && gm.magnitude < 0) {
+    out.push({ key: 'netSales', label: 'Net Sales', kind: 'money', material: true, tone: 'warning', composite: 'salesWithoutMargin', variance: ns.variance, magnitude: ns.magnitude, favorable: true, drill: 'grossMargin' });
+  }
+  return out;
+}
+function movementToSignal(m) {
+  let title, detail;
+  if (m.composite === 'salesWithoutMargin') {
+    title = 'Sales growth did not improve margin';
+    detail = `Net Sales rose ${(m.magnitude * 100).toFixed(1)}% while the Gross Margin rate did not keep pace.`;
+  } else if (m.material) {
+    detail = describeMovement(m).detail;
+    title = MATERIAL_TITLES[m.key] || describeMovement(m).title;
+  } else {
+    const d = describeMovement(m);
+    title = d.title; detail = d.detail;
+  }
+  const tone = m.tone || (m.favorable ? 'positive' : 'warning');
+  const signal = { tone, title, detail };
+  if (m.drill) { signal.action = 'variance'; signal.metric = m.drill; }
+  return signal;
+}
+function selectKeyMovements(movements) {
+  const positives = movements.filter(m => m.favorable).sort((a, b) => b.magnitude - a.magnitude);
+  const negatives = movements.filter(m => !m.favorable).sort((a, b) => a.magnitude - b.magnitude);
+  const picks = [];
+  if (positives.length && negatives.length) {
+    picks.push(positives[0]);
+    picks.push(negatives[0]);
+    if (positives.length > 1) picks.push(positives[1]);
+    else if (negatives.length > 1) picks.push(negatives[1]);
+  } else if (positives.length) {
+    picks.push(...positives.slice(0, 3));
+  } else if (negatives.length) {
+    picks.push(...negatives.slice(0, 3));
+  }
+  return picks.slice(0, 3);
+}
+function stabilitySignals(movements) {
+  const largest = movements.slice().sort((a, b) => Math.abs(b.magnitude) - Math.abs(a.magnitude))[0];
+  const items = [{ tone: 'positive', title: 'Portfolio performance remained broadly stable', detail: 'No major movement across core P&L indicators versus the comparison period.' }];
+  if (largest) {
+    const d = describeMovement(largest);
+    const item = { tone: largest.favorable ? 'positive' : 'warning', title: `${largest.label} showed the largest movement`, detail: d.detail };
+    if (largest.drill) { item.action = 'variance'; item.metric = largest.drill; }
+    items.push(item);
+  }
+  return items;
+}
+function renderOverviewInsights(metrics) {
+  if (!metrics) return;
+  const c = metrics.current, p = metrics.comparison;
+  if (!Number.isFinite(p.netSales)) {
+    $('overviewInsights').innerHTML = insightHtml([{ title: 'Comparison period unavailable', detail: 'Prior-year same-period data is required for variance signals.' }]);
+    return;
+  }
+  const movements = SIGNAL_METRICS.map(def => signalMovement(def, c, p)).filter(Boolean);
+  if (!movements.length) {
+    $('overviewInsights').innerHTML = insightHtml([{ title: 'No comparable stores in scope', detail: 'The current filters return no comparison-period stores, so no movement signals can be derived.' }]);
+    return;
+  }
+  const material = materialSignals(movements);
+  let items;
+  if (material.length) {
+    items = material.map(movementToSignal);
+  } else if (movements.some(m => Math.abs(m.magnitude) >= 0.005)) {
+    items = selectKeyMovements(movements).map(movementToSignal);
+  } else {
+    items = stabilitySignals(movements);
+  }
+  $('overviewInsights').innerHTML = insightHtml(items.slice(0, 4));
 }
 
 function driverDescriptor(fieldKey,label,kind) { return {field:fieldKey,label,kind}; }
@@ -827,19 +1023,21 @@ function renderApCharts(current,ly) {
 }
 
 function renderFooter() {
-  if(!state.dataStats)return;
-  $('footerMeta').textContent=`${state.dataStats.records} records · ${state.dataStats.stores} stores · ${state.dataStats.periods} review periods · Source unit KRMB · Data held in browser memory only`;
+  if (!state.model) return;
+  const md = state.model.metadata;
+  const currentStores = state.model.detail.current.stores.length;
+  const comparisonStores = state.model.detail.comparison.stores.length;
+  $('footerMeta').textContent = `${currentStores} current stores · ${comparisonStores} comparison stores · ${md.reviewPeriod} · Source unit KRMB · Data held in browser memory only`;
 }
 function renderAll() {
   updatePeriodSummary(); ensureSelectedStore(); renderFooter(); renderActiveTab();
 }
 function renderActiveTab() {
-  if(!state.records.length)return;
-  if(state.activeTab==='overview')renderOverview();
-  else if(state.activeTab==='variance')renderVariance();
-  else if(state.activeTab==='portfolio')renderPortfolio();
+  if (state.activeTab === 'overview') renderOverview();
+  else if (state.activeTab === 'variance') renderVariance();
+  else if (state.activeTab === 'portfolio') renderPortfolio();
   else renderDetail();
-  requestAnimationFrame(()=>Object.values(state.charts).forEach(c=>c.resize()));
+  requestAnimationFrame(() => Object.values(state.charts).forEach(c => c.resize()));
 }
 function switchTab(tab) {
   state.activeTab=tab;
@@ -850,21 +1048,25 @@ function switchTab(tab) {
 function setSegment(containerId,value) { document.querySelectorAll(`#${containerId} button[data-value]`).forEach(button=>button.classList.toggle('active',button.dataset.value===value)); }
 
 function clearData() {
-  state.book=null; state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
+  state.book=null; state.model=null; state.service=null;
+  state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
   state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.search=''; state.warnings=[]; state.dataStats=null;
   Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
-  ['timelineChart','bridgeChart','ccChart','gmChart','bubbleChart','paretoChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
+  ['bridgeChart','ccChart','gmChart','bubbleChart','paretoChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
   ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores'].forEach(id=>{$(id).innerHTML='';});
+  $('snapshotBody').innerHTML='<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
   $('overviewInsights').innerHTML='<div class="empty-state">No analysis available</div>';
   $('varianceInsights').innerHTML='<div class="empty-state">No analysis available</div>';
   $('storeInsights').innerHTML='<div class="empty-state">No store selected</div>';
   $('detailTitle').textContent='Select a store to review';$('detailMeta').textContent='Current versus comparison period';
+  $('reviewPeriodValue').textContent='—';
   $('periodSummary').innerHTML='<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>';
   $('footerMeta').textContent='Files are processed locally and are not transmitted to an external server';
   $('ccBench').textContent='—';$('gmBench').textContent='—';$('paretoBadge').textContent='—';$('bridgeReconcile').textContent='—';$('apReconcile').textContent='—';$('storeReconcile').textContent='—';
   $('storeSearch').value='';$('fileInput').value='';
-  $('yearSelect').innerHTML='<option>—</option>';$('reviewSelect').innerHTML='<option>—</option>';$('detailStoreSelect').innerHTML='<option>No data</option>';
-  [['regionFilter','All Regions'],['cityFilter','All Cities'],['channelFilter','All Channels'],['typeFilter','All Types'],['statusFilter','All Status']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
+  $('detailStoreSelect').innerHTML='<option>No data</option>';
+  [['regionFilter','All Regions'],['cityFilter','All Cities'],['statusFilter','All Status'],['tierFilter','All Tiers']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
+  updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
   enableDashboard(false); setNotice('info','Data cleared from browser memory','No workbook values are retained by the dashboard. Field Mapping settings remain available locally.');
 }
 function saveMapping() {
@@ -886,13 +1088,12 @@ function importMappingFile(file) {
 
 document.querySelectorAll('.rail-link').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.tab)));
 document.addEventListener('click',event=>{
-  const kpi=event.target.closest('[data-kpi]'); if(kpi){state.varianceMetric=kpi.dataset.kpi;setSegment('varianceMetric',state.varianceMetric);switchTab('variance');return;}
+  const kpi=event.target.closest('[data-kpi]'); if(kpi){const target=kpi.dataset.kpi;state.selectedVarianceKpi=target;state.varianceMetric=target==='minorations'?'netSales':target;setSegment('varianceMetric',state.varianceMetric);switchTab('variance');return;}
   const driver=event.target.closest('[data-driver]'); if(driver){setPortfolioMetric(`field:${driver.dataset.driver}`);state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');return;}
   const store=event.target.closest('[data-store]'); if(store){openStoreDetail(store.dataset.store);return;}
-  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){state.varianceMetric=action.dataset.metric||'operatingProfit';setSegment('varianceMetric',state.varianceMetric);switchTab('variance');}else if(action.dataset.action==='portfolio'){if(action.dataset.driver)setPortfolioMetric(`field:${action.dataset.driver}`);else setPortfolioMetric(action.dataset.metric||'operatingProfit');state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');}}
+  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){const target=action.dataset.metric||'operatingProfit';state.selectedVarianceKpi=target;state.varianceMetric=target==='minorations'?'netSales':target;setSegment('varianceMetric',state.varianceMetric);switchTab('variance');}else if(action.dataset.action==='portfolio'){if(action.dataset.driver)setPortfolioMetric(`field:${action.dataset.driver}`);else setPortfolioMetric(action.dataset.metric||'operatingProfit');state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');}}
 });
 
-$('timelineMetric').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.timelineMetric=button.dataset.value;setSegment('timelineMetric',state.timelineMetric);renderTimeline();});
 $('varianceMetric').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.varianceMetric=button.dataset.value;setSegment('varianceMetric',state.varianceMetric);renderDriverAnalysis();renderVarianceInsights();});
 $('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
 $('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
@@ -900,20 +1101,48 @@ $('storeSearch').addEventListener('input',event=>{state.search=event.target.valu
 $('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderConcentration();});
 $('detailStoreSelect').addEventListener('change',event=>{state.selectedStore=event.target.value;renderDetail();});
 
-$('yearSelect').addEventListener('change',()=>{refreshReviewOptions();ensureSelectedStore();renderAll();});
-$('reviewSelect').addEventListener('change',event=>{state.currentPeriodKey=event.target.value;ensureSelectedStore();renderAll();});
-$('comparisonSelect').addEventListener('change',event=>{state.comparisonMode=event.target.value;updatePeriodSummary();ensureSelectedStore();renderAll();});
-['regionFilter','cityFilter','channelFilter','typeFilter','statusFilter'].forEach(id=>$(id).addEventListener('change',()=>{ensureSelectedStore();renderAll();}));
-$('resetFiltersBtn').addEventListener('click',()=>{['regionFilter','cityFilter','channelFilter','typeFilter','statusFilter'].forEach(id=>$(id).value='');renderAll();});
+$('regionFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
+$('statusFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
+$('tierFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
+$('cityFilter').addEventListener('change',()=>{renderAll();});
+$('resetFiltersBtn').addEventListener('click',()=>{['regionFilter','cityFilter','statusFilter','tierFilter'].forEach(id=>$(id).value='');renderAll();});
 
 const WORKBOOK_FILE_PATTERN=/\.(xlsx|xls|xlsm|csv)$/i;
 function isWorkbookFile(file){return Boolean(file&&WORKBOOK_FILE_PATTERN.test(file.name||''));}
 async function loadWorkbookFile(file){
   if(!isWorkbookFile(file)){setNotice('error','Unsupported file type','Use an .xlsx, .xls, .xlsm or .csv workbook.');return;}
   const dropZone=$('uploadDropZone');dropZone.classList.add('is-loading');dropZone.setAttribute('aria-busy','true');
-  try{if(!window.XLSX||!window.echarts)throw new Error('Local libraries are missing. Keep the libs folder beside index.html.');setNotice('info','Reading workbook locally',file.name);state.book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});loadSource(file.name);}
+  try{
+    if(!window.XLSX||!window.echarts)throw new Error('Local libraries are missing. Keep the libs folder beside index.html.');
+    if(!window.RetailDashboardData)throw new Error('Workbook data layer (RetailDashboardData) is missing.');
+    setNotice('info','Reading workbook locally',file.name);
+    state.book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});
+    state.model=window.RetailDashboardData.parseWorkbook(state.book,{XLSX:window.XLSX,fileName:file.name});
+    state.service=window.RetailDashboardData.createDataService(state.model);
+    initializeDataService(file.name);
+  }
   catch(error){setNotice('error','Unable to load workbook',error.message);}
   finally{dropZone.classList.remove('is-loading','is-dragging');dropZone.removeAttribute('aria-busy');}
+}
+
+function initializeDataService(fileName) {
+  state.fileName = fileName;
+  state.filters = {};
+  state.selectedStore = '';
+  state.warnings = [];
+  state.dataStats = {
+    records: state.model.detail.current.stores.length + state.model.detail.comparison.stores.length,
+    stores: state.model.detail.current.stores.length,
+    periods: 1,
+    tieErrorRows: 0,
+    duplicateKeys: 0
+  };
+  populateGlobalFilters();
+  enableDashboard(true);
+  updatePeriodSummary();
+  renderAll();
+  const md = state.model.metadata;
+  setNotice('success', `Loaded ${md.reviewPeriod} workbook locally`, `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
 }
 
 $('fileInput').addEventListener('change',async event=>{const file=event.target.files[0];if(file)await loadWorkbookFile(file);event.target.value='';});
@@ -939,6 +1168,6 @@ $('sheetSelect').addEventListener('change',event=>{if(!state.book)return;state.s
 $('headerRow').addEventListener('change',event=>{if(!state.book)return;state.headerRow=Math.max(0,Number(event.target.value||1)-1);state.headers=headersAt(state.matrix,state.headerRow);state.signature=schemaSignature(state.headers);state.mapping=autoMap(state.headers);renderMapping();$('schemaMeta').textContent=`${state.headers.length} columns detected · ${state.fileName}`;});
 
 window.addEventListener('resize',()=>Object.values(state.charts).forEach(c=>c.resize()));
-window.addEventListener('pagehide',()=>{state.book=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
+window.addEventListener('pagehide',()=>{state.book=null;state.model=null;state.service=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
 if(!window.XLSX||!window.echarts)setNotice('error','Local libraries could not load','Keep index.html, libs, js and assets in the same local folder.');
 })();

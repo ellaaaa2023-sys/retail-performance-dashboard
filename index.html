@@ -60,34 +60,34 @@
 
     <section class="context-bar is-disabled" id="contextBar" aria-label="Review context">
       <div class="context-primary">
-        <div class="field period-field"><label for="yearSelect">Year</label><select id="yearSelect" disabled><option>—</option></select></div>
-        <div class="field period-field"><label for="reviewSelect">Review Period</label><select id="reviewSelect" disabled><option>—</option></select></div>
-        <div class="field comparison-field"><label for="comparisonSelect">Comparison</label><select id="comparisonSelect" disabled><option value="ly">vs Last Year</option><option value="previous">vs Previous Review</option></select></div>
+        <div class="field period-field"><label>Review Period</label><div class="static-value" id="reviewPeriodValue">—</div></div>
         <div class="period-summary" id="periodSummary"><span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong></div>
       </div>
       <div class="context-filters">
         <div class="field"><label for="regionFilter">Region</label><select id="regionFilter" disabled><option value="">All Regions</option></select></div>
         <div class="field"><label for="cityFilter">City</label><select id="cityFilter" disabled><option value="">All Cities</option></select></div>
-        <div class="field"><label for="channelFilter">Channel</label><select id="channelFilter" disabled><option value="">All Channels</option></select></div>
-        <div class="field"><label for="typeFilter">Store Type</label><select id="typeFilter" disabled><option value="">All Types</option></select></div>
         <div class="field"><label for="statusFilter">Status</label><select id="statusFilter" disabled><option value="">All Status</option></select></div>
+        <div class="field"><label for="tierFilter">Store Productivity Tier</label><select id="tierFilter" disabled><option value="">All Tiers</option></select></div>
         <button class="button secondary compact" id="resetFiltersBtn" type="button" disabled>Reset</button>
       </div>
     </section>
 
     <section class="tab-panel active" id="tab-overview" data-panel="overview">
-      <div class="page-heading"><div><span class="section-kicker">01 · EXECUTIVE OVERVIEW</span><h2>Portfolio performance at a glance</h2></div><p>Current review versus the selected comparison period</p></div>
+      <div class="page-heading"><div><span class="section-kicker">01 · EXECUTIVE OVERVIEW</span><h2>Portfolio performance at a glance</h2></div><div class="scope-status" id="scopeStatus"><span class="scope-dot"></span><span>Total Portfolio</span></div></div>
       <section class="kpi-grid primary-kpis" id="primaryKpis" aria-label="Primary financial KPIs"></section>
       <section class="kpi-grid secondary-kpis" id="secondaryKpis" aria-label="Supporting KPIs"></section>
       <section class="overview-grid">
-        <article class="card timeline-card">
+        <article class="card snapshot-card">
           <div class="card-head">
-            <div><div class="card-title">Review Timeline</div><div class="card-sub" id="timelineSub">Discrete half-year reviews; selected comparison is highlighted</div></div>
-            <div class="segmented" id="timelineMetric" aria-label="Timeline metric">
-              <button class="active" data-value="netSales" type="button">Net Sales</button><button data-value="grossMargin" type="button">Gross Margin</button><button data-value="contribution" type="button">Customer Contribution</button><button data-value="operatingProfit" type="button">Operating Profit</button>
-            </div>
+            <div><div class="card-title">P&L Snapshot</div><div class="card-sub" id="snapshotSub">Summary P&L · Actual Adj. · Current vs Prior Year Same Period</div></div>
+            <span class="rule-badge">KRMB</span>
           </div>
-          <div id="timelineChart" class="chart chart-timeline"><div class="chart-empty">Upload a workbook to view analysis</div></div>
+          <div class="table-wrap snapshot-wrap">
+            <table class="data-table snapshot-table">
+              <thead><tr><th>P&L Line</th><th>Current</th><th>% of Net Sales</th><th>Comparison</th><th>% of Net Sales</th><th>Variance %</th></tr></thead>
+              <tbody id="snapshotBody"></tbody>
+            </table>
+          </div>
         </article>
         <article class="card insight-card">
           <div class="card-head"><div><div class="card-title">Management Signals</div><div class="card-sub">Rule-based observations from the selected review</div></div><span class="rule-badge">NO AI</span></div>
