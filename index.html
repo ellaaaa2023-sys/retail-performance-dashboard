@@ -141,11 +141,12 @@
 
     <section class="tab-panel" id="tab-detail" data-panel="detail">
       <div class="page-heading detail-heading"><div><span class="section-kicker">04 · STORE DETAIL</span><h2 id="detailTitle">Select a store to review</h2><p id="detailMeta">Current versus comparison period</p></div><div class="detail-selector"><label for="detailStoreSelect">Select Store</label><select id="detailStoreSelect" disabled><option>No data</option></select></div></div>
+      <div class="store-header" id="storeHeader" hidden></div>
       <section class="kpi-grid store-kpis" id="storeKpis"></section>
       <section class="detail-layout">
         <article class="card pnl-card">
-          <div class="card-head"><div><div class="card-title">Store P&amp;L</div><div class="card-sub">Signed P&amp;L values in KRMB; margin rows use aggregated ratios</div></div><div class="reconcile" id="storeReconcile">—</div></div>
-          <div class="table-wrap pnl-wrap"><table class="data-table pnl-table"><thead><tr><th>P&amp;L Line</th><th>Current</th><th>Comparison</th><th>Variance</th><th>Variance %</th><th>% of Net Sales</th></tr></thead><tbody id="storePnlBody"></tbody></table></div>
+          <div class="card-head"><div><div class="card-title">Store P&amp;L</div><div class="card-sub">Signed P&amp;L values in KRMB; ratios shown as % of Net Sales</div></div><div class="reconcile" id="storeReconcile">—</div></div>
+          <div class="table-wrap pnl-wrap"><table class="data-table pnl-table"><thead><tr><th>P&amp;L Line</th><th>Current</th><th>Current % of Net Sales</th><th>Comparison</th><th>Comparison % of Net Sales</th><th>Variance %</th></tr></thead><tbody id="storePnlBody"></tbody></table></div>
         </article>
         <article class="card insight-card store-insight-card"><div class="card-head"><div><div class="card-title">Store Signals</div><div class="card-sub">Rule-based review prompts</div></div><span class="rule-badge">NO AI</span></div><div class="insight-list" id="storeInsights"><div class="empty-state">No store selected</div></div></article>
       </section>

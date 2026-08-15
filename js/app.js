@@ -100,34 +100,57 @@ const METRICS = {
   avgSales: { label: 'Average Sales per Store', type: 'money', direction: 'up', aggregate: 'avgSales' }
 };
 
-const AP_COMPONENTS = [
-  ['samples','Customer Samples'], ['gifts','Promotional Gifts'], ['animations','Animations'],
-  ['posAdvertising','POS Advertising'], ['development','Specific Development'], ['specificAP','Specific A&P']
+const STORE_AP_COMPONENTS = [
+  { key: 'customerSamples', label: 'Customer Samples' },
+  { key: 'promotionalGifts', label: 'Promotional Gifts' },
+  { key: 'animations', label: 'Animations' },
+  { key: 'posAdvertising', label: 'POS Advertising' },
+  { key: 'specificDevelopment', label: 'Specific Development' },
+  { key: 'specificAP', label: 'Specific A&P' }
 ];
 
-const PNL_LINES = [
-  {field:'grossSales',label:'GROSS SALES',className:'major'},
-  {field:'discount',label:'Discount',indent:1}, {field:'rebates',label:'Rebates',indent:1},
-  {field:'promotionalAllowance',label:'Promotional Allowance',className:'total'},
-  {field:'structuralOn',label:'Structural Conditions On',indent:2}, {field:'structuralOff',label:'Structural Conditions Off',indent:2},
-  {field:'activeSupport',label:'Active Support',indent:2}, {field:'shopperInvestment',label:'Shopper Investment',indent:2},
-  {field:'promoInvoice',label:'Promo Allow On Invoice',indent:2}, {field:'promoSeparate',label:'Promo Allow Applied Separately',indent:2},
-  {field:'promoLoyalty',label:'Promo Allow Loyalty',indent:2}, {field:'returns',label:'Returns',indent:1},
-  {field:'oca',label:'OCA',indent:1}, {field:'coupon',label:'Coupon',indent:1},
-  {field:'minorations',label:'TOTAL MINORATIONS',className:'total'},
-  {field:'netSales',label:'CONSO NET SALES',className:'major'},
-  {field:'stdCos',label:'Std COS',indent:1}, {field:'royal',label:'Royal / TA / MS',indent:1},
-  {field:'specialOps',label:'Special Operations Cost',indent:1}, {field:'obsolete',label:'Obsolete / Slow Moving / Return',indent:1},
-  {field:'physicalDistribution',label:'Physical Distribution',indent:1}, {field:'costOfSales',label:'Cost of Sales',className:'total'},
-  {field:'grossMargin',label:'GROSS MARGIN',className:'major'}, {metric:'grossMarginPct',label:'Gross Margin %',className:'group'},
-  {field:'samples',label:'Customer Samples',indent:1}, {field:'gifts',label:'Promotional Gifts',indent:1},
-  {field:'animations',label:'Animations',indent:1}, {field:'posAdvertising',label:'POS Advertising',className:'total'},
-  {field:'posAdvAmort',label:'POS Advertising Amortization',indent:2}, {field:'posAdvOther',label:'Other POS Advertising',indent:2},
-  {field:'development',label:'Specific Development',indent:1}, {field:'daCost',label:'DA Cost',className:'total'},
-  {field:'specificAP',label:'Specific A&P',className:'group'}, {field:'specificSga',label:'Specific SG&A',className:'group'},
-  {field:'contribution',label:'CUSTOMER CONTRIBUTION',className:'major'}, {metric:'contributionPct',label:'Customer Contribution %',className:'group'},
-  {field:'nonSpecificCosts',label:'Non-specific Costs',className:'group'},
-  {field:'operatingProfit',label:'OPERATING PROFIT',className:'major'}, {metric:'operatingMargin',label:'Operating Margin %',className:'group'}
+const STORE_PNL_LINES = [
+  { field: 'grossSales', label: 'GROSS SALES', className: 'major' },
+  { field: 'discount', label: 'Discount', indent: 1 },
+  { field: 'rebates', label: 'Rebates', indent: 1 },
+  { field: 'promotionalAllowance', label: 'Promotional Allowance', indent: 1 },
+  { field: 'totalReturns', label: 'Actual Returns', indent: 1 },
+  { field: 'vipRedemption', label: 'VIP Redemption', indent: 1 },
+  { field: 'oca', label: 'OCA', indent: 1 },
+  { field: 'coupon', label: 'Coupon', indent: 1 },
+  { field: 'totalMinorations', label: 'TOTAL MINORATIONS', className: 'total' },
+  { field: 'netSales', label: 'CONSO NET SALES', className: 'major' },
+  { field: 'stdCos', label: 'Std COS', indent: 1 },
+  { field: 'royalTaMs', label: 'Royal / TA / MS', indent: 1 },
+  { field: 'physicalDistribution', label: 'Physical Distribution', indent: 1 },
+  { field: 'specialOperationsCost', label: 'Special Operations Cost', indent: 1 },
+  { field: 'obsoleteSlowMovingReturns', label: 'Obsolete / Slow Moving / Return', indent: 1 },
+  { field: 'grossMargin', label: 'GROSS MARGIN', className: 'major' },
+  { field: 'tradeRelation', label: 'Trade Relation', indent: 1 },
+  { field: 'customerSamples', label: 'Customer Samples', indent: 1 },
+  { field: 'promotionalGifts', label: 'Promotional Gifts', indent: 1 },
+  { field: 'posAdvertisingAmortization', label: 'POS Advertising Amortization', indent: 1 },
+  { field: 'posAdvertisingExpense', label: 'POS Advertising', indent: 1 },
+  { field: 'merchandising', label: 'Merchandising', indent: 1 },
+  { field: 'animations', label: 'Animations', indent: 1 },
+  { field: 'tester', label: 'Tester', indent: 1 },
+  { field: 'daCost', label: 'DA Cost', className: 'total' },
+  { field: 'specificDevelopment', label: 'Specific Development', indent: 1 },
+  { field: 'otherAP', label: 'Others', indent: 1 },
+  { field: 'specificAP', label: 'Specific A&P', className: 'group' },
+  { field: 'specificSga', label: 'Specific SG&A', className: 'group' },
+  { field: 'customerContribution', label: 'CUSTOMER CONTRIBUTION', className: 'major' },
+  { field: 'nonSpecificCosts', label: 'Unspecific Costs', className: 'group' },
+  { field: 'operatingProfit', label: 'OPERATING PROFIT', className: 'major' }
+];
+
+const STORE_KPIS = [
+  { key: 'grossSales', label: 'Gross Sales', type: 'money' },
+  { key: 'netSales', label: 'CA Net', type: 'money' },
+  { key: 'caNetPctOfGs', label: 'CA Net % of GS', type: 'percent' },
+  { key: 'grossMarginPct', label: 'Gross Margin %', type: 'percent' },
+  { key: 'customerContribution', label: 'Customer Contribution', type: 'money' },
+  { key: 'customerContributionPct', label: 'Customer Contribution %', type: 'percent' }
 ];
 
 const state = {
@@ -1137,68 +1160,152 @@ function rankStoreHtml(rows, tone) {
   return rows.map((pair, index) => `<button class="rank-row" type="button" data-store="${esc(pair.terminal)}"><span>${String(index + 1).padStart(2, '0')}</span><strong title="${esc(pair.store)}">${esc(pair.store)}</strong><em class="${tone === 'positive' ? 'cell-positive' : 'cell-negative'}">${formatSignedMoney(pair.variance)}</em></button>`).join('');
 }
 
+function detailCurrentStores() {
+  return state.service ? state.service.getStores('current', {}) : [];
+}
+function findDetailStore() {
+  const current = detailCurrentStores().find(s => s.terminal === state.selectedStore) || null;
+  const comparison = (state.service ? state.service.getStores('comparison', {}).find(s => s.terminal === state.selectedStore) : null) || null;
+  return { current, comparison };
+}
 function ensureSelectedStore() {
-  const currentRows=scope().currentRows;
-  if(!currentRows.some(r=>r.terminal===state.selectedStore)) state.selectedStore=currentRows[0]?.terminal||'';
-  const stores=currentRows.slice().sort((a,b)=>a.store.localeCompare(b.store,'zh-CN'));
-  $('detailStoreSelect').innerHTML=stores.map(record=>`<option value="${esc(record.terminal)}"${record.terminal===state.selectedStore?' selected':''}>${esc(record.store)} · ${esc(record.terminal)}</option>`).join('')||'<option>No data</option>';
+  const stores = detailCurrentStores();
+  if (!stores.length) { $('detailStoreSelect').innerHTML = '<option>No data</option>'; return; }
+  if (!stores.some(s => s.terminal === state.selectedStore)) state.selectedStore = stores[0].terminal;
+  $('detailStoreSelect').innerHTML = stores.slice().sort((a, b) => a.store.localeCompare(b.store, 'zh-CN'))
+    .map(s => `<option value="${esc(s.terminal)}"${s.terminal === state.selectedStore ? ' selected' : ''}>${esc(s.store)} · ${esc(s.terminal)}</option>`).join('');
 }
-function openStoreDetail(terminal) { state.selectedStore=terminal; switchTab('detail'); }
-function currentStoreRecords() {
-  const {currentRows,comparisonRows}=scope();
-  return {current:currentRows.find(r=>r.terminal===state.selectedStore)||null,ly:comparisonRows.find(r=>r.terminal===state.selectedStore)||null};
+function openStoreDetail(terminal) { state.selectedStore = terminal; switchTab('detail'); }
+function apComponentValue(store, key) {
+  if (!store) return 0;
+  if (key === 'posAdvertising') return Math.abs(store.pnl.posAdvertisingExpense || 0) + Math.abs(store.pnl.posAdvertisingAmortization || 0);
+  return Math.abs(store.pnl[key] || 0);
 }
-function recordStats(fieldKey,current,ly,metricKey=fieldKey) {
-  const currentValue=current?finite(current[fieldKey]):0, lyValue=ly?finite(ly[fieldKey]):NaN, delta=Number.isFinite(lyValue)?currentValue-lyValue:NaN, pct=Number.isFinite(delta)&&Math.abs(lyValue)>1e-9?delta/Math.abs(lyValue):NaN;
-  return {current:currentValue,ly:lyValue,delta,pct,metricKey};
+function apExpense(store) {
+  if (!store) return NaN;
+  return STORE_AP_COMPONENTS.reduce((sum, comp) => sum + apComponentValue(store, comp.key), 0);
+}
+function storeKpiValue(store, key) {
+  if (!store) return NaN;
+  if (key === 'caNetPctOfGs') {
+    const gs = store.metrics.grossSales;
+    return gs ? store.metrics.netSales / gs : NaN;
+  }
+  const value = store.metrics[key];
+  return Number.isFinite(value) ? value : NaN;
+}
+function storeKpiCard(def, current, ly) {
+  const cv = storeKpiValue(current, def.key);
+  const lv = storeKpiValue(ly, def.key);
+  const hasLy = Number.isFinite(lv);
+  let cls = 'neutral', changeCls = 'flat', compareHtml;
+  if (def.type === 'percent') {
+    const pp = hasLy && Number.isFinite(cv) ? cv - lv : NaN;
+    cls = Number.isFinite(pp) && Math.abs(pp) > 1e-9 ? (pp > 0 ? 'favorable' : 'adverse') : 'neutral';
+    changeCls = cls === 'favorable' ? 'good' : cls === 'adverse' ? 'bad' : 'flat';
+    compareHtml = `<span>Comparison</span><strong>${formatPct(lv)}</strong><span>pp change</span><strong class="${changeCls}">${formatPp(pp)}</strong>`;
+  } else {
+    const variance = hasLy && Math.abs(lv) > 1e-9 && Number.isFinite(cv) ? (cv - lv) / Math.abs(lv) : NaN;
+    cls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'favorable' : 'adverse') : 'neutral';
+    changeCls = cls === 'favorable' ? 'good' : cls === 'adverse' ? 'bad' : 'flat';
+    compareHtml = `<span>Comparison</span><strong>${formatMoney(lv)}</strong><span>Variance</span><strong class="${changeCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</strong>`;
+  }
+  return `<article class="kpi-card ${cls}"><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span></div><div class="kpi-current">${def.type === 'percent' ? formatPct(cv) : formatMoney(cv)}</div><div class="kpi-compare">${compareHtml}</div></article>`;
+}
+function renderStoreHeader(store, hasComparison) {
+  const el = $('storeHeader');
+  if (!el) return;
+  const items = [
+    ['City', store.city],
+    ['Region', store.region],
+    ['Status', store.status],
+    ['Tier', store.productivityTier],
+    ['Store Productivity', formatMoney(store.storeProductivity)],
+    ['POS no.', formatInt(store.cityPosNo)]
+  ];
+  if (!hasComparison) items.push(['Comparison', 'No prior-year record']);
+  el.innerHTML = items.map(([label, value]) => `<div class="sh-item"><span class="sh-label">${esc(label)}</span><span class="sh-value">${esc(value)}</span></div>`).join('');
+  el.hidden = false;
 }
 function renderDetail() {
   ensureSelectedStore();
-  const {current,ly}=currentStoreRecords();
-  if(!current){$('detailTitle').textContent='No store in the selected scope';$('storeKpis').innerHTML='';return;}
-  $('detailStoreSelect').value=state.selectedStore;
-  $('detailTitle').textContent=current.store;
-  $('detailMeta').textContent=`${current.city} · ${current.region} · ${current.channel} · ${current.storeType} · ${current.status} · ${current.terminal}`;
-  const currentRows=[current], lyRows=ly?[ly]:[];
-  $('storeKpis').innerHTML=['netSales','grossMargin','contribution','operatingProfit'].map(key=>kpiCardHtml(key,metricStats(key,currentRows,lyRows),false)).join('');
-  renderStorePnl(current,ly);
-  renderStoreInsights(current,ly);
-  renderApCharts(current,ly);
+  const { current, comparison } = findDetailStore();
+  if (!current) {
+    $('detailTitle').textContent = 'No store selected';
+    $('detailMeta').textContent = 'Select a store from the Store Portfolio to review';
+    $('storeHeader').hidden = true;
+    $('storeKpis').innerHTML = '';
+    $('storePnlBody').innerHTML = '';
+    $('storeInsights').innerHTML = '<div class="empty-state">No store selected</div>';
+    $('storeReconcile').textContent = '—';
+    ['apComparisonChart', 'apWaterfallChart'].forEach(id => { const c = chart(id); if (c) c.clear(); });
+    $('apReconcile').textContent = '—';
+    return;
+  }
+  $('detailStoreSelect').value = state.selectedStore;
+  $('detailTitle').textContent = current.store;
+  $('detailMeta').textContent = `${current.city} · ${current.region} · ${current.terminal}`;
+  renderStoreHeader(current, Boolean(comparison));
+  $('storeKpis').innerHTML = STORE_KPIS.map(def => storeKpiCard(def, current, comparison)).join('');
+  renderStorePnl(current, comparison);
+  renderStoreInsights(current, comparison);
+  renderApCharts(current, comparison);
 }
-function renderStorePnl(current,ly) {
-  const netSales=current.netSales;
-  $('storePnlBody').innerHTML=PNL_LINES.map(line=>{
-    if(line.metric){const currentValue=metricValue([current],line.metric),lyValue=ly?metricValue([ly],line.metric):NaN,delta=Number.isFinite(lyValue)?currentValue-lyValue:NaN,pct=Number.isFinite(delta)&&Math.abs(lyValue)>1e-9?delta/Math.abs(lyValue):NaN;return `<tr class="${line.className||''}"><td>${esc(line.label)}</td><td>${formatPct(currentValue)}</td><td>${formatPct(lyValue)}</td><td class="${delta>0?'cell-positive':delta<0?'cell-negative':''}">${formatPp(delta)}</td><td>${Number.isFinite(pct)?formatPct(pct):'—'}</td><td>—</td></tr>`;}
-    const currentValue=finite(current[line.field]),lyValue=ly?finite(ly[line.field]):NaN,delta=Number.isFinite(lyValue)?currentValue-lyValue:NaN,pct=Number.isFinite(delta)&&Math.abs(lyValue)>1e-9?delta/Math.abs(lyValue):NaN,share=netSales?currentValue/netSales:NaN;
-    return `<tr class="${line.className||''}"><td class="${line.indent?`indent-${line.indent}`:''}">${esc(line.label)}</td><td>${formatKrmb(currentValue)}</td><td>${formatKrmb(lyValue)}</td><td class="${delta>0?'cell-positive':delta<0?'cell-negative':''}">${formatKrmb(delta)}</td><td>${Number.isFinite(pct)?`${pct>=0?'+':''}${formatPct(pct)}`:'—'}</td><td>${Number.isFinite(share)?formatPct(share):'—'}</td></tr>`;
+function renderStorePnl(current, ly) {
+  const netSales = current.metrics.netSales;
+  const lyNetSales = ly ? ly.metrics.netSales : NaN;
+  $('storePnlBody').innerHTML = STORE_PNL_LINES.map(line => {
+    const cv = Number(current.pnl[line.field]) || 0;
+    const lv = ly ? (Number(ly.pnl[line.field]) || 0) : NaN;
+    const hasLy = Number.isFinite(lv);
+    const curShare = netSales ? cv / netSales : NaN;
+    const lyShare = Number.isFinite(lyNetSales) && lyNetSales ? lv / lyNetSales : NaN;
+    const variance = hasLy && Math.abs(lv) > 1e-9 ? (cv - lv) / Math.abs(lv) : NaN;
+    const vCls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'cell-positive' : 'cell-negative') : '';
+    return `<tr class="${line.className || ''}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(line.label)}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
   }).join('');
-  const errors=pnlTieErrors(current)+(ly?pnlTieErrors(ly):0);
-  $('storeReconcile').textContent=errors?'P&L tie-out issue':'P&L reconciled'; $('storeReconcile').className=`reconcile ${errors?'bad':''}`;
+  $('storeReconcile').textContent = state.model ? state.model.metadata.reviewPeriod : '—';
+  $('storeReconcile').className = 'reconcile';
 }
-function renderStoreInsights(current,ly) {
-  if(!ly){$('storeInsights').innerHTML=insightHtml([{title:'Comparison record unavailable',detail:'This store may be new or outside the comparison-period filter.'}]);return;}
-  const ns=recordStats('netSales',current,ly),op=recordStats('operatingProfit',current,ly),gmDelta=current.grossMarginPct-ly.grossMarginPct;
-  const currentAp=AP_COMPONENTS.reduce((s,[key])=>s+Math.abs(current[key]),0),lyAp=AP_COMPONENTS.reduce((s,[key])=>s+Math.abs(ly[key]),0),apPct=lyAp?(currentAp-lyAp)/lyAp:NaN;
-  const items=[];
-  items.push({tone:ns.delta>=0?'positive':'warning',title:`Net Sales ${ns.delta>=0?'increased':'decreased'} ${formatPct(ns.pct)}`,detail:`${formatMoney(current.netSales)} current versus ${formatMoney(ly.netSales)} comparison.`});
-  if(Math.abs(gmDelta)>=.01)items.push({tone:gmDelta>0?'positive':'warning',title:`Gross Margin rate changed ${formatPp(gmDelta)}`,detail:`Current ${formatPct(current.grossMarginPct)} versus ${formatPct(ly.grossMarginPct)}.`});
-  if(Number.isFinite(apPct)&&Math.abs(apPct)>=.1)items.push({tone:apPct>0?'warning':'positive',title:`A&P expense ${apPct>0?'increased':'decreased'} ${formatPct(apPct)}`,detail:`Current ${formatMoney(currentAp)} versus ${formatMoney(lyAp)}.`});
-  if(ns.delta>0&&op.delta<0)items.push({tone:'critical',title:'Sales growth did not convert to OP growth',detail:`Operating Profit changed ${formatSignedMoney(op.delta)} despite positive sales movement.`});
-  $('storeInsights').innerHTML=insightHtml(items);
+function renderStoreInsights(current, ly) {
+  const c = current.metrics;
+  if (!ly) {
+    $('storeInsights').innerHTML = insightHtml([{ title: 'New Store · No Prior-Year Comparison', detail: 'This store has no prior-year same-period record. Current-only values are shown; comparison columns display —.' }]);
+    return;
+  }
+  const l = ly.metrics;
+  const nsVariance = Math.abs(l.netSales) > 1e-9 ? (c.netSales - l.netSales) / Math.abs(l.netSales) : NaN;
+  const gmPp = c.grossMarginPct - l.grossMarginPct;
+  const ccPp = c.customerContributionPct - l.customerContributionPct;
+  const apCur = apExpense(current), apLy = apExpense(ly);
+  const apVariance = Math.abs(apLy) > 1e-9 ? (apCur - apLy) / Math.abs(apLy) : NaN;
+  const items = [];
+  items.push({ tone: nsVariance >= 0 ? 'positive' : 'warning', title: `Net Sales ${nsVariance >= 0 ? 'increased' : 'decreased'} ${Number.isFinite(nsVariance) ? `${nsVariance >= 0 ? '+' : ''}${formatPct(nsVariance)}` : ''}`, detail: `${formatMoney(c.netSales)} current versus ${formatMoney(l.netSales)} comparison.` });
+  if (Math.abs(gmPp) >= 0.01) items.push({ tone: gmPp > 0 ? 'positive' : 'warning', title: `Gross Margin rate changed ${formatPp(gmPp)}`, detail: `Current ${formatPct(c.grossMarginPct)} versus ${formatPct(l.grossMarginPct)}.` });
+  if (Math.abs(ccPp) >= 0.01) items.push({ tone: ccPp > 0 ? 'positive' : 'warning', title: `Customer Contribution rate changed ${formatPp(ccPp)}`, detail: `Current ${formatPct(c.customerContributionPct)} versus ${formatPct(l.customerContributionPct)}.` });
+  if (Number.isFinite(apVariance) && Math.abs(apVariance) >= 0.1) items.push({ tone: apVariance > 0 ? 'warning' : 'positive', title: `A&P expense ${apVariance > 0 ? 'increased' : 'decreased'} ${formatPct(apVariance)}`, detail: `Current ${formatMoney(apCur)} versus ${formatMoney(apLy)}.` });
+  if (!items.length) items.push({ tone: 'positive', title: 'No material store-level movement', detail: 'Key figures remained broadly stable versus the comparison period.' });
+  $('storeInsights').innerHTML = insightHtml(items);
 }
-function renderApCharts(current,ly) {
-  const labels=AP_COMPONENTS.map(([,label])=>label), currentValues=AP_COMPONENTS.map(([key])=>Math.abs(current[key])),lyValues=AP_COMPONENTS.map(([key])=>ly?Math.abs(ly[key]):0);
-  const comparisonChart=chart('apComparisonChart');
-  comparisonChart.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:150,right:25,top:30,bottom:42},legend:{top:0,right:82,textStyle:{color:THEME.muted,fontSize:9}},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>`<b>${esc(params[0].name)}</b><br>${params.map(p=>`${esc(p.seriesName)}: ${formatMoney(p.value)}`).join('<br>')}`},xAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},series:[{name:currentPeriod()?.key||'Current',type:'bar',data:currentValues,barMaxWidth:12,itemStyle:{color:THEME.blue,borderRadius:[0,3,3,0]}},{name:comparisonPeriod()?.key||'Comparison',type:'bar',data:lyValues,barMaxWidth:12,itemStyle:{color:THEME.gold,borderRadius:[0,3,3,0]}}]},{notMerge:true});
-  const waterfall=chart('apWaterfallChart');
-  if(!ly){waterfall.clear();$('apReconcile').textContent='No comparison';$('apReconcile').className='reconcile bad';return;}
-  const lyTotal=lyValues.reduce((s,v)=>s+v,0),currentTotal=currentValues.reduce((s,v)=>s+v,0),deltas=currentValues.map((v,i)=>v-lyValues[i]);
-  const names=[`${comparisonPeriod()?.key||'LY'} Total`,...labels,`${currentPeriod()?.key||'Current'} Total`];
-  const base=[],values=[],raw=[],types=[];let run=lyTotal;base.push(0);values.push(lyTotal);raw.push(lyTotal);types.push('anchor');
-  deltas.forEach(delta=>{if(delta>=0){base.push(run);values.push(delta);}else{base.push(run+delta);values.push(Math.abs(delta));}raw.push(delta);types.push(delta>=0?'increase':'decrease');run+=delta;});
-  base.push(0);values.push(currentTotal);raw.push(currentTotal);types.push('anchor');
-  const diff=lyTotal+deltas.reduce((s,v)=>s+v,0)-currentTotal;
-  $('apReconcile').textContent=Math.abs(diff)<.05?'Reconciled':`Variance ${formatKrmb(diff)} KRMB`; $('apReconcile').className=`reconcile ${Math.abs(diff)<.05?'':'bad'}`;
+function periodLabel(role) {
+  if (state.model) return role === 'comparison' ? state.model.metadata.comparisonPeriodKey : state.model.metadata.currentPeriodKey;
+  return role === 'comparison' ? 'Comparison' : 'Current';
+}
+function renderApCharts(current, ly) {
+  const labels = STORE_AP_COMPONENTS.map(comp => comp.label);
+  const currentValues = STORE_AP_COMPONENTS.map(comp => apComponentValue(current, comp.key));
+  const lyValues = STORE_AP_COMPONENTS.map(comp => apComponentValue(ly, comp.key));
+  const comparisonChart = chart('apComparisonChart');
+  comparisonChart.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:150,right:25,top:30,bottom:42},legend:{top:0,right:82,textStyle:{color:THEME.muted,fontSize:9}},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>`<b>${esc(params[0].name)}</b><br>${params.map(p=>`${esc(p.seriesName)}: ${formatMoney(p.value)}`).join('<br>')}`},xAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},series:[{name:periodLabel('current'),type:'bar',data:currentValues,barMaxWidth:12,itemStyle:{color:THEME.blue,borderRadius:[0,3,3,0]}},{name:periodLabel('comparison'),type:'bar',data:lyValues,barMaxWidth:12,itemStyle:{color:THEME.gold,borderRadius:[0,3,3,0]}}]},{notMerge:true});
+  const waterfall = chart('apWaterfallChart');
+  if (!ly) { waterfall.clear(); $('apReconcile').textContent = 'No comparison'; $('apReconcile').className = 'reconcile bad'; return; }
+  const lyTotal = lyValues.reduce((s, v) => s + v, 0), currentTotal = currentValues.reduce((s, v) => s + v, 0), deltas = currentValues.map((v, i) => v - lyValues[i]);
+  const names = [`${periodLabel('comparison')} Total`, ...labels, `${periodLabel('current')} Total`];
+  const base = [], values = [], raw = [], types = []; let run = lyTotal; base.push(0); values.push(lyTotal); raw.push(lyTotal); types.push('anchor');
+  deltas.forEach(delta => { if (delta >= 0) { base.push(run); values.push(delta); } else { base.push(run + delta); values.push(Math.abs(delta)); } raw.push(delta); types.push(delta >= 0 ? 'increase' : 'decrease'); run += delta; });
+  base.push(0); values.push(currentTotal); raw.push(currentTotal); types.push('anchor');
+  const diff = lyTotal + deltas.reduce((s, v) => s + v, 0) - currentTotal;
+  $('apReconcile').textContent = Math.abs(diff) < .05 ? 'Reconciled' : `Variance ${formatKrmb(diff)} KRMB`; $('apReconcile').className = `reconcile ${Math.abs(diff) < .05 ? '' : 'bad'}`;
   waterfall.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:64,right:20,top:28,bottom:100},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const i=params[0].dataIndex;return `<b>${esc(names[i])}</b><br>${types[i]==='anchor'?'Total expense':'Expense change'}: ${types[i]==='anchor'?formatMoney(raw[i]):formatSignedMoney(raw[i])}`;}},xAxis:{type:'category',data:names,axisTick:{show:false},axisLine:{lineStyle:{color:THEME.axis}},axisLabel:{interval:0,rotate:38,color:THEME.muted,fontSize:8}},yAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'bar',stack:'ap',data:base,itemStyle:{color:'transparent'},silent:true},{type:'bar',stack:'ap',barMaxWidth:35,data:values.map((value,i)=>({value,itemStyle:{color:types[i]==='anchor'?THEME.navy:types[i]==='increase'?THEME.orange:THEME.green,borderRadius:[3,3,0,0]}})),label:{show:true,position:'top',color:THEME.muted,fontSize:8,formatter:p=>types[p.dataIndex]==='anchor'?formatMoney(raw[p.dataIndex]):formatSignedMoney(raw[p.dataIndex])}}]},{notMerge:true});
 }
 
@@ -1239,6 +1346,7 @@ function clearData() {
   $('varianceInsights').innerHTML='<div class="empty-state">No analysis available</div>';
   $('storeInsights').innerHTML='<div class="empty-state">No store selected</div>';
   $('detailTitle').textContent='Select a store to review';$('detailMeta').textContent='Current versus comparison period';
+  $('storeHeader').hidden = true;
   $('reviewPeriodValue').textContent='—';
   $('periodSummary').innerHTML='<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>';
   $('footerMeta').textContent='Files are processed locally and are not transmitted to an external server';

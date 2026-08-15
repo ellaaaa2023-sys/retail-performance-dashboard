@@ -113,6 +113,20 @@ Store Detail
 - 验证：Core Data 18/18 PASS；`git diff --check` PASS；无头验证 Bubble X/Y/size 字段、Tier / Region+Tier 联动门店数、四指标 ranking Top± 与 sum variance、cityPosNo 求和均正确。
 - 04 Store Detail 仍未迁移。下一步为 Phase 6D — 04 Store Detail Migration。
 
+### Phase 6D — 04 Store Detail Migration（已完成，2026-08-16）
+
+- 04 Store Detail 已迁移到新版 `RetailDashboardData` Data Service，仅消费 `service.getStores('current'/'comparison', {})`，按 `terminal` 匹配 current/comparison，未在页面复刻 store 级解析 / 匹配 / 计算逻辑。
+- 03→04 `selectedStore` drill-down 正常；`openStoreDetail(terminal)` + `data-store` 复用；返回 03 不清空 Region/City/Status/Tier/selectedDriver。
+- **Store Header**（轻量条 `#storeHeader`）：City / Region / Status / Tier / Store Productivity / `cityPosNo`（真实门店 POS 数，非 derived `posNo`）；Store Name 在 `detailTitle`。Store Productivity 与 AUP 严格区分，不展示 portfolio AUP。
+- **顶部 Key Figures 最终 6 个**（顺序固定）：Gross Sales / CA Net / CA Net % of GS / Gross Margin % / Customer Contribution / Customer Contribution %。金额用 Current/Comparison/Variance %，比例（CA Net % of GS / GM% / CC%）用 Current/Comparison/pp change（非 ratio growth rate）。
+- Operating Profit 不再作为顶部 KPI；A&P Expense 也不再作为顶部 KPI，但 **A&P Expense Comparison / A&P Expense Variance 两图继续保留**（A&P Expense 沿用旧 6 组件语义，映射新版字段）。
+- **CA Net** 对应 Detail 真实 `"CA NET "` 字段（header 带尾随空格，`normalizeHeader` 已归一），normalized field 为 `netSales`（`DETAIL_FIELDS.netSales = ['CA NET']`）；CA Net % of GS = `netSales ÷ grossSales`（各自 period 计算）。CA NET 与 Summary 的 CONSO NET SALES 是同一 canonical 字段 `netSales`，04 读 detail 层门店值。
+- **Store P&L 最终列结构**：`P&L Line | Current | Current % of Net Sales | Comparison | Comparison % of Net Sales | Variance %`（6 列，**无 absolute Variance amount 列**）。31 行金额行来自新版 `store.pnl` 真实字段（P&L hierarchy 顺序），**ratio rows 已去重**（GM%/CC% 通过 % of Net Sales 列展示，不另起一行）；% of NS 统一用 Net Sales 分母；Variance % = (current−comparison)÷|comparison|，comparison=0 显示 —。
+- **New Store 容错**：Current 有 10 家新店无 prior-year comparison；Comparison 列 / % of NS / Variance % / pp 均显示 `—`，Store Signals 显示「New Store · No Prior-Year Comparison」；不拿 0 当 comparison。
+- 已知限制：Store Detail 的 component 与 subtotal（daCost / specificAP / totalMinorations）存在 KRMB 取整差异，P&L 表展示各列真实值、不做 store-level tie-out；A&P Expense 沿用旧 6 组件（含 specificAP，仅展示参考非 Bridge）。
+- 验证：Core Data 18/18 PASS；`git diff --check` PASS；无头验证 existing store（上海久光）6 KPI / 31 行 P&L / New Store（西安高新万达2店）comparison=— 均正确；01/02/03 渲染函数零改动。
+- 下一步：Final Regression / Cleanup。
+
 ### 2.1 已完成并在代码中存在
 
 #### Mock P&L 数据与数据模型
