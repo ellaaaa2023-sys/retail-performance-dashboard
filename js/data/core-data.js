@@ -744,9 +744,9 @@
     const netSales = sumField(stores, 'netSales');
     const grossMargin = sumField(stores, 'grossMargin');
     const customerContribution = sumField(stores, 'customerContribution');
-    const terminals = new Set(stores.map(store => normalizeHeader(store.terminal)).filter(Boolean));
+    const posNo = stores.reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
     return {
-      posNo: terminals.size,
+      posNo,
       aup,
       grossSales,
       totalMinorations,

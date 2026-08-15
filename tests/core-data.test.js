@@ -190,6 +190,21 @@ check(19, 'Summary POS no. reconciles with active Detail cityPosNo', () => {
   }
 });
 
+check(20, 'Filtered Portfolio POS no. sums active cityPosNo', () => {
+  const status = service.getFilterOptions().status[0];
+  const byStatus = service.getPortfolioMetrics({ status });
+  const total = service.getPortfolioMetrics();
+  assert.equal(byStatus.current.posNo, total.current.posNo);
+  assert.equal(byStatus.comparison.posNo, total.comparison.posNo);
+  assert.equal(byStatus.rowCounts.current, 160);
+
+  const tierStores = model.detail.current.stores.filter(store => store.productivityTier === '>136K');
+  const expectedTierPos = tierStores.reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
+  const byTier = service.getPortfolioMetrics({ productivityTier: '>136K' });
+  assert.equal(byTier.current.posNo, expectedTierPos);
+  assert.equal(byTier.rowCounts.current, tierStores.length);
+});
+
 const filteredBridgeError = service.getBridgeData('grossMargin', { region: selectedRegion });
 assert.equal(filteredBridgeError.reconciliation.ok, false);
 assert.equal(filteredBridgeError.error.code, 'BRIDGE_RECONCILIATION_ERROR');
@@ -220,6 +235,6 @@ assert.throws(
 );
 
 console.log(results.join('\n'));
-console.log(`\n${results.length}/19 validation checks passed.`);
+console.log(`\n${results.length}/20 validation checks passed.`);
 console.log('Filtered Bridge error handling PASS - non-zero residual is reported without a residual driver.');
 console.log('Period detection edge cases PASS - Full Year and missing prior-year handling verified.');
