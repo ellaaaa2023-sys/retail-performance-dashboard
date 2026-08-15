@@ -98,15 +98,15 @@
 
     <section class="tab-panel" id="tab-variance" data-panel="variance">
       <div class="page-heading"><div><span class="section-kicker">02 · P&amp;L VARIANCE ANALYSIS</span><h2>Identify the accounts driving performance</h2></div><p>Click a driver to locate the responsible stores</p></div>
-      <div class="metric-selector"><span>Analyze</span><div class="segmented" id="varianceMetric"><button data-value="netSales" type="button">Net Sales</button><button data-value="grossMargin" type="button">Gross Margin</button><button data-value="contribution" type="button">Customer Contribution</button><button class="active" data-value="operatingProfit" type="button">Operating Profit</button></div></div>
+      <div class="metric-selector"><span>Analyze</span><div class="segmented" id="varianceMetric"><button data-value="minorations" type="button">Total Minorations</button><button class="active" data-value="grossMargin" type="button">Gross Margin</button><button data-value="contribution" type="button">Customer Contribution</button></div></div>
       <section class="variance-top">
-        <article class="card bridge-card"><div class="card-head"><div><div class="card-title">Operating Profit Variance Bridge</div><div class="card-sub" id="bridgeSub">Reconciled P&amp;L movements from LY OP to Current OP</div></div><div class="reconcile" id="bridgeReconcile">—</div></div><div id="bridgeChart" class="chart chart-bridge"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
+        <article class="card bridge-card"><div class="card-head"><div><div class="card-title" id="bridgeTitle">Gross Margin Variance Bridge</div><div class="card-sub" id="bridgeSub">Comparison to Current · Prior Year Same Period</div></div><div class="bridge-status"><div class="scope-status" id="varianceScopeStatus"><span class="scope-dot"></span><span>Total Portfolio</span></div><div class="reconcile" id="bridgeReconcile">—</div></div></div><div id="bridgeChart" class="chart chart-bridge"><div class="chart-empty">Upload a workbook to view analysis</div></div></article>
         <article class="card insight-card"><div class="card-head"><div><div class="card-title">Variance Readout</div><div class="card-sub" id="varianceInsightSub">Selected KPI context</div></div></div><div class="insight-list" id="varianceInsights"><div class="empty-state">No analysis available</div></div></article>
       </section>
       <section class="driver-grid">
         <article class="card driver-table-card">
-          <div class="card-head"><div><div class="card-title" id="driverTitle">Operating Profit Driver Analysis</div><div class="card-sub">Amounts in KRMB · click a row to continue to Store Portfolio</div></div></div>
-          <div class="table-wrap"><table class="data-table driver-table"><thead><tr><th>Driver</th><th>Current</th><th>Comparison</th><th>Variance</th><th>Variance %</th><th>Share of Movement</th><th></th></tr></thead><tbody id="driverTableBody"></tbody></table></div>
+          <div class="card-head"><div><div class="card-title" id="driverTitle">Gross Margin Driver Analysis</div><div class="card-sub">Amounts in KRMB · click a row to preserve Store Ranking context</div></div></div>
+          <div class="table-wrap"><table class="data-table driver-table"><thead><tr><th>Driver</th><th>Current</th><th>Comparison</th><th>Variance</th><th>Variance %</th><th>Contribution</th><th></th></tr></thead><tbody id="driverTableBody"></tbody></table></div>
         </article>
         <div class="driver-rank-stack">
           <article class="card compact-card"><div class="card-head"><div><div class="card-title">Top Positive Drivers</div><div class="card-sub">Largest positive P&amp;L impacts</div></div></div><div class="rank-list" id="positiveDrivers"></div></article>

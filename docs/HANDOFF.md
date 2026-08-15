@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Codex Handoff
 
-> 更新时间：2026-08-15（Asia/Shanghai）
+> 更新时间：2026-08-16（Asia/Shanghai）
 > 交接目的：让新的 Codex 对话窗口在不依赖聊天历史的情况下，安全地继续维护本项目。  
 > 事实边界：本文基于当前仓库、`js/app.js`、HTML/CSS、现有文档、Git 状态及 Mock 工作簿的实际审计结果编写。本文不代表 Enterprise Release 已完成。
 
@@ -81,6 +81,20 @@ Store Detail
 - Management Signals 已改为两层：有 Material Signal 时显示显著异常；否则显示 2–3 个 Key Movements（不再出现无信息量空状态）。
 - 02 / 03 / 04 尚未迁移（仍走旧 `state.records`，新 workbook 下优雅降级为空态）。
 - 下一步：02 P&L Variance Migration（消费 Summary/Filtered Bridge API）。
+
+### Phase 6B — 02 P&L Variance Migration（已完成，2026-08-16）
+
+- 02 P&L Variance 已迁移到新版 `RetailDashboardData` Data Service；Analyze Selector、Bridge、Variance Readout、Driver Table、Top Positive Drivers 和 Top Negative Drivers 共用单一 `selectedVarianceKpi` 状态并已完成联动。
+- Analyze 只保留 `Total Minorations` / `Gross Margin` / `Customer Contribution`，已删除旧 Net Sales / Operating Profit 入口。
+- 页面只调用 `service.getBridgeData(metric, filters)`，不在 `app.js` 重写 Bridge hierarchy 或 reconciliation calculation。
+- Total Portfolio 消费 Summary P&L `Actual Adj.` Bridge；Total Minorations、Gross Margin、Customer Contribution 三个 Total Portfolio Bridge 均为 `residual = 0` / `Reconciled`。Filtered Portfolio 消费 Detail aggregation，并在页面显示当前 scope。
+- Filtered Bridge 的 `BRIDGE_RECONCILIATION_ERROR` 继续按现有逻辑处理：阻止 ECharts Bridge 绘制并显示 detail-level reconciliation 提示，不增加 residual / rounding 柱。
+- 已知 Data API 颗粒度限制：Summary Customer Contribution Bridge 提供 8 个非重叠细分 Driver；Filtered Customer Contribution detail hierarchy 目前只能安全返回 Gross Margin / Specific A&P / Specific SG&A。Detail A&P 列同时含 component 和 subtotal，在未确认非重叠 hierarchy 前不得在页面或 Core 中凭列名强行拆分。
+- 01 的 Total Minorations / Gross Margin / Customer Contribution KPI 均能带入正确的 `selectedVarianceKpi`。02 点击 Driver 时保留 `selectedDriver` 导航上下文，本阶段未迁移 03。
+- Analyze selector bug fix：`selectedVarianceKpi` 只保存 `minorations` / `grossMargin` / `contribution`，在 `getBridgeData()` 边界显式映射到 Core API metric；三个按钮直接绑定同一 `renderVariance()` 路径，可在 Total/Filtered scope 下连续切换，并能从 reconciliation error 恢复为正常 Bridge。
+- Waterfall renderer fix（2026-08-16）：移除不具备区间柱语义的普通 `bar` + `[start,end]` 写法，改用 ECharts `custom` series 按真实 cumulative start/end 像素坐标绘制 Driver，并增加 connector line。Bridge 专用金额标签按 `>=1000 KRMB → M` / `<1000 KRMB → K` / `0 → —` 动态显示；Total Minorations 的小额 Driver 使用 K、大额 Comparison / Current Anchor 使用 M。Total Minorations、Gross Margin、Customer Contribution 三个 Bridge 均已完成浏览器视觉测试并通过实际页面验收。
+- 验证：Core Data 18/18 PASS；三个 Summary Bridge 均 reconcile；浏览器 Mock upload、3 指标切换、Region/Tier Filtered scope、City 联动、Filtered 正常/错误 Bridge、01→02 下钻均通过；无 console error。
+- 03 Store Portfolio / 04 Store Detail 仍未迁移。下一步为 Phase 6C — 03 Store Portfolio Migration。
 
 ### 2.1 已完成并在代码中存在
 

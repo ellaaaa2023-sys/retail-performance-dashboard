@@ -13,3 +13,4 @@ SHA256SUMS.txt
 *.csv
 !sample_data/Mock_Counter_PnL.xlsx
 .vercel
+.workbuddy/

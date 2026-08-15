@@ -157,7 +157,7 @@ button.kpi-card:hover { border-color: #d2c9b8; box-shadow: var(--shadow-strong);
 .overview-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(270px,.75fr); gap: 14px; }
 .chart { width: 100%; height: 380px; }
 .chart-timeline { height: 330px; }
-.chart-bridge { height: 350px; }
+.chart-bridge { height: 390px; }
 .chart-wide { height: 510px; }
 .chart-pareto { height: 355px; }
 .chart-ap { height: 390px; }
@@ -183,8 +183,17 @@ button.insight-item:hover { border-color: #d8d0c2; }
 .metric-selector { margin-bottom: 13px; display: flex; align-items: center; gap: 10px; }
 .metric-selector > span { color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
 .variance-top { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(270px,.65fr); gap: 14px; margin-bottom: 14px; }
+.bridge-status { display: flex; align-items: center; gap: 7px; }
 .reconcile { padding: 5px 7px; border-radius: 5px; background: var(--green-light); color: var(--green); font-size: 8px; font-weight: 650; white-space: nowrap; }
 .reconcile.bad { background: var(--red-light); color: var(--red); }
+.bridge-error { min-height: 290px; padding: 28px; display: grid; place-content: center; gap: 8px; text-align: center; }
+.bridge-error strong { color: var(--red); font-size: 11px; font-weight: 650; }
+.bridge-error span { max-width: 390px; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.variance-summary { padding: 11px; border: 1px solid #e8e4dc; border-radius: 8px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; background: #f8fafc; }
+.variance-summary > div { min-width: 0; }
+.variance-summary .summary-kpi { grid-column: 1 / -1; padding-bottom: 8px; border-bottom: 1px solid #e8e4dc; }
+.variance-summary span { display: block; color: var(--muted-2); font-size: 7.5px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+.variance-summary strong { display: block; margin-top: 4px; color: var(--ink); font-size: 11px; font-weight: 650; }
 .driver-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(270px,.65fr); gap: 14px; }
 .driver-rank-stack { display: grid; gap: 14px; }
 .compact-card .card-head { min-height: 54px; }
@@ -311,6 +320,7 @@ dialog::backdrop { background: rgba(24,25,23,.44); }
   .primary-kpis, .secondary-kpis, .store-kpis { grid-template-columns: 1fr 1fr; }
   .segmented { max-width: 100%; overflow-x: auto; }
   .card-head { flex-direction: column; }
+  .bridge-status { width: 100%; justify-content: space-between; }
   .driver-rank-stack, .concentration-grid { grid-template-columns: 1fr; }
   .pareto-card { grid-column: auto; }
   .search-field, .detail-selector { width: 100%; }

@@ -158,9 +158,9 @@ const PNL_LINES = [
 const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
-  varianceMetric: 'operatingProfit', portfolioView: 'quadrants', snapshot: 'current',
+  portfolioView: 'quadrants', snapshot: 'current',
   portfolioMetric: 'operatingProfit', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, selectedVarianceKpi: 'grossMargin'
+  model: null, service: null, selectedVarianceKpi: 'grossMargin', selectedDriver: ''
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -823,65 +823,257 @@ function renderOverviewInsights(metrics) {
   $('overviewInsights').innerHTML = insightHtml(items.slice(0, 4));
 }
 
-function driverDescriptor(fieldKey,label,kind) { return {field:fieldKey,label,kind}; }
-function driverRows(metricKey) { return (DRIVER_SETS[metricKey] || []).map(item=>driverDescriptor(...item)); }
-function driverStats(descriptor,currentRows,comparisonRows,totalDelta) {
-  const rawCurrent=sum(currentRows,descriptor.field), rawLy=sum(comparisonRows,descriptor.field), impact=rawCurrent-rawLy;
-  const current=descriptor.kind==='expense'?Math.abs(rawCurrent):rawCurrent, ly=descriptor.kind==='expense'?Math.abs(rawLy):rawLy;
-  const delta=current-ly, pct=Math.abs(ly)>1e-9?delta/Math.abs(ly):NaN, share=Math.abs(totalDelta)>1e-9?impact/totalDelta:NaN;
-  return {...descriptor,rawCurrent,rawLy,current,ly,delta,pct,impact,share};
+const VARIANCE_KPIS = Object.freeze({
+  minorations: { apiMetric: 'totalMinorations' },
+  grossMargin: { apiMetric: 'grossMargin' },
+  contribution: { apiMetric: 'customerContribution' }
+});
+const VARIANCE_KPI_ALIASES = Object.freeze({
+  minorations: 'minorations',
+  totalMinorations: 'minorations',
+  grossMargin: 'grossMargin',
+  contribution: 'contribution',
+  customerContribution: 'contribution'
+});
+
+function selectVarianceKpi(value) {
+  const selected = VARIANCE_KPI_ALIASES[value] || 'grossMargin';
+  state.selectedVarianceKpi = selected;
+  setSegment('varianceMetric', selected);
 }
+
+function variancePercent(current, comparison) {
+  return Math.abs(comparison) > 1e-9 ? (current - comparison) / Math.abs(comparison) : NaN;
+}
+
+function varianceScopeLabel(bridge) {
+  return bridge.mode === 'filtered' ? 'Filtered Portfolio' : 'Total Portfolio';
+}
+
+function formatBridgeMoney(value, signed = false) {
+  if (!Number.isFinite(value) || Math.abs(value) < 1e-9) return '—';
+  const amount = Math.abs(value);
+  const sign = value < 0 ? '-' : signed ? '+' : '';
+  if (amount >= 1000) return `${sign}¥${trimZeros(amount / 1000, 2)}M`;
+  return `${sign}¥${trimZeros(amount, amount < 10 && !Number.isInteger(amount) ? 1 : 0)}K`;
+}
+
+function formatBridgeAxis(value) {
+  if (!Number.isFinite(value)) return '—';
+  if (Math.abs(value) < 1e-9) return '¥0';
+  const sign = value < 0 ? '-' : '';
+  const amount = Math.abs(value);
+  return amount >= 1000
+    ? `${sign}¥${trimZeros(amount / 1000, 1)}M`
+    : `${sign}¥${trimZeros(amount, 0)}K`;
+}
+
+function wrapBridgeLabel(value) {
+  const words = String(value || '').split(/\s+/);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && candidate.length > 16) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.join('\n');
+}
+
+function buildBridgeWaterfall(bridge) {
+  const items = [{
+    label: `Comparison ${bridge.label}`,
+    start: 0,
+    end: bridge.comparison,
+    connector: null,
+    type: 'anchor',
+    raw: bridge.comparison
+  }];
+  const path = [bridge.comparison];
+  let running = bridge.comparison;
+  bridge.drivers.forEach(driver => {
+    const next = running + driver.variance;
+    items.push({
+      label: driver.label,
+      start: running,
+      end: next,
+      connector: running,
+      type: driver.variance > 0 ? 'positive' : driver.variance < 0 ? 'negative' : 'zero',
+      raw: driver.variance
+    });
+    running = next;
+    path.push(running);
+  });
+  items.push({
+    label: `Current ${bridge.label}`,
+    start: 0,
+    end: bridge.current,
+    connector: bridge.current,
+    type: 'anchor',
+    raw: bridge.current
+  });
+  path.push(bridge.current);
+  return { items, path };
+}
+
+function disposeChart(id) {
+  const instance = state.charts[id];
+  if (!instance) return;
+  instance.dispose();
+  delete state.charts[id];
+}
+
 function renderVariance() {
-  renderBridge();
-  renderDriverAnalysis();
-  renderVarianceInsights();
+  selectVarianceKpi(state.selectedVarianceKpi);
+  if (!state.service) {
+    $('bridgeTitle').textContent = 'P&L Variance Bridge';
+    $('bridgeSub').textContent = 'Comparison to Current · Prior Year Same Period';
+    $('bridgeReconcile').textContent = '—';
+    $('bridgeReconcile').className = 'reconcile';
+    $('varianceScopeStatus').className = 'scope-status';
+    $('varianceScopeStatus').innerHTML = '<span class="scope-dot"></span><span>Total Portfolio</span>';
+    $('driverTableBody').innerHTML = '';
+    $('positiveDrivers').innerHTML = '';
+    $('negativeDrivers').innerHTML = '';
+    $('varianceInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
+    return;
+  }
+  const apiMetric = VARIANCE_KPIS[state.selectedVarianceKpi].apiMetric;
+  const bridge = state.service.getBridgeData(apiMetric, activeFilters());
+  renderBridge(bridge);
+  renderDriverAnalysis(bridge);
+  renderVarianceInsights(bridge);
 }
-function renderBridge() {
-  const {currentRows,comparisonRows,currentPeriod:cp,comparisonPeriod:lp} = scope();
+
+function renderBridge(bridge) {
+  const md = state.service.getMetadata();
+  const scopeLabel = varianceScopeLabel(bridge);
+  $('bridgeTitle').textContent = `${bridge.label} Variance Bridge`;
+  $('bridgeSub').textContent = `${md.comparisonPeriodKey} to ${md.currentPeriodKey} · Prior Year Same Period`;
+  $('varianceScopeStatus').className = `scope-status${bridge.mode === 'filtered' ? ' filtered' : ''}`;
+  $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${scopeLabel}</span>`;
+
+  if (bridge.error && bridge.error.code === 'BRIDGE_RECONCILIATION_ERROR') {
+    $('bridgeReconcile').textContent = 'Reconciliation error';
+    $('bridgeReconcile').className = 'reconcile bad';
+    disposeChart('bridgeChart');
+    $('bridgeChart').innerHTML = '<div class="bridge-error"><strong>Selected filtered portfolio does not fully reconcile at detail level.</strong><span>Adjust the filters or check the underlying detail data before using this Bridge.</span></div>';
+    return;
+  }
+
+  $('bridgeReconcile').textContent = 'Reconciled';
+  $('bridgeReconcile').className = 'reconcile';
+  const { items, path } = buildBridgeWaterfall(bridge);
+  const low = Math.min(...path), high = Math.max(...path);
+  const pathSpan = high - low;
+  const pad = pathSpan > 1e-9 ? Math.max(pathSpan * .16, 20) : Math.max(Math.abs(high) * .01, 1);
+  const yMin = low - pad, yMax = high + pad;
+  const typeCode = { anchor: 0, positive: 1, negative: -1, zero: 2 };
   const c = chart('bridgeChart');
-  if (!comparisonRows.length) { c.clear(); $('bridgeReconcile').textContent='No comparison'; $('bridgeReconcile').className='reconcile bad'; return; }
-  const start=sum(comparisonRows,'operatingProfit');
-  const descriptors=[['netSales','Δ Net Sales'],['costOfSales','Δ Cost of Sales'],['daCost','Δ DA Cost'],['specificAP','Δ Specific A&P'],['specificSga','Δ Specific SG&A'],['nonSpecificCosts','Δ Non-specific Costs']];
-  const changes=descriptors.map(([key,label])=>({key,label,delta:sum(currentRows,key)-sum(comparisonRows,key)}));
-  const end=sum(currentRows,'operatingProfit'), reconciled=start+changes.reduce((s,d)=>s+d.delta,0), difference=reconciled-end;
-  const labels=[`${lp?.key || 'LY'} OP`,...changes.map(d=>d.label),`${cp?.key || 'Current'} OP`];
-  const base=[],values=[],raw=[],types=[]; let run=start; base.push(0);values.push(start);raw.push(start);types.push('anchor');
-  for(const change of changes){if(change.delta>=0){base.push(run);values.push(change.delta);}else{base.push(run+change.delta);values.push(Math.abs(change.delta));}raw.push(change.delta);types.push(change.delta>=0?'positive':'negative');run+=change.delta;}
-  base.push(0);values.push(end);raw.push(end);types.push('anchor');
-  const path=[start]; let temp=start; changes.forEach(d=>{temp+=d.delta;path.push(temp)});path.push(end);
-  const low=Math.min(...path), high=Math.max(...path), pad=Math.max((high-low)*.14,Math.abs(high)*.025,1);
-  $('bridgeSub').textContent=`${lp?.key || 'N/A'} to ${cp?.key || 'N/A'} · additive P&L bridge · focused scale`;
-  $('bridgeReconcile').textContent=Math.abs(difference)<.05?'Reconciled':`Variance ${formatKrmb(difference)} KRMB`;
-  $('bridgeReconcile').className=`reconcile ${Math.abs(difference)<.05?'':'bad'}`;
-  c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:72,right:22,top:32,bottom:92},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const i=params[0].dataIndex;return `<b>${esc(labels[i])}</b><br>${types[i]==='anchor'?'Balance':'P&L impact'}: ${types[i]==='anchor'?formatMoney(raw[i]):formatSignedMoney(raw[i])}`;}},xAxis:{type:'category',data:labels,axisTick:{show:false},axisLine:{lineStyle:{color:THEME.axis}},axisLabel:{interval:0,rotate:28,color:THEME.muted,fontSize:8.5}},yAxis:{type:'value',min:low-pad,max:high+pad,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'bar',stack:'bridge',data:base,itemStyle:{color:'transparent'},silent:true},{type:'bar',stack:'bridge',barMaxWidth:44,data:values.map((value,i)=>({value,itemStyle:{color:types[i]==='anchor'?THEME.navy:types[i]==='positive'?THEME.blue:THEME.orange,borderRadius:[3,3,0,0]}})),label:{show:true,position:'top',color:THEME.muted,fontSize:8.5,formatter:p=>types[p.dataIndex]==='anchor'?formatMoney(raw[p.dataIndex]):formatSignedMoney(raw[p.dataIndex])}}]},{notMerge:true});
+  c.setOption({
+    textStyle: baseText(),
+    ...chartNavigation(),
+    grid: { left: 72, right: 22, top: 38, bottom: 112 },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; return `<b>${esc(item.label)}</b><br>${item.type === 'anchor' ? 'Balance' : 'P&L impact'}: ${formatBridgeMoney(item.raw, item.type !== 'anchor')}`; } },
+    xAxis: { type: 'category', data: items.map(item => item.label), axisTick: { show: false }, axisLine: { lineStyle: { color: THEME.axis } }, axisLabel: { interval: 0, rotate: 24, margin: 15, color: THEME.muted, fontSize: 8, lineHeight: 11, formatter: wrapBridgeLabel } },
+    yAxis: { type: 'value', min: yMin, max: yMax, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatBridgeAxis }, splitLine: { lineStyle: { color: THEME.grid } } },
+    series: [{
+      name: 'Variance Bridge',
+      type: 'custom',
+      encode: { x: 0, y: [1, 2] },
+      data: items.map((item, index) => [index, item.start, item.end, item.raw, typeCode[item.type], item.connector]),
+      renderItem: (params, api) => {
+        const item = items[params.dataIndex];
+        const categoryIndex = api.value(0);
+        const startPoint = api.coord([categoryIndex, api.value(1)]);
+        const endPoint = api.coord([categoryIndex, api.value(2)]);
+        const categoryWidth = api.size([1, 0])[0];
+        const barWidth = Math.max(14, Math.min(42, categoryWidth * .52));
+        const rawHeight = Math.abs(endPoint[1] - startPoint[1]);
+        const minHeight = item.type === 'zero' ? 2 : item.type === 'anchor' ? 0 : 3;
+        const height = Math.max(rawHeight, minHeight);
+        let y = Math.min(startPoint[1], endPoint[1]);
+        if (rawHeight < minHeight) y = (startPoint[1] + endPoint[1] - height) / 2;
+        const rawRect = { x: endPoint[0] - barWidth / 2, y, width: barWidth, height };
+        const clippedRect = echarts.graphic.clipRectByRect(rawRect, params.coordSys);
+        const children = [];
+        if (item.connector != null) {
+          const connectorY = api.coord([categoryIndex, item.connector])[1];
+          children.push({
+            type: 'line',
+            silent: true,
+            shape: { x1: endPoint[0] - categoryWidth + barWidth / 2, y1: connectorY, x2: endPoint[0] - barWidth / 2, y2: connectorY },
+            style: { stroke: THEME.axis, lineWidth: 1, lineDash: [3, 3] }
+          });
+        }
+        if (clippedRect) {
+          children.push({
+            type: 'rect',
+            shape: clippedRect,
+            style: {
+              fill: item.type === 'anchor' ? THEME.navy : item.type === 'positive' ? THEME.green : item.type === 'negative' ? THEME.orange : THEME.neutral
+            }
+          });
+        }
+        const valuePoint = api.coord([categoryIndex, item.type === 'anchor' ? item.end : item.raw >= 0 ? Math.max(item.start, item.end) : Math.min(item.start, item.end)]);
+        const labelAbove = item.type === 'anchor' ? item.raw >= 0 : item.raw >= 0;
+        children.push({
+          type: 'text',
+          silent: true,
+          style: {
+            text: formatBridgeMoney(item.raw, item.type !== 'anchor'),
+            x: valuePoint[0],
+            y: valuePoint[1] + (labelAbove ? -7 : 7),
+            fill: THEME.ink,
+            font: '600 9px Segoe UI, PingFang SC, Microsoft YaHei, Arial, sans-serif',
+            textAlign: 'center',
+            textVerticalAlign: labelAbove ? 'bottom' : 'top'
+          }
+        });
+        return { type: 'group', children };
+      }
+    }]
+  }, { notMerge: true });
 }
-function renderDriverAnalysis() {
-  const {currentRows,comparisonRows} = scope();
-  const key=state.varianceMetric, totalDelta=metricValue(currentRows,key)-metricValue(comparisonRows,key);
-  const rows=driverRows(key).map(d=>driverStats(d,currentRows,comparisonRows,totalDelta));
-  $('driverTitle').textContent=`${METRICS[key].label} Driver Analysis`;
-  $('driverTableBody').innerHTML=rows.map(row=>`<tr data-driver="${row.field}"><td><span class="driver-name"><i></i>${esc(row.label)}${row.kind==='expense'?' <small>(expense)</small>':''}</span></td><td>${formatKrmb(row.current)}</td><td>${comparisonRows.length?formatKrmb(row.ly):'—'}</td><td class="${row.impact>0?'cell-positive':row.impact<0?'cell-negative':''}">${comparisonRows.length?formatKrmb(row.impact):'—'}</td><td>${comparisonRows.length&&Number.isFinite(row.pct)?`${row.pct>=0?'+':''}${formatPct(row.pct)}`:'—'}</td><td>${comparisonRows.length&&Number.isFinite(row.share)?formatPct(row.share):'—'}</td><td class="row-action">›</td></tr>`).join('') || '<tr><td colspan="7">No mapped drivers</td></tr>';
-  const positive=rows.filter(r=>r.impact>0).sort((a,b)=>b.impact-a.impact).slice(0,4), negative=rows.filter(r=>r.impact<0).sort((a,b)=>a.impact-b.impact).slice(0,4);
-  $('positiveDrivers').innerHTML=rankDriverHtml(positive,'positive');
-  $('negativeDrivers').innerHTML=rankDriverHtml(negative,'negative');
+
+function renderDriverAnalysis(bridge) {
+  const totalVariance = bridge.current - bridge.comparison;
+  $('driverTitle').textContent = `${bridge.label} Driver Analysis`;
+  $('driverTableBody').innerHTML = bridge.drivers.map(driver => {
+    const pct = variancePercent(driver.current, driver.comparison);
+    const contribution = Math.abs(totalVariance) > 1e-9 ? driver.variance / totalVariance : NaN;
+    const tone = driver.variance > 0 ? 'cell-positive' : driver.variance < 0 ? 'cell-negative' : '';
+    return `<tr data-driver="${esc(driver.field)}"><td><span class="driver-name"><i></i>${esc(driver.label)}</span></td><td>${formatKrmb(driver.current)}</td><td>${formatKrmb(driver.comparison)}</td><td class="${tone}">${driver.variance > 0 ? '+' : ''}${formatKrmb(driver.variance)}</td><td>${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${formatPct(pct)}` : '—'}</td><td>${Number.isFinite(contribution) ? formatPct(contribution) : '—'}</td><td class="row-action">›</td></tr>`;
+  }).join('') || '<tr><td colspan="7">No mapped drivers</td></tr>';
+  const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance).slice(0,4);
+  const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance).slice(0,4);
+  $('positiveDrivers').innerHTML = rankDriverHtml(positive, 'positive');
+  $('negativeDrivers').innerHTML = rankDriverHtml(negative, 'negative');
 }
+
 function rankDriverHtml(rows,tone) {
   if (!rows.length) return '<div class="empty-state">No material drivers</div>';
-  return rows.map((row,index)=>`<button class="rank-row" type="button" data-driver="${row.field}"><span>${String(index+1).padStart(2,'0')}</span><strong>${esc(row.label)}</strong><em class="${tone==='positive'?'cell-positive':'cell-negative'}">${formatSignedMoney(row.impact)}</em></button>`).join('');
+  return rows.map((row,index)=>`<button class="rank-row" type="button" data-driver="${esc(row.field)}"><span>${String(index+1).padStart(2,'0')}</span><strong>${esc(row.label)}</strong><em class="${tone==='positive'?'cell-positive':'cell-negative'}">${formatSignedMoney(row.variance)}</em></button>`).join('');
 }
-function renderVarianceInsights() {
-  const {currentRows,comparisonRows,currentPeriod:cp,comparisonPeriod:lp}=scope();
-  const key=state.varianceMetric, stats=metricStats(key,currentRows,comparisonRows), rows=driverRows(key).map(d=>driverStats(d,currentRows,comparisonRows,stats.delta));
-  const positive=rows.filter(r=>r.impact>0).sort((a,b)=>b.impact-a.impact)[0], negative=rows.filter(r=>r.impact<0).sort((a,b)=>a.impact-b.impact)[0];
-  $('varianceInsightSub').textContent=`${METRICS[key].label} · ${cp?.key||'—'} vs ${lp?.key||'N/A'}`;
-  const items=[];
-  if (!comparisonRows.length) items.push({title:'Comparison period unavailable',detail:'Driver variance requires a matching comparison period.'});
-  else {
-    items.push({tone:stats.delta>=0?'positive':'critical',title:`${METRICS[key].label} changed ${formatSignedMoney(stats.delta)}`,detail:`${formatMetric(stats.current,key)} current versus ${formatMetric(stats.ly,key)} comparison.`});
-    if (positive) items.push({tone:'positive',title:`Largest positive impact: ${positive.label}`,detail:`${formatSignedMoney(positive.impact)} P&L impact.`,action:'portfolio',driver:positive.field});
-    if (negative) items.push({tone:'warning',title:`Largest negative impact: ${negative.label}`,detail:`${formatSignedMoney(negative.impact)} P&L impact.`,action:'portfolio',driver:negative.field});
-  }
-  $('varianceInsights').innerHTML=insightHtml(items);
+
+function renderVarianceInsights(bridge) {
+  const md = state.service.getMetadata();
+  const variance = bridge.current - bridge.comparison;
+  const pct = variancePercent(bridge.current, bridge.comparison);
+  const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance)[0];
+  const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance)[0];
+  $('varianceInsightSub').textContent = `${bridge.label} · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
+  const summary = `<div class="variance-summary"><div class="summary-kpi"><span>Selected KPI</span><strong>${esc(bridge.label)}</strong></div><div><span>Current</span><strong>${formatMoney(bridge.current)}</strong></div><div><span>Comparison</span><strong>${formatMoney(bridge.comparison)}</strong></div><div><span>Variance</span><strong class="${variance>0?'cell-positive':variance<0?'cell-negative':''}">${formatSignedMoney(variance)}</strong></div><div><span>Variance %</span><strong>${Number.isFinite(pct)?`${pct>=0?'+':''}${formatPct(pct)}`:'—'}</strong></div></div>`;
+  const items = [];
+  if (bridge.error) items.push({tone:'warning',title:'Detail-level reconciliation requires attention',detail:'The selected filtered slice is not safe to present as a reconciled Bridge.'});
+  if (positive) items.push({tone:'positive',title:`Largest positive driver: ${positive.label}`,detail:`${formatSignedMoney(positive.variance)} P&L line contribution.`,action:'portfolio',driver:positive.field});
+  if (negative) items.push({tone:'warning',title:`Largest negative driver: ${negative.label}`,detail:`${formatSignedMoney(negative.variance)} P&L line contribution.`,action:'portfolio',driver:negative.field});
+  $('varianceInsights').innerHTML = summary + insightHtml(items);
 }
 
 function measureMeta(reference) {
@@ -1050,7 +1242,7 @@ function setSegment(containerId,value) { document.querySelectorAll(`#${container
 function clearData() {
   state.book=null; state.model=null; state.service=null;
   state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
-  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.search=''; state.warnings=[]; state.dataStats=null;
+  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedDriver=''; state.search=''; state.warnings=[]; state.dataStats=null;
   Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
   ['bridgeChart','ccChart','gmChart','bubbleChart','paretoChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
   ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores'].forEach(id=>{$(id).innerHTML='';});
@@ -1088,13 +1280,17 @@ function importMappingFile(file) {
 
 document.querySelectorAll('.rail-link').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.tab)));
 document.addEventListener('click',event=>{
-  const kpi=event.target.closest('[data-kpi]'); if(kpi){const target=kpi.dataset.kpi;state.selectedVarianceKpi=target;state.varianceMetric=target==='minorations'?'netSales':target;setSegment('varianceMetric',state.varianceMetric);switchTab('variance');return;}
-  const driver=event.target.closest('[data-driver]'); if(driver){setPortfolioMetric(`field:${driver.dataset.driver}`);state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');return;}
+  const kpi=event.target.closest('[data-kpi]'); if(kpi){selectVarianceKpi(kpi.dataset.kpi);switchTab('variance');return;}
+  const driver=event.target.closest('[data-driver]'); if(driver){state.selectedDriver=driver.dataset.driver;setPortfolioMetric(`field:${state.selectedDriver}`);state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');return;}
   const store=event.target.closest('[data-store]'); if(store){openStoreDetail(store.dataset.store);return;}
-  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){const target=action.dataset.metric||'operatingProfit';state.selectedVarianceKpi=target;state.varianceMetric=target==='minorations'?'netSales':target;setSegment('varianceMetric',state.varianceMetric);switchTab('variance');}else if(action.dataset.action==='portfolio'){if(action.dataset.driver)setPortfolioMetric(`field:${action.dataset.driver}`);else setPortfolioMetric(action.dataset.metric||'operatingProfit');state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');}}
+  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){selectVarianceKpi(action.dataset.metric);switchTab('variance');}else if(action.dataset.action==='portfolio'){state.selectedDriver=action.dataset.driver||'';if(state.selectedDriver)setPortfolioMetric(`field:${state.selectedDriver}`);else setPortfolioMetric(action.dataset.metric||'operatingProfit');state.portfolioView='concentration';setSegment('portfolioView','concentration');switchTab('portfolio');}}
 });
 
-$('varianceMetric').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.varianceMetric=button.dataset.value;setSegment('varianceMetric',state.varianceMetric);renderDriverAnalysis();renderVarianceInsights();});
+document.querySelectorAll('#varianceMetric button[data-value]').forEach(button=>button.addEventListener('click',event=>{
+  event.stopPropagation();
+  selectVarianceKpi(button.dataset.value);
+  renderVariance();
+}));
 $('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
 $('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
 $('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='quadrants'||state.portfolioView==='productivity')renderPortfolio();});
