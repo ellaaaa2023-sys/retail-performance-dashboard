@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Architecture Decisions
 
-> Confirmed decision log for the 2026-08-15 Workbook migration.
+> Confirmed decision log for the Workbook migration and Phase G product polish, updated through Phase G on 2026-08-18.
 
 ## D-001 — Current Mock Dataset
 
@@ -50,11 +50,11 @@
 
 **Decision:** All Detail columns and Summary rows are identified through Field Mapping and normalized aliases. Fixed coordinates are forbidden.
 
-**Consequence:** `门店总单产` is the Bubble-size field regardless of its current column position.
+**Consequence:** `门店总单产` remains the Store Productivity / Tier / tooltip field regardless of its current column position; Quadrant point size is fixed.
 
 ## D-009 — POS Semantics
 
-**Decision:** Summary `POS no.` is the Portfolio KPI. In filtered store scope, POS count is distinct Terminal count unless a confirmed store-level POS-count field is mapped.
+**Decision:** Summary `POS no.` is the Total Portfolio KPI. In filtered/store scope, POS count is the sum of mapped `城市POS数` / `cityPosNo` for active stores.
 
 **Rejected:** Mapping Detail `POS.` to POS count. In the current Workbook, `POS.` is an expense component.
 
@@ -66,11 +66,11 @@
 
 **Decision:** City options are recalculated from the current-period Detail records after applying Region, Status, and Productivity Tier. An invalid selected City resets to All.
 
-## D-012 — Three Portfolio Bridges
+## D-012 — Bridge API and Page 02 Scope
 
-**Decision:** Page 02 supports Total Minorations, Gross Margin, and Customer Contribution only. One selected KPI state drives Bridge, Readout, Driver Table, and Top Drivers.
+**Decision:** Core retains Total Minorations, Gross Margin, and Customer Contribution Bridge APIs. Page 02 intentionally displays only Customer Contribution Bridge.
 
-**Consequence:** Net Sales and Operating Profit are removed from the Analyze control during Phase 6.
+**Consequence:** The Analyze selector and `selectedVarianceKpi` UI state are removed. Page 01 KPI drill-down selects a Page 02 P&L Snapshot row only; it never switches the Bridge.
 
 ## D-013 — Non-overlapping Bridge Drivers
 
@@ -99,21 +99,23 @@ Executive Overview
 
 ## D-016 — Executive Overview
 
-**Decision:** Replace Review Timeline with a finance-style P&L Snapshot. Retain only the nine approved KPIs from the migration brief.
+**Decision:** Use 8 cards: Store Count, POS no., AUP, Gross Sales, Total Minorations %, CONSO Net Sales, Gross Margin [amount + ratio], Customer Contribution [amount + ratio]. Page 01 contains no P&L Snapshot and focuses on Executive KPI Overview plus Management Signals.
+
+**Navigation:** Every KPI with a natural Page 02 P&L row is clickable and opens that highlighted row. Store Count stays non-clickable. The Customer Contribution Bridge never changes with KPI selection.
 
 ## D-017 — Store Portfolio
 
-**Decision:** Keep Productivity and Store Variance Ranking. Remove Quadrants and Variance Pareto after the replacement views pass validation.
+**Decision:** Keep Productivity and Store Variance Ranking. Productivity is the Store Investment Productivity Quadrant.
 
-**Productivity Bubble:** X = Customer Contribution amount, Y = Gross Margin amount, size = mapped `门店总单产` using bounded square-root scaling.
+**Quadrant:** X = Customer Contribution amount; Y = `abs(Specific A&P)`; point size is fixed. Current and Comparison views use their own visible-scope medians; `>= median` is High. Movement uses one pooled median frame for both endpoints.
 
 ## D-018 — Snapshot Switching
 
-**Decision:** Current/Comparison switching applies to Productivity only. Store Variance Ranking always represents Current minus Prior Year Same Period.
+**Decision:** Current/Comparison/Movement switching applies to Productivity only. Store Variance Ranking always represents Current minus Prior Year Same Period.
 
 ## D-019 — Store Detail
 
-**Decision:** Preserve the overall Store Detail architecture and A&P charts. Remove Operating Profit only from the top Key Figures and reorder the Store P&L columns as specified.
+**Decision:** Preserve the overall Store Detail architecture with 4 top cards: Gross Sales, CA Net [amount + % of GS], Gross Margin %, Customer Contribution [amount + ratio]. Store P&L uses ratio variance. A&P uses canonical Specific A&P spend plus two non-overlapping component analysis charts.
 
 ## D-020 — Security and Offline Operation
 
@@ -124,6 +126,86 @@ Executive Overview
 ## D-021 — Migration Safety
 
 **Decision:** Do not delete old logic at the start of migration. Build and validate the replacement adapter and pages first; clean up S2/Year/Comparison/Store Type/Timeline/Quadrants/Pareto/old Bubble state only after regression tests pass.
+
+## D-022 — Ratio Variance Semantics
+
+**Decision:** For every metric with an explicit ratio representation:
+
+```text
+ratio variance = Current ratio - Comparison ratio
+```
+
+**Presentation:** Display `+0.1%` / `-0.3%`, not relative growth and not `pp`.
+
+**Consequence:** Bridge reconciliation and Store Variance Ranking remain amount-based and are not converted to ratio variance.
+
+## D-023 — Canonical A&P Expense
+
+**Decision:** Signed A&P Expense = `store.pnl.specificAP`; spend magnitude = `abs(store.pnl.specificAP)`.
+
+**Rejected:** Summing Customer Samples, Promotional Gifts, Animations, POS Advertising, Specific Development, and Specific A&P as a formal total because Specific A&P is a subtotal and the result double-counts.
+
+## D-024 — Customer Contribution Bridge Presentation
+
+**Decision:** Summary Page 02 uses the 8 non-overlapping Customer Contribution drivers. Filtered Page 02 uses only Gross Margin, Specific A&P, and Specific SG&A.
+
+**Consequence:** A rounded filtered slice that does not reconcile returns `BRIDGE_RECONCILIATION_ERROR`; no residual bar or forced tie-out is permitted.
+
+## D-025 — Median Quadrant Scope
+
+**Decision:** Region, City, Status, Tier, and Current/Comparison changes rebuild the visible store dataset, medians, and classifications. Selected Driver context belongs only to Ranking and does not filter Productivity.
+
+## D-026 — Pure Browser-compatible Helpers
+
+**Decision:** Keep `js/productivity-quadrant.js` and `js/store-detail.js` as small UMD/global classic-script helpers loaded before `app.js`.
+
+**Consequence:** They remain usable by Node tests without introducing ES Modules, runtime fetches, or external dependencies.
+
+## D-027 — Final Validation Baseline
+
+**Decision:** The Phase F baseline is Core 27/27, Quadrant 10/10, Store Detail 10/10 (47/47 total), plus standard Mock browser journeys and zero console warnings/errors.
+
+## D-028 — Inline Amount and Ratio
+
+**Decision:** When amount and ratio describe the same business metric, render them at the same visual level as `Amount · Ratio`. This applies to current and comparison values across Pages 01–04.
+
+**Consequence:** Ratio-only metrics remain ratio-only; the design does not invent an amount. Ratio variance stays on its own line or column.
+
+## D-029 — Page 02 Driver Analysis Columns
+
+**Decision:** Driver Analysis exposes independent Current Amount, Current % of Net Sales, Comparison Amount, Comparison % of Net Sales, Variance %, and Drill-down columns.
+
+**Rejected:** Stacking ratios below amounts, restoring absolute Variance, or restoring Contribution.
+
+## D-030 — A&P Component Analysis
+
+**Decision:** Restore two Store Detail A&P component views using the finest non-overlapping Workbook lines: Trade Relation, Customer Samples, Promotional Gifts, POS Advertising Amortization, POS Advertising Expense, Merchandising, Animations, Tester, DA Cost and Specific Development, and Other A&P.
+
+**Boundary:** Specific A&P is the formal subtotal and is excluded from the component pool. Component charts do not redefine canonical A&P, claim reconciliation, or invent a residual when source rounding prevents an exact tie.
+
+## D-031 — Quadrant Summary Local State
+
+**Decision:** Dynamic Star, Risk, Balanced High, and Balanced Low counts sum to the current scope. `selectedQuadrant` changes only chart visibility and never mutates Region, City, Status, Tier, Ranking, or Priority Risk Stores.
+
+## D-032 — Priority Risk Ranking
+
+**Decision:** Only Low-CC + High-A&P stores are eligible. Average-rank percentiles are calculated across the current filtered quadrant dataset, including ties, and drive this score:
+
+```text
+riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
+```
+
+**Consequence:** The score has no hard-coded business threshold. Stable tie-breaks preserve deterministic ordering.
+
+## D-033 — Movement Matching and Coordinate Frame
+
+**Decision:** Movement matches stores only by exact normalized Terminal key and excludes unmatched stores. It calculates pooled CC and A&P medians from both periods' observations and classifies both endpoints against that one frame.
+
+**Filter rule:** Region, City, Status, and Tier apply to the matched current-store scope. Tier deliberately uses Current Tier because Dashboard filters describe the current portfolio.
+
+## D-034 — Phase G Validation Baseline
+
+**Decision:** Phase G validation is Core 27/27, Quadrant 25/25, and Store Detail 14/14 (66/66 total), plus five consecutive Current → Comparison → Movement → Ranking → Productivity → Movement browser cycles with stable chart canvases and no console warnings/errors.
 
 ## Confirmed Filter Dimensions
 

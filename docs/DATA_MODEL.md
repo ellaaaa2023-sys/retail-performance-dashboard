@@ -1,7 +1,7 @@
 # Retail Performance Dashboard — Data Model
 
-> Status: architecture contract for the next refactor. No Phase 5 code has been implemented.
-> Audit date: 2026-08-15 (Asia/Shanghai).
+> Status: implemented data contract through Phase F.
+> Audit date: 2026-08-18 (Asia/Shanghai).
 
 ## 1. Source of Truth and Security Boundary
 
@@ -14,6 +14,34 @@ sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx
 It is the default input for feature development, parser refactoring, field mapping, and Dashboard testing. Legacy workbooks are retained but are not compatibility targets and must not be read unless the user explicitly requests it.
 
 Only Mock Data may enter the project directory, Git, GitHub, Vercel, or AI workflows. Real company data must remain in the approved company environment and must never be committed to Git.
+
+### 1.1 Final shared calculation contracts
+
+Ratio variance is a percentage-point difference mathematically, but the UI displays it with the normal percent sign:
+
+```text
+ratioVariance = currentRatio - comparisonRatio
+```
+
+Example: Current `-27.9%` minus Comparison `-27.6%` displays `-0.3%`. It is never divided by the comparison ratio, and a negative comparison base does not reverse the direction.
+
+This contract applies to Total Minorations %, Gross Margin %, Customer Contribution %, CA Net % of Gross Sales, every P&L line % of Net Sales, expense ratios, and Bridge driver ratio metadata. Metrics without an explicit ratio representation keep their existing amount/count comparison semantics.
+
+Bridge reconciliation remains independent and amount-based:
+
+```text
+Comparison amount + Σ driver amount variance = Current amount
+driver amount variance = Current amount - Comparison amount
+```
+
+Canonical A&P Expense is:
+
+```text
+signed A&P amount = store.pnl.specificAP
+A&P spend magnitude = abs(store.pnl.specificAP)
+```
+
+Customer Samples, Promotional Gifts, Animations, POS Advertising, Specific Development, and the Specific A&P subtotal must not be summed as one formal total because that double-counts the subtotal.
 
 ## 2. Audited Workbook Structure
 
@@ -186,7 +214,7 @@ Default Portfolio rules:
 - `Actual Adj.` is the final business scope formed after detail adjustments and is the authoritative presentation basis.
 - Raw `Actual` is retained only as a fallback when the required Adjusted value is absent; fallback use must remain visible in source metadata.
 - AUP is read only from Summary P&L. It is never calculated from Store Detail and is not affected by Region, City, Status, or Productivity Tier filters.
-- AUP is not Store Productivity (`门店总单产`). Store Productivity remains a store-level field used for Tier, Bubble size, and store analysis.
+- AUP is not Store Productivity (`门店总单产`). Store Productivity remains a store-level field used for Tier, tooltip, Store Detail, and store analysis; Quadrant points use a fixed size.
 - Column K is not an absolute variance source; absolute variance is calculated as Current minus Prior Year Same Period.
 
 ### 5.2 Store record model
@@ -205,7 +233,13 @@ Each Detail row becomes:
   status,
   productivityTier,
   storeProductivity,
+  cityPosNo,
   pnl: { ...mapped P&L amounts and ratios },
+  metrics: {
+    ...portfolio metrics,
+    apExpense,          // signed Specific A&P
+    apExpenseMagnitude // abs(Specific A&P)
+  },
   source: { sheetName, rowNumber }
 }
 ```
@@ -222,8 +256,8 @@ High-risk Workbook mappings:
 |---|---|---|
 | Terminal | `Terminal` | Stable store identifier |
 | Store Productivity Tier | `门店单产等级` | Values are discovered from data; never hard-code the tier list |
-| Store Productivity | `门店总单产` | Bubble size source; do not infer from column I |
-| POS count | Summary `POS no.` | Portfolio KPI; for filtered store scope use distinct Terminal count |
+| Store Productivity | `门店总单产` | Tier/tooltip/store detail source; it no longer controls point size |
+| POS count | Summary `POS no.` / Detail `城市POS数` | Total Portfolio uses Summary; filtered/store views sum active `cityPosNo` |
 | POS advertising component | Detail `POS.` | Expense component; must never auto-map to POS count |
 | CONSO Net Sales | Detail `CA NET ` | Header normalization must trim whitespace |
 | Customer Contribution | Detail `Client Contribution` | Supported alias |
@@ -258,7 +292,7 @@ Core calculations:
 Gross Margin % = Σ Gross Margin / Σ CONSO Net Sales
 Customer Contribution % = Σ Customer Contribution / Σ CONSO Net Sales
 Total Minorations % = Σ Total Minorations / Σ Gross Sales
-POS no. = distinct Terminal count
+POS no. = Σ active store cityPosNo
 ```
 
 The current store rows contain whole-KRMB rounding. Aggregated Detail totals differ slightly from Summary totals, which confirms that Summary remains the authoritative unfiltered source.
@@ -349,7 +383,18 @@ If the residual exceeds the configured numeric tolerance, the Dashboard must sho
 
 Filtered Bridges must calculate the target KPI and every Driver variance from the same filtered Store Detail aggregates. No rounding/residual bar is permitted. Any non-zero residual outside numeric tolerance is a data or calculation defect and must produce `Bridge reconciliation error` without silent correction.
 
-## 9. Known Gaps Before Phase 5
+### 8.5 Final Bridge UI and ratio metadata
+
+Core retains the three Summary Bridge APIs: Total Minorations, Gross Margin, and Customer Contribution. Page 02 intentionally consumes only Customer Contribution.
+
+- Summary Customer Contribution: 8 non-overlapping drivers listed in 8.3.
+- Filtered Customer Contribution: Gross Margin, Specific A&P, Specific SG&A only.
+- Each Bridge and driver exposes `currentRatio`, `comparisonRatio`, and `ratioVariance` for readouts/tables.
+- Those ratio fields never replace the amount fields used by waterfall reconciliation or Store Variance Ranking.
+
+## 9. Known Limitations After Phase F
 
 - No separate Full Year Mock fixture exists yet.
-- Store-detail component rounding can create Bridge residuals; Phase 5 must report these as reconciliation errors rather than correcting them.
+- Filtered Customer Contribution cannot safely expand beyond Gross Margin / Specific A&P / Specific SG&A with the current Detail hierarchy.
+- Store-detail KRMB rounding can create filtered Bridge residuals; the implementation reports `BRIDGE_RECONCILIATION_ERROR` and does not correct them.
+- The old A&P component list remains useful only as source-line reference; it is not a complete, non-overlapping bridge to the Specific A&P subtotal.

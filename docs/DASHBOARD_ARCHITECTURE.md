@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Target Architecture
 
-> Status: Phase 3 proposal. It describes the approved migration target but does not indicate that Phase 5 code exists.
+> Status: implemented architecture through Phase G; updated 2026-08-18.
 
 ## 1. Purpose
 
@@ -16,9 +16,29 @@ Portfolio
 
 The migration changes the Workbook adapter and business logic while preserving the current offline security boundary, overall visual language, four-page navigation, and drill-down experience.
 
-## 2. Current Architecture and Migration Impact
+### 1.1 Phase G final implementation snapshot
 
-The current application selects one rectangular sheet, maps it into one `records[]` array, and expects Year and Review Period columns inside that sheet. The new Workbook separates Summary P&L and Store Detail across multiple sheets.
+```text
+Workbook
+  → RetailDashboardData normalized model / Data Service
+  → Page 01: 8 KPI cards + Management Signals
+  → Page 02: Snapshot-first + Customer Contribution amount Bridge
+  → Page 03: Current / Comparison / pooled-frame Movement + risk prioritization / amount Ranking
+  → Page 04: 4 KPI cards + Store P&L + non-overlapping A&P component analysis
+```
+
+Shared business contracts:
+
+- Ratio variance = Current ratio − Comparison ratio and is displayed with `%`.
+- Bridge and Store Ranking retain Current amount − Comparison amount.
+- Canonical signed A&P = `store.pnl.specificAP`; chart spend = its absolute magnitude.
+- Whenever an amount and ratio describe the same business metric, they use one inline `Amount · Ratio` display model.
+- A&P component charts analyze non-overlapping expense lines and do not redefine or overwrite canonical Specific A&P.
+- `js/productivity-quadrant.js` and `js/store-detail.js` isolate pure, testable UI-domain logic while preserving classic relative script loading and `file://` compatibility.
+
+## 2. Pre-migration Architecture and Migration Impact (historical)
+
+Before Phase 5, the application selected one rectangular sheet, mapped it into one `records[]` array, and expected Year and Review Period columns inside that sheet. The implemented Workbook architecture now separates Summary P&L and Store Detail across multiple sheets.
 
 | Area | Current implementation | Required migration |
 |---|---|---|
@@ -31,30 +51,21 @@ The current application selects one rectangular sheet, maps it into one `records
 | State | Year, comparison mode, one sheet | Review Period, period pair, summary/detail sources, scope mode |
 | Calculations | Portfolio metrics always aggregate Store rows | Summary for Total Portfolio; Detail for Filtered Portfolio |
 | Filters | Global independent option lists | Cascading option sets, including Tier → City |
-| Overview | Store aggregation and timeline | Summary-led KPI + P&L Snapshot; no timeline |
+| Overview | Store aggregation and timeline | Summary-led KPI drill-down + Management Signals; no duplicate Snapshot |
 | Variance | Operating Profit bridge | Three Summary-row Bridges with reconciliation |
-| Portfolio | Quadrants, Bubble, Pareto | Productivity Bubble + Store Variance Ranking only |
+| Portfolio | Quadrants, Bubble, Pareto | Median Productivity Quadrant + Store Variance Ranking only |
 | Store Detail | Existing store model | Remap new fields and reorder presentation |
 
-Primary future code impact:
+Primary implemented code surfaces:
 
 ```text
 index.html
 assets/styles.css
+js/data/core-data.js
+js/productivity-quadrant.js
+js/store-detail.js
 js/app.js
-```
-
-Recommended Phase 5 module boundary, subject to user approval before creating new files:
-
-```text
-js/workbook-adapter.js
-js/sheet-discovery.js
-js/field-mapping.js
-js/normalized-model.js
-js/calculations.js
-js/filter-engine.js
-js/charts.js
-js/app.js
+tests/*.test.js
 ```
 
 Classic local scripts with explicit load order are preferred to preserve `file://` compatibility. ES Modules, runtime fetches, external APIs, CDNs, analytics, and telemetry remain prohibited.
@@ -166,10 +177,11 @@ filters
   status
   productivityTier
 activePage
-selectedVarianceKpi        // minorations | grossMargin | contribution
+selectedPnlLine            // Snapshot row context only
 selectedDriver
 portfolioView              // productivity | ranking
-snapshot                   // current | comparison; Productivity only
+snapshot                   // current | comparison | movement; Productivity only
+selectedQuadrant           // all | Star | Risk | Balanced High | Balanced Low; local chart view only
 selectedStore
 storeSearch
 diagnostics
@@ -242,47 +254,44 @@ Summary value resolution defaults to `Actual Adj.` because it is the final adjus
 
 ### 8.1 Page 01 — Executive Overview
 
-Keep these KPIs:
+Final 8 cards:
 
 ```text
+Store Count
 POS no.
 AUP
 Gross Sales
 Total Minorations %
 CONSO Net Sales
-Gross Margin
-Gross Margin %
-Customer Contribution
-Customer Contribution %
+Gross Margin [amount + ratio]
+Customer Contribution [amount + ratio]
 ```
 
 Default source is Portfolio Summary. Filtered mode reaggregates supported measures from Detail and clearly labels the scope. AUP is the exception: it always remains the unfiltered Summary P&L value and never responds to store filters. AUP and Store Productivity are distinct metrics.
 
-Remove Review Timeline. Replace it with a finance-style P&L Snapshot containing:
+Page 01 contains no P&L Snapshot. It intentionally focuses on Executive KPI Overview plus Management Signals. Every KPI with a natural Page 02 line is a drill-down entry: it stores `selectedPnlLine`, opens Page 02, highlights the corresponding Snapshot row, and scrolls it into view when needed. Store Count remains non-clickable because no natural P&L row exists. The Page 02 Bridge remains Customer Contribution regardless of the selected KPI.
 
-```text
-P&L Line | Current | % NS | Comparison | % NS | Variance | Variance %
-```
-
-Ratio KPIs are rendered as ratios, not as duplicate amount and `% NS` rows.
+Gross Margin and Customer Contribution show `Amount · Ratio` on one line at one visual level. The same rule applies to their comparison values.
 
 ### 8.2 Page 02 — P&L Variance Analysis
 
-Analyze supports:
+Page order is P&L Snapshot first, followed by one Customer Contribution Bridge Analysis group. The old Analyze selector is removed.
+
+The group contains Bridge Chart, ratio-based Variance Readout, Driver Analysis, and Top Positive/Negative Drivers. The Customer Contribution readout uses inline `Amount · Ratio` for Current and Comparison.
+
+Driver Analysis columns are independent fields:
 
 ```text
-Total Minorations
-Gross Margin
-Customer Contribution
+Driver
+| Current Amount
+| Current % of Net Sales
+| Comparison Amount
+| Comparison % of Net Sales
+| Variance %
+| Drill-down
 ```
 
-One `selectedVarianceKpi` controls:
-
-- Bridge Chart.
-- Variance Readout.
-- Driver Table.
-- Top Positive Drivers.
-- Top Negative Drivers.
+`Variance %` is Current ratio − Comparison ratio. There is no absolute Variance column and no Contribution column. Top Drivers remain sorted by amount movement.
 
 Bridge definitions come from normalized non-overlapping P&L rows and must run reconciliation before receiving `reconciled` status.
 
@@ -293,27 +302,40 @@ Keep only:
 - Productivity.
 - Store Variance Ranking.
 
-Remove Quadrants and Variance Pareto after migration validation.
-
-Productivity Bubble:
+Productivity is a median-based Store Investment Productivity Quadrant:
 
 ```text
 X = Customer Contribution amount
-Y = Gross Margin amount
-Size = mapped 门店总单产
+Y = abs(Specific A&P)
+Point = Store, fixed size
 ```
 
-Size uses bounded square-root scaling. Tier filtering is the primary density control. The lightweight Selected Tier Summary may show store count, POS/Terminal count, ratio-of-sums Gross Margin %, ratio-of-sums Customer Contribution %, and average mapped store productivity.
+In Current or Comparison view, the X/Y medians come from the currently visible period/filter dataset and are recomputed after Region, City, Status, Tier, or snapshot changes. Boundary rule is `>= median → High`. Classifications are Star, Risk, Balanced High, and Balanced Low. Their summary counts always sum to the visible scope count. Clicking a summary segment filters only the chart display; clicking it again or clicking All restores all points. This local state does not mutate global filters or Ranking.
 
-Current/Comparison snapshot switching applies only to Productivity. Store Variance Ranking always calculates Current minus Prior Year Same Period; snapshot state must not alter ranking.
+Priority Risk Stores is independently rebuilt from the full current filtered scope and therefore remains useful even when the chart is locally highlighting another quadrant. Only Risk stores are eligible. Percentile ranks are calculated across the current filtered quadrant dataset, with average ranks for ties:
+
+```text
+riskScore = 0.5 × A&P spend percentile + 0.5 × (1 − CC percentile)
+```
+
+The list is stably sorted by score and opens Page 04 through the shared store-detail navigation.
+
+Movement uses exact Terminal matching and excludes Current-only and Comparison-only stores. It filters matched pairs through the current store's Region, City, Status, and Tier; Current Tier is deliberate because global portfolio filters describe the current portfolio. Both periods share one coordinate frame built from pooled matched observations:
+
+```text
+pooled CC median  = median(Comparison CC + Current CC)
+pooled A&P median = median(Comparison A&P spend + Current A&P spend)
+```
+
+Both endpoints are classified with those same pooled medians. Changed-quadrant trajectories are emphasized; same-quadrant paths remain faint. The Movement summary reports Changed Quadrant and Stayed Same plus stable key transitions such as Risk → Star, Risk → non-Risk, non-Risk → Risk, and Star → non-Star.
+
+Current/Comparison/Movement switching applies only to Productivity. Store Variance Ranking always calculates Current minus Prior Year Same Period; snapshot and local selected-quadrant state must not alter ranking.
 
 Store Variance Ranking retains metric selection, Top Positive Stores, Top Negative Stores, search, and Store Detail navigation.
 
 ### 8.4 Page 04 — Store Detail
 
-Preserve the page structure, Store Signals, P&L table, A&P comparison, A&P variance, and drill-down.
-
-Remove Operating Profit only from the top Key Figure cards. Do not remove its mapped data until dependency analysis confirms it is unused elsewhere.
+Final top cards are Gross Sales; CA Net [amount + % of GS]; Gross Margin %; Customer Contribution [amount + ratio]. Operating Profit, A&P KPI, and Gross Margin amount are not top cards; their mapped data remains available where required.
 
 Store P&L presentation order:
 
@@ -328,12 +350,24 @@ Variance %
 
 Ratio rows must not repeat meaningless `% of Net Sales` cells.
 
+Store P&L Variance % uses Current % of Net Sales − Comparison % of Net Sales. New Store comparison and variance cells display `—`.
+
+CA Net and Customer Contribution use inline `Amount · Ratio`; Gross Margin % remains ratio-only.
+
+The two A&P component views use the Workbook's finest available non-overlapping lines: Trade Relation, Customer Samples, Promotional Gifts, POS Advertising Amortization, POS Advertising Expense, Merchandising, Animations, Tester, DA Cost and Specific Development, and Other A&P. Specific A&P is excluded from the component pool because it is the formal subtotal.
+
+- A&P Component Composition compares Current and Comparison amount plus share of the component pool.
+- A&P Component Movement shows each component's signed spend change.
+
+These views are analytical and never claim reconciliation when rounded components do not exactly tie to the formal subtotal. They never add a residual. Canonical signed A&P remains `store.pnl.specificAP`, and canonical spend remains `abs(store.pnl.specificAP)`.
+
 ## 9. Drill-down Contract
 
 ```text
-Overview KPI
-  → selectedVarianceKpi
-  → P&L Variance
+Overview KPI / Page 02 Snapshot row
+  → selectedPnlLine
+  → P&L Variance Snapshot highlight
+  → fixed Customer Contribution Bridge
   → selectedDriver
   → Store Variance Ranking
   → selectedStore
@@ -372,16 +406,17 @@ Must remain true:
 - CSP `connect-src 'none'`.
 - No real company data in Git, Vercel, or AI workflows.
 
-## 12. Migration Sequence After Approval
+## 12. Completed Migration Sequence
 
-Phase 5 should migrate in dependency order:
+The migration completed in dependency order:
 
 1. Sheet Discovery and Period Detection.
 2. Summary and Detail Mapping.
 3. Normalized Model and validation.
 4. Calculation and Filter engines.
 5. Page 01, then 02, then 03, then 04.
-6. Regression tests.
-7. Cleanup of old state, UI, calculations, and CSS only after replacements pass.
+6. Shared ratio semantics and canonical A&P contract.
+7. Phase G product polish: inline amount/ratio, Page 01 Snapshot removal, independent Driver columns, risk prioritization, pooled-frame Movement, and restored non-overlapping A&P component analysis.
+8. Pure helper tests, five-cycle ECharts lifecycle regression, and proven dead-code cleanup.
 
-This document does not authorize Phase 5.
+Final automated validation: Core 27/27 + Quadrant 25/25 + Store Detail 14/14 = 66/66. Browser regression covers five consecutive Current → Comparison → Movement → Ranking → Productivity → Movement cycles, stable canvas counts, full option replacement, resize behavior, and zero console warnings/errors. Filtered Customer Contribution remains intentionally limited to Gross Margin / Specific A&P / Specific SG&A and may stop with `BRIDGE_RECONCILIATION_ERROR` on rounded slices.

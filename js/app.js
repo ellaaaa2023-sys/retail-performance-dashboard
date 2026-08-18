@@ -9,6 +9,8 @@ const THEME = {
   goldDark: '#846a39', green: '#347c68', orange: '#c7773e', red: '#b64f4f',
   ink: '#30312f', muted: '#777a76', grid: '#efede8', axis: '#cbc6bc', neutral: '#979891'
 };
+const ProductivityQuadrant = window.RetailProductivityQuadrant;
+const StoreDetailModel = window.RetailStoreDetail;
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -85,29 +87,6 @@ const FIELDS = {
 const REQUIRED = Object.keys(FIELDS).filter(k => FIELDS[k].level === 'required');
 const PERCENT_KEYS = new Set(['discountPct','rebatesPct','promotionalAllowancePct','returnsPct','minorationsPct','netSalesPct','costOfSalesPct','grossMarginPct','contributionPct','operatingMargin']);
 const NUMERIC_KEYS = Object.keys(FIELDS).filter(k => !['year','reviewPeriod','periodKey','terminal','store','city','province','region','channel','storeType','status','tier'].includes(k));
-const MONEY_KEYS = new Set(['rsp','avgTicket','grossSales','discount','rebates','structuralOn','structuralOff','activeSupport','shopperInvestment','promoInvoice','promoSeparate','promoLoyalty','promotionalAllowance','returns','oca','coupon','minorations','netSales','netSalesPerPos','stdCos','royal','specialOps','obsolete','physicalDistribution','costOfSales','grossMargin','samples','gifts','animations','posAdvAmort','posAdvOther','posAdvertising','development','daCost','nonDaCost','daCostPerHc','specificAP','specificSga','contribution','nonSpecificCosts','operatingProfit']);
-
-const METRICS = {
-  netSales: { label: 'Net Sales', type: 'money', direction: 'up', field: 'netSales', drill: 'netSales' },
-  grossMargin: { label: 'Gross Margin', type: 'money', direction: 'up', field: 'grossMargin', drill: 'grossMargin' },
-  grossMarginPct: { label: 'Gross Margin %', type: 'percent', direction: 'up', ratio: ['grossMargin','netSales'], drill: 'grossMargin' },
-  contribution: { label: 'Customer Contribution', type: 'money', direction: 'up', field: 'contribution', drill: 'contribution' },
-  contributionPct: { label: 'Customer Contribution %', type: 'percent', direction: 'up', ratio: ['contribution','netSales'], drill: 'contribution' },
-  operatingProfit: { label: 'Operating Profit', type: 'money', direction: 'up', field: 'operatingProfit', drill: 'operatingProfit' },
-  operatingMargin: { label: 'Operating Margin %', type: 'percent', direction: 'up', ratio: ['operatingProfit','netSales'], drill: 'operatingProfit' },
-  storeCount: { label: 'Store Count', type: 'count', direction: 'neutral', aggregate: 'stores' },
-  posCount: { label: 'POS Count', type: 'count', direction: 'neutral', field: 'pos' },
-  avgSales: { label: 'Average Sales per Store', type: 'money', direction: 'up', aggregate: 'avgSales' }
-};
-
-const STORE_AP_COMPONENTS = [
-  { key: 'customerSamples', label: 'Customer Samples' },
-  { key: 'promotionalGifts', label: 'Promotional Gifts' },
-  { key: 'animations', label: 'Animations' },
-  { key: 'posAdvertising', label: 'POS Advertising' },
-  { key: 'specificDevelopment', label: 'Specific Development' },
-  { key: 'specificAP', label: 'Specific A&P' }
-];
 
 const STORE_PNL_LINES = [
   { field: 'grossSales', label: 'GROSS SALES', className: 'major' },
@@ -144,21 +123,14 @@ const STORE_PNL_LINES = [
   { field: 'operatingProfit', label: 'OPERATING PROFIT', className: 'major' }
 ];
 
-const STORE_KPIS = [
-  { key: 'grossSales', label: 'Gross Sales', type: 'money' },
-  { key: 'netSales', label: 'CA Net', type: 'money' },
-  { key: 'caNetPctOfGs', label: 'CA Net % of GS', type: 'percent' },
-  { key: 'grossMarginPct', label: 'Gross Margin %', type: 'percent' },
-  { key: 'customerContribution', label: 'Customer Contribution', type: 'money' },
-  { key: 'customerContributionPct', label: 'Customer Contribution %', type: 'percent' }
-];
+const STORE_KPIS = StoreDetailModel.KPI_DEFINITIONS;
 
 const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
   portfolioView: 'productivity', snapshot: 'current',
   portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, selectedVarianceKpi: 'grossMargin', selectedDriver: ''
+  model: null, service: null, selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all'
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -200,10 +172,14 @@ function formatMoney(value) {
 }
 function formatKrmb(value) { return Number.isFinite(value) ? value.toLocaleString('en-US',{maximumFractionDigits:1,minimumFractionDigits:0}) : '—'; }
 function formatPct(value) { return Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—'; }
-function formatPp(value) { return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}pp` : '—'; }
+function formatRatioVariance(value) { return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${formatPct(value)}` : '—'; }
 function formatInt(value) { return Number.isFinite(value) ? Math.round(value).toLocaleString('en-US') : '—'; }
 function formatSignedMoney(value) { const text = formatMoney(value); return value > 0 ? `+${text}` : text; }
 function formatSignedNumber(value) { return `${value > 0 ? '+' : ''}${formatInt(value)}`; }
+function inlineAmountRatioHtml(amount, ratio) {
+  const display = StoreDetailModel.amountRatioDisplay(amount, ratio);
+  return `<span>${formatMoney(display.amount)}</span><i class="metric-separator">·</i><span>${formatPct(display.ratio)}</span>`;
+}
 
 function setNotice(type, title, message) {
   $('notice').className = `notice ${type}`;
@@ -495,70 +471,27 @@ function enableDashboard(on) {
   ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect','clearBtn'].forEach(id => { if ($(id)) $(id).disabled = !on; });
 }
 
-function metricValue(rows,key) {
-  const metric = METRICS[key];
-  if (!metric) return 0;
-  if (metric.aggregate === 'stores') return unique(rows.map(row => row.terminal)).length;
-  if (metric.aggregate === 'avgSales') { const stores = unique(rows.map(row=>row.terminal)).length; return stores ? sum(rows,'netSales') / stores : 0; }
-  if (metric.ratio) { const denominator = sum(rows,metric.ratio[1]); return denominator ? sum(rows,metric.ratio[0]) / denominator : 0; }
-  return sum(rows,metric.field);
-}
-function metricStats(key,currentRows,comparisonRows) {
-  const current = metricValue(currentRows,key), ly = comparisonRows.length ? metricValue(comparisonRows,key) : NaN;
-  const delta = Number.isFinite(ly) ? current - ly : NaN;
-  const pct = Number.isFinite(delta) && Math.abs(ly) > 1e-9 ? delta / Math.abs(ly) : NaN;
-  return {current,ly,delta,pct};
-}
-function formatMetric(value,key) {
-  const type = METRICS[key]?.type;
-  if (type === 'percent') return formatPct(value);
-  if (type === 'count') return formatInt(value);
-  return formatMoney(value);
-}
-function formatMetricDelta(value,key) {
-  const type = METRICS[key]?.type;
-  if (type === 'percent') return formatPp(value);
-  if (type === 'count') return formatSignedNumber(value);
-  return formatSignedMoney(value);
-}
-function directionClass(key,delta) {
-  if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9 || METRICS[key]?.direction === 'neutral') return 'neutral';
-  return delta > 0 ? 'favorable' : 'adverse';
-}
-function goodBadClass(key,delta) {
-  if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9 || METRICS[key]?.direction === 'neutral') return 'flat';
-  return delta > 0 ? 'good' : 'bad';
-}
-function kpiCardHtml(key,stats,clickable = true) {
-  const metric = METRICS[key], tag = clickable && metric.drill ? 'button' : 'article';
-  const attrs = tag === 'button' ? ` type="button" data-kpi="${metric.drill}"` : '';
-  const yoy = Number.isFinite(stats.delta) ? `${formatMetricDelta(stats.delta,key)}${Number.isFinite(stats.pct) ? ` · ${stats.pct >= 0 ? '+' : ''}${formatPct(stats.pct)}` : ''}` : 'N/A';
-  return `<${tag} class="kpi-card ${directionClass(key,stats.delta)}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(metric.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current">${formatMetric(stats.current,key)}</div><div class="kpi-compare"><span>Comparison</span><strong>${formatMetric(stats.ly,key)}</strong><span>${state.comparisonMode === 'ly' ? 'YoY Change' : 'Change'}</span><strong class="${goodBadClass(key,stats.delta)}">${yoy}</strong></div></${tag}>`;
-}
-
 const OVERVIEW_KPIS_PRIMARY = [
   { key: 'storeCount', label: 'Store Count', type: 'count', drill: null },
-  { key: 'posNo', label: 'POS no.', type: 'count', drill: null },
-  { key: 'aup', label: 'AUP', type: 'money', drill: null },
-  { key: 'grossSales', label: 'Gross Sales', type: 'money', drill: null }
+  { key: 'posNo', label: 'POS no.', type: 'count', drill: 'posNo' },
+  { key: 'aup', label: 'AUP', type: 'money', drill: 'aup' },
+  { key: 'grossSales', label: 'Gross Sales', type: 'money', drill: 'grossSales' }
 ];
 const OVERVIEW_KPIS_SECONDARY = [
-  { key: 'totalMinorationsPct', label: 'Total Minorations %', type: 'percent', drill: 'minorations' },
-  { key: 'netSales', label: 'CONSO Net Sales', type: 'money', drill: null },
-  { key: 'grossMargin', label: 'Gross Margin', type: 'money', drill: 'grossMargin' },
-  { key: 'grossMarginPct', label: 'Gross Margin %', type: 'percent', drill: 'grossMargin' },
-  { key: 'customerContribution', label: 'Customer Contribution', type: 'money', drill: 'contribution' },
-  { key: 'customerContributionPct', label: 'Customer Contribution %', type: 'percent', drill: 'contribution' }
+  { key: 'totalMinorationsPct', label: 'Total Minorations %', type: 'percent', drill: 'totalMinorations' },
+  { key: 'netSales', label: 'CONSO Net Sales', type: 'money', drill: 'netSales' },
+  { key: 'grossMargin', label: 'Gross Margin', type: 'money', ratioKey: 'grossMarginPct', drill: 'grossMargin' },
+  { key: 'customerContribution', label: 'Customer Contribution', type: 'money', ratioKey: 'customerContributionPct', drill: 'customerContribution' }
 ];
 function overviewMetricFormat(value, type) {
   if (type === 'percent') return formatPct(value);
   if (type === 'count') return formatInt(value);
   return formatMoney(value);
 }
-function overviewMetricDelta(current, comparison, type) {
+function overviewMetricDelta(current, comparison, type, coreVariance) {
   if (!Number.isFinite(current) || !Number.isFinite(comparison)) return null;
   const variance = current - comparison;
-  if (type === 'percent') return formatPp(variance);
+  if (type === 'percent') return Number.isFinite(coreVariance) ? formatRatioVariance(coreVariance) : null;
   if (type === 'count') return formatSignedNumber(variance);
   const rel = Math.abs(comparison) > 1e-9 ? variance / Math.abs(comparison) : null;
   return Number.isFinite(rel) ? `${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%` : null;
@@ -566,14 +499,24 @@ function overviewMetricDelta(current, comparison, type) {
 function overviewKpiCard(def, metrics) {
   const current = metrics.current[def.key];
   const comparison = metrics.comparison[def.key];
-  const deltaText = overviewMetricDelta(current, comparison, def.type);
-  const variance = (Number.isFinite(current) && Number.isFinite(comparison)) ? current - comparison : null;
-  const tone = (variance == null || Math.abs(variance) < 1e-9) ? 'neutral' : variance > 0 ? 'favorable' : 'adverse';
+  const ratioCurrent = def.ratioKey ? metrics.current[def.ratioKey] : null;
+  const ratioComparison = def.ratioKey ? metrics.comparison[def.ratioKey] : null;
+  const ratioVariance = metrics.variance?.[def.ratioKey || (def.type === 'percent' ? def.key : '')];
+  const amountVariance = (Number.isFinite(current) && Number.isFinite(comparison)) ? current - comparison : null;
+  const displayVariance = def.ratioKey || def.type === 'percent' ? ratioVariance : amountVariance;
+  const deltaText = def.ratioKey
+    ? formatRatioVariance(ratioVariance)
+    : overviewMetricDelta(current, comparison, def.type, ratioVariance);
+  const tone = (!Number.isFinite(displayVariance) || Math.abs(displayVariance) < 1e-9) ? 'neutral' : displayVariance > 0 ? 'favorable' : 'adverse';
   const tag = def.drill ? 'button' : 'article';
-  const attrs = tag === 'button' ? ` type="button" data-kpi="${def.drill}"` : '';
+  const attrs = tag === 'button' ? ` type="button" data-pnl-line="${def.drill}"` : '';
   const comparisonText = Number.isFinite(comparison) ? overviewMetricFormat(comparison, def.type) : '—';
   const currentText = Number.isFinite(current) ? overviewMetricFormat(current, def.type) : '—';
-  return `<${tag} class="kpi-card ${tone}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current">${currentText}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonText}</strong><span>Variance</span><strong class="${deltaText == null ? 'flat' : variance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
+  const comparisonValue = def.ratioKey
+    ? `<span class="kpi-compare-inline">${inlineAmountRatioHtml(comparison, ratioComparison)}</span>`
+    : comparisonText;
+  const currentValue = def.ratioKey ? inlineAmountRatioHtml(current, ratioCurrent) : currentText;
+  return `<${tag} class="kpi-card ${tone}${def.ratioKey ? ' kpi-card-combined' : ''}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current${def.ratioKey ? ' kpi-current-inline' : ''}">${currentValue}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>Variance</span><strong class="${deltaText == null ? 'flat' : Number.isFinite(displayVariance) && displayVariance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
 }
 function updateScopeStatus(metrics) {
   const el = $('scopeStatus');
@@ -586,7 +529,6 @@ function renderOverviewEmpty() {
   updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
   $('primaryKpis').innerHTML = '';
   $('secondaryKpis').innerHTML = '';
-  $('snapshotBody').innerHTML = '<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
   $('overviewInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
 }
 function renderOverview() {
@@ -599,7 +541,6 @@ function renderOverview() {
   updateScopeStatus(view);
   $('primaryKpis').innerHTML = OVERVIEW_KPIS_PRIMARY.map(def => overviewKpiCard(def, view)).join('');
   $('secondaryKpis').innerHTML = OVERVIEW_KPIS_SECONDARY.map(def => overviewKpiCard(def, view)).join('');
-  renderPnlSnapshot(view);
   renderOverviewInsights(view);
 }
 
@@ -629,40 +570,55 @@ function chartNavigation({x=true,y=true,xAxisIndex=0,yAxisIndex=0}={}) {
   };
 }
 const SNAPSHOT_ROWS = [
-  { key: 'posNo', label: 'POS no.', type: 'count', ratio: null, major: false },
-  { key: 'aup', label: 'AUP', type: 'money', ratio: null, major: false },
+  { key: 'posNo', label: 'POS no.', type: 'count', ratio: null, variance: 'amount-relative', major: false },
+  { key: 'aup', label: 'AUP', type: 'money', ratio: null, variance: 'amount-relative', major: false },
   { key: 'grossSales', label: 'Gross Sales', type: 'money', ratio: null, major: true },
   { key: 'totalMinorations', label: 'Total Minorations', type: 'money', ratio: 'totalMinorationsPct', major: true },
   { key: 'netSales', label: 'CONSO Net Sales', type: 'money', ratio: null, major: true },
   { key: 'grossMargin', label: 'Gross Margin', type: 'money', ratio: 'grossMarginPct', major: true },
   { key: 'customerContribution', label: 'Customer Contribution', type: 'money', ratio: 'customerContributionPct', major: true }
 ];
+const PNL_LINE_ALIASES = Object.freeze({
+  minorations: 'totalMinorations',
+  totalMinorations: 'totalMinorations',
+  grossMargin: 'grossMargin',
+  contribution: 'customerContribution',
+  customerContribution: 'customerContribution',
+  grossSales: 'grossSales',
+  netSales: 'netSales',
+  posNo: 'posNo',
+  aup: 'aup'
+});
 function snapshotCell(value, type) {
   if (!Number.isFinite(value)) return '—';
   if (type === 'count') return formatInt(value);
   if (type === 'money') return formatKrmb(value);
   return formatPct(value);
 }
-function snapshotVariancePct(current, comparison) {
-  if (!Number.isFinite(current) || !Number.isFinite(comparison) || Math.abs(comparison) < 1e-9) return '—';
-  const rel = (current - comparison) / comparison;
-  return `${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
-}
-function renderPnlSnapshot(metrics) {
+function renderPnlSnapshot(metrics, { bodyId, subId, interactive = false } = {}) {
   const md = state.model.metadata;
-  $('snapshotSub').textContent = `Summary P&L · Actual Adj. · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
-  $('snapshotBody').innerHTML = SNAPSHOT_ROWS.map(row => {
+  const scope = metrics.mode === 'filtered' ? 'Filtered Detail P&L' : 'Summary P&L · Actual Adj.';
+  $(subId).textContent = `${scope} · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
+  $(bodyId).innerHTML = SNAPSHOT_ROWS.map(row => {
     const current = metrics.current[row.key];
     const comparison = metrics.comparison[row.key];
-    const variance = (Number.isFinite(current) && Number.isFinite(comparison)) ? current - comparison : null;
     const currentRatio = row.ratio ? metrics.current[row.ratio] : null;
     const comparisonRatio = row.ratio ? metrics.comparison[row.ratio] : null;
-    const varianceCls = variance == null || Math.abs(variance) < 1e-9 ? '' : variance > 0 ? 'cell-positive' : 'cell-negative';
-    return `<tr class="${row.major ? 'major' : ''}"><td>${esc(row.label)}</td><td>${snapshotCell(current, row.type)}</td><td>${snapshotCell(currentRatio, 'percent')}</td><td>${snapshotCell(comparison, row.type)}</td><td>${snapshotCell(comparisonRatio, 'percent')}</td><td class="${varianceCls}">${snapshotVariancePct(current, comparison)}</td></tr>`;
+    const variance = row.ratio
+      ? metrics.variance?.[row.ratio]
+      : row.variance === 'amount-relative'
+        ? window.RetailDashboardData.amountRelativeVariance(current, comparison)
+        : null;
+    const varianceCls = !Number.isFinite(variance) || Math.abs(variance) < 1e-9 ? '' : variance > 0 ? 'cell-positive' : 'cell-negative';
+    const selected = !interactive && state.selectedPnlLine === row.key;
+    const classes = [row.major ? 'major' : '', interactive ? 'is-drillable' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ');
+    const attrs = interactive
+      ? ` data-pnl-line="${row.key}" tabindex="0" role="button" aria-label="Open ${esc(row.label)} in P&L Variance"`
+      : ` data-snapshot-line="${row.key}"`;
+    return `<tr class="${classes}"${attrs}><td>${esc(row.label)}</td><td>${snapshotCell(current, row.type)}</td><td>${snapshotCell(currentRatio, 'percent')}</td><td>${snapshotCell(comparison, row.type)}</td><td>${snapshotCell(comparisonRatio, 'percent')}</td><td class="${varianceCls}">${Number.isFinite(variance) ? formatRatioVariance(variance) : '—'}</td></tr>`;
   }).join('');
 }
 
-function apInvestment(rows) { return Math.abs(sum(rows,'daCost')) + Math.abs(sum(rows,'specificAP')); }
 function insightHtml(items) {
   if (!items.length) return '<div class="empty-state">No material signals for the selected scope</div>';
   return items.map(item => {
@@ -687,10 +643,10 @@ const MATERIAL_TITLES = {
   customerContributionPct: 'Customer Contribution % decreased significantly',
   grossMarginPct: 'Gross Margin rate compressed'
 };
-function signalMovement(def, c, p) {
+function signalMovement(def, c, p, coreVariance) {
   const cur = c[def.key], cmp = p[def.key];
   if (!Number.isFinite(cur) || !Number.isFinite(cmp)) return null;
-  const variance = cur - cmp;
+  const variance = def.kind === 'money' ? cur - cmp : coreVariance;
   const magnitude = def.kind === 'money'
     ? (Math.abs(cmp) > 1e-9 ? variance / Math.abs(cmp) : null)
     : variance;
@@ -704,15 +660,15 @@ function describeMovement(m) {
       ? { title: `${m.label} increased`, detail: `${m.label} rose ${pct} versus the comparison period.` }
       : { title: `${m.label} declined`, detail: `${m.label} fell ${pct} versus the comparison period.` };
   }
-  const pp = `${m.magnitude >= 0 ? '+' : ''}${(m.magnitude * 100).toFixed(1)}pp`;
+  const ratioDelta = formatRatioVariance(m.magnitude);
   if (m.key === 'totalMinorationsPct') {
     return m.favorable
-      ? { title: 'Total Minorations narrowed', detail: `Total Minorations % narrowed ${pp}, easing commercial deductions against Gross Sales.` }
-      : { title: 'Total Minorations deteriorated', detail: `Total Minorations % widened ${pp}, deepening commercial deductions against Gross Sales.` };
+      ? { title: 'Total Minorations narrowed', detail: `Total Minorations % changed ${ratioDelta}, easing commercial deductions against Gross Sales.` }
+      : { title: 'Total Minorations deteriorated', detail: `Total Minorations % changed ${ratioDelta}, deepening commercial deductions against Gross Sales.` };
   }
   return m.favorable
-    ? { title: `${m.label} improved`, detail: `${m.label} improved ${pp} versus the comparison period.` }
-    : { title: `${m.label} declined`, detail: `${m.label} declined ${pp} versus the comparison period.` };
+    ? { title: `${m.label} improved`, detail: `${m.label} changed ${ratioDelta} versus the comparison period.` }
+    : { title: `${m.label} declined`, detail: `${m.label} changed ${ratioDelta} versus the comparison period.` };
 }
 function materialSignals(movements) {
   const byKey = {};
@@ -784,7 +740,7 @@ function renderOverviewInsights(metrics) {
     $('overviewInsights').innerHTML = insightHtml([{ title: 'Comparison period unavailable', detail: 'Prior-year same-period data is required for variance signals.' }]);
     return;
   }
-  const movements = SIGNAL_METRICS.map(def => signalMovement(def, c, p)).filter(Boolean);
+  const movements = SIGNAL_METRICS.map(def => signalMovement(def, c, p, metrics.variance?.[def.key])).filter(Boolean);
   if (!movements.length) {
     $('overviewInsights').innerHTML = insightHtml([{ title: 'No comparable stores in scope', detail: 'The current filters return no comparison-period stores, so no movement signals can be derived.' }]);
     return;
@@ -799,29 +755,6 @@ function renderOverviewInsights(metrics) {
     items = stabilitySignals(movements);
   }
   $('overviewInsights').innerHTML = insightHtml(items.slice(0, 4));
-}
-
-const VARIANCE_KPIS = Object.freeze({
-  minorations: { apiMetric: 'totalMinorations' },
-  grossMargin: { apiMetric: 'grossMargin' },
-  contribution: { apiMetric: 'customerContribution' }
-});
-const VARIANCE_KPI_ALIASES = Object.freeze({
-  minorations: 'minorations',
-  totalMinorations: 'minorations',
-  grossMargin: 'grossMargin',
-  contribution: 'contribution',
-  customerContribution: 'contribution'
-});
-
-function selectVarianceKpi(value) {
-  const selected = VARIANCE_KPI_ALIASES[value] || 'grossMargin';
-  state.selectedVarianceKpi = selected;
-  setSegment('varianceMetric', selected);
-}
-
-function variancePercent(current, comparison) {
-  return Math.abs(comparison) > 1e-9 ? (current - comparison) / Math.abs(comparison) : NaN;
 }
 
 function varianceScopeLabel(bridge) {
@@ -908,9 +841,9 @@ function disposeChart(id) {
 }
 
 function renderVariance() {
-  selectVarianceKpi(state.selectedVarianceKpi);
   if (!state.service) {
-    $('bridgeTitle').textContent = 'P&L Variance Bridge';
+    $('varianceSnapshotBody').innerHTML = '<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
+    $('bridgeTitle').textContent = 'Customer Contribution Bridge';
     $('bridgeSub').textContent = 'Comparison to Current · Prior Year Same Period';
     $('bridgeReconcile').textContent = '—';
     $('bridgeReconcile').className = 'reconcile';
@@ -922,8 +855,10 @@ function renderVariance() {
     $('varianceInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
     return;
   }
-  const apiMetric = VARIANCE_KPIS[state.selectedVarianceKpi].apiMetric;
-  const bridge = state.service.getBridgeData(apiMetric, activeFilters());
+  const filters = activeFilters();
+  const metrics = state.service.getPortfolioMetrics(filters);
+  renderPnlSnapshot(metrics, { bodyId: 'varianceSnapshotBody', subId: 'varianceSnapshotSub' });
+  const bridge = state.service.getBridgeData('customerContribution', filters);
   renderBridge(bridge);
   renderDriverAnalysis(bridge);
   renderVarianceInsights(bridge);
@@ -932,7 +867,7 @@ function renderVariance() {
 function renderBridge(bridge) {
   const md = state.service.getMetadata();
   const scopeLabel = varianceScopeLabel(bridge);
-  $('bridgeTitle').textContent = `${bridge.label} Variance Bridge`;
+  $('bridgeTitle').textContent = `${bridge.label} Bridge`;
   $('bridgeSub').textContent = `${md.comparisonPeriodKey} to ${md.currentPeriodKey} · Prior Year Same Period`;
   $('varianceScopeStatus').className = `scope-status${bridge.mode === 'filtered' ? ' filtered' : ''}`;
   $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${scopeLabel}</span>`;
@@ -956,7 +891,6 @@ function renderBridge(bridge) {
   const c = chart('bridgeChart');
   c.setOption({
     textStyle: baseText(),
-    ...chartNavigation(),
     grid: { left: 72, right: 22, top: 38, bottom: 112 },
     tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; const base = `<b>${esc(item.label)}</b><br>${item.type === 'anchor' ? 'Balance' : 'P&L impact'}: ${formatBridgeMoney(item.raw, item.type !== 'anchor')}`; return item.type !== 'anchor' && item.field ? `${base}<br>Click to view store impact` : base; } },
     xAxis: { type: 'category', data: items.map(item => item.label), axisTick: { show: false }, axisLine: { lineStyle: { color: THEME.axis } }, axisLabel: { interval: 0, rotate: 24, margin: 15, color: THEME.muted, fontSize: 8, lineHeight: 11, formatter: wrapBridgeLabel } },
@@ -1028,14 +962,11 @@ function renderBridge(bridge) {
 }
 
 function renderDriverAnalysis(bridge) {
-  const totalVariance = bridge.current - bridge.comparison;
   $('driverTitle').textContent = `${bridge.label} Driver Analysis`;
   $('driverTableBody').innerHTML = bridge.drivers.map(driver => {
-    const pct = variancePercent(driver.current, driver.comparison);
-    const contribution = Math.abs(totalVariance) > 1e-9 ? driver.variance / totalVariance : NaN;
-    const tone = driver.variance > 0 ? 'cell-positive' : driver.variance < 0 ? 'cell-negative' : '';
-    return `<tr data-driver="${esc(driver.field)}"><td><span class="driver-name"><i></i>${esc(driver.label)}</span></td><td>${formatKrmb(driver.current)}</td><td>${formatKrmb(driver.comparison)}</td><td class="${tone}">${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${formatPct(pct)}` : '—'}</td><td>${Number.isFinite(contribution) ? formatPct(contribution) : '—'}</td><td class="row-action">›</td></tr>`;
-  }).join('') || '<tr><td colspan="6">No mapped drivers</td></tr>';
+    const tone = driver.ratioVariance > 0 ? 'cell-positive' : driver.ratioVariance < 0 ? 'cell-negative' : '';
+    return `<tr data-driver="${esc(driver.field)}"><td><span class="driver-name"><i></i>${esc(driver.label)}</span></td><td>${formatKrmb(driver.current)}</td><td>${formatPct(driver.currentRatio)}</td><td>${formatKrmb(driver.comparison)}</td><td>${formatPct(driver.comparisonRatio)}</td><td class="${tone}">${formatRatioVariance(driver.ratioVariance)}</td><td class="row-action">›</td></tr>`;
+  }).join('') || '<tr><td colspan="7">No mapped drivers</td></tr>';
   const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance).slice(0,4);
   const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance).slice(0,4);
   $('positiveDrivers').innerHTML = rankDriverHtml(positive, 'positive');
@@ -1049,12 +980,13 @@ function rankDriverHtml(rows,tone) {
 
 function renderVarianceInsights(bridge) {
   const md = state.service.getMetadata();
-  const variance = bridge.current - bridge.comparison;
-  const pct = variancePercent(bridge.current, bridge.comparison);
+  const amountVariance = bridge.current - bridge.comparison;
   const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance)[0];
   const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance)[0];
   $('varianceInsightSub').textContent = `${bridge.label} · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
-  const summary = `<div class="variance-summary"><div class="summary-kpi"><span>Selected KPI</span><strong>${esc(bridge.label)}</strong></div><div><span>${periodLabel('current')}</span><strong>${formatMoney(bridge.current)}</strong></div><div><span>${periodLabel('comparison')}</span><strong>${formatMoney(bridge.comparison)}</strong></div><div><span>Variance</span><strong class="${variance>0?'cell-positive':variance<0?'cell-negative':''}">${formatSignedMoney(variance)}</strong></div><div><span>Variance %</span><strong>${Number.isFinite(pct)?`${pct>=0?'+':''}${formatPct(pct)}`:'—'}</strong></div></div>`;
+  const ratioTone = bridge.ratioVariance > 0 ? 'cell-positive' : bridge.ratioVariance < 0 ? 'cell-negative' : '';
+  const amountTone = amountVariance > 0 ? 'cell-positive' : amountVariance < 0 ? 'cell-negative' : '';
+  const summary = `<div class="variance-summary"><div class="summary-kpi"><span>Selected KPI</span><strong>${esc(bridge.label)}</strong></div><div><span>${periodLabel('current')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.current, bridge.currentRatio)}</strong></div><div><span>${periodLabel('comparison')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.comparison, bridge.comparisonRatio)}</strong></div><div class="summary-variance"><span>Variance</span><strong class="${ratioTone}">${formatRatioVariance(bridge.ratioVariance)}</strong></div><div><span>Amount movement</span><strong class="${amountTone}">${formatSignedMoney(amountVariance)}</strong></div></div>`;
   const items = [];
   if (bridge.error) items.push({tone:'warning',title:'Detail-level reconciliation requires attention',detail:'The selected filtered slice is not safe to present as a reconciled Bridge.'});
   if (positive) items.push({tone:'positive',title:`Largest positive driver: ${positive.label}`,detail:`${formatSignedMoney(positive.variance)} P&L line contribution.`,action:'portfolio',driver:positive.field});
@@ -1105,23 +1037,72 @@ function renderPortfolio() {
   if (toggle) toggle.style.display = inRanking ? 'none' : '';
   $('portfolioContext').textContent = inRanking
     ? 'Store Variance Ranking · Current vs Comparison'
-    : 'Store Productivity · Customer Contribution × Gross Margin';
+    : state.snapshot === 'movement'
+      ? 'Store Investment Productivity · Comparison to Current movement'
+      : `Store Investment Productivity · ${state.snapshot === 'comparison' ? 'Comparison' : 'Current'} quadrant`;
   if (inRanking) renderStoreRanking();
-  else renderBubble();
+  else renderProductivityQuadrant();
 }
 function renderPortfolioEmpty() {
   $('tierSummary').innerHTML = '';
+  $('quadrantSummary').innerHTML = '';
+  $('riskStoreBody').innerHTML = '';
   $('positiveStores').innerHTML = '';
   $('negativeStores').innerHTML = '';
   $('portfolioContext').textContent = 'Current portfolio view';
-  const c = chart('bubbleChart');
+  const c = chart('productivityChart');
   c.clear();
 }
 function searchHit(store) { const text = state.search.trim().toLowerCase(); return text && (store.store.toLowerCase().includes(text) || store.terminal.toLowerCase().includes(text)); }
-function pointOpacity(store) { return state.search ? (searchHit(store) ? 1 : .08) : .68; }
-function pointColor(store) { return store.terminal === state.selectedStore || searchHit(store) ? THEME.gold : THEME.blue; }
-function bubbleTooltip(store) {
-  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>Status: ${esc(store.status)} · Tier: ${esc(store.productivityTier)}<br>Store Productivity: ${formatMoney(store.storeProductivity)}<br>POS no.: ${formatInt(store.cityPosNo)}<br>Gross Margin: ${formatMoney(store.metrics.grossMargin)} (${formatPct(store.metrics.grossMarginPct)})<br>Customer Contribution: ${formatMoney(store.metrics.customerContribution)} (${formatPct(store.metrics.customerContributionPct)})`;
+const QUADRANT_ORDER = ProductivityQuadrant.QUADRANT_ORDER;
+const QUADRANT_COLORS = Object.freeze({
+  [ProductivityQuadrant.QUADRANTS.STAR]: '#347c68',
+  [ProductivityQuadrant.QUADRANTS.RISK]: '#b64f4f',
+  [ProductivityQuadrant.QUADRANTS.BALANCED_HIGH]: '#526d8c',
+  [ProductivityQuadrant.QUADRANTS.BALANCED_LOW]: '#92958f'
+});
+const MOVEMENT_COLORS = Object.freeze({
+  comparison: THEME.gold,
+  current: THEME.blue,
+  changed: THEME.orange,
+  same: THEME.neutral
+});
+function quadrantPointStyle(point) {
+  const store = point.store;
+  const highlighted = store.terminal === state.selectedStore || searchHit(store);
+  const isPriority = point.quadrant === ProductivityQuadrant.QUADRANTS.STAR || point.quadrant === ProductivityQuadrant.QUADRANTS.RISK;
+  return {
+    color: QUADRANT_COLORS[point.quadrant],
+    opacity: state.search ? (searchHit(store) ? 1 : .07) : isPriority ? .84 : .62,
+    borderColor: highlighted ? THEME.goldDark : '#fff',
+    borderWidth: highlighted ? 2 : 1
+  };
+}
+function quadrantTooltip(data) {
+  const store = data.store;
+  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>Status: ${esc(store.status)}<br>Tier: ${esc(store.productivityTier)}<br>Customer Contribution: ${formatMoney(data.value[0])}<br>Customer Contribution %: ${formatPct(store.metrics.customerContributionPct)}<br>A&P Expense: ${formatMoney(data.value[1])}<br>Store Productivity: ${formatMoney(store.storeProductivity)}<br>Quadrant: ${esc(data.quadrant)}<br>POS no.: ${formatInt(store.cityPosNo)}`;
+}
+function renderQuadrantSummary(model) {
+  $('quadrantSummaryLabel').textContent = 'Quadrant Summary';
+  const allActive = state.selectedQuadrant === 'all' || !QUADRANT_ORDER.includes(state.selectedQuadrant);
+  const buttons = [
+    `<button class="quadrant-chip${allActive ? ' active' : ''}" type="button" data-quadrant="all">All <b>${model.points.length}</b></button>`,
+    ...QUADRANT_ORDER.map(quadrant => `<button class="quadrant-chip${state.selectedQuadrant === quadrant ? ' active' : ''}" type="button" data-quadrant="${esc(quadrant)}">${esc(quadrant)} <b>${model.counts[quadrant]}</b></button>`)
+  ];
+  $('quadrantSummary').innerHTML = buttons.join('');
+}
+function renderMovementSummary(summary) {
+  $('quadrantSummaryLabel').textContent = 'Movement Summary';
+  const items = [
+    ['Matched Stores', summary.matched],
+    ['Changed Quadrant', summary.changed],
+    ['Stayed Same', summary.stayed],
+    ['Risk → Star', summary.riskToStar],
+    ['Risk → Non-Risk', summary.riskToNonRisk],
+    ['Non-Risk → Risk', summary.nonRiskToRisk],
+    ['Star → Non-Star', summary.starToNonStar]
+  ];
+  $('quadrantSummary').innerHTML = items.map(([label, count]) => `<span class="quadrant-chip">${esc(label)} <b>${count}</b></span>`).join('');
 }
 function renderTierSummary(stores, role) {
   const el = $('tierSummary');
@@ -1137,27 +1118,164 @@ function renderTierSummary(stores, role) {
   const ccPct = netSales ? contribution / netSales : null;
   el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> Stores</span><span><b>${posCount}</b> POS</span><span>Avg Gross Margin <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>Avg Customer Contribution <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
 }
+function renderMovementTierSummary(model) {
+  const el = $('tierSummary');
+  const stores = model.pairs.map(pair => pair.current);
+  if (!stores.length) { el.innerHTML = '<span class="tier-summary-label">Movement</span><span>No matched stores in scope</span>'; return; }
+  const netSales = stores.reduce((sum, store) => sum + store.metrics.netSales, 0);
+  const grossMargin = stores.reduce((sum, store) => sum + store.metrics.grossMargin, 0);
+  const contribution = stores.reduce((sum, store) => sum + store.metrics.customerContribution, 0);
+  const avgProd = stores.reduce((sum, store) => sum + (store.storeProductivity || 0), 0) / stores.length;
+  const posCount = stores.reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
+  el.innerHTML = `<span class="tier-summary-label">Movement</span><span><b>${model.summary.matched}</b> Matched Stores</span><span><b>${posCount}</b> POS</span><span>Avg Gross Margin <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>Avg Customer Contribution <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
+}
+function renderRiskStores(stores, role) {
+  const ranked = ProductivityQuadrant.buildRiskRanking(stores).slice(0, 8);
+  $('riskStoreSub').textContent = `${periodLabel(role)} · percentile-ranked within the full selected scope${state.snapshot === 'movement' ? ' · Movement uses Current risk view' : ''}`;
+  $('riskStoreBody').innerHTML = ranked.map((point, index) => {
+    const store = point.store;
+    return `<tr data-store="${esc(store.terminal)}"><td>${String(index + 1).padStart(2, '0')}</td><td title="${esc(store.store)}">${esc(store.store)}</td><td>${esc(store.region)} / ${esc(store.city)}</td><td>${formatKrmb(point.customerContribution)}</td><td>${formatPct(store.metrics.customerContributionPct)}</td><td>${formatKrmb(point.expenseMagnitude)}</td><td>${formatKrmb(store.storeProductivity)}</td><td><span class="risk-score">${Math.round(point.riskScore * 100)}</span></td><td class="row-action">›</td></tr>`;
+  }).join('') || '<tr><td colspan="9">No Risk stores in the selected scope</td></tr>';
+}
 function bindStoreClick(c) { c.off('click'); c.on('click', params => { if (params.data?.store) openStoreDetail(params.data.store.terminal); }); }
-function renderBubble() {
-  // Productivity Bubble 使用独立的 store dataset（Current/Comparison role + 正常页面 filters），
+function renderProductivityQuadrant() {
+  // Productivity Quadrant 使用独立的 store dataset（Current/Comparison role + 正常页面 filters），
   // 不消费 selectedDriver / portfolioMetric —— 02 带来的 Driver context 只属于 Store Variance Ranking。
+  if (state.snapshot === 'movement') {
+    renderProductivityMovement();
+    return;
+  }
   const role = state.snapshot === 'comparison' ? 'comparison' : 'current';
   const stores = portfolioStores(role);
-  const c = chart('bubbleChart');
+  const c = chart('productivityChart');
+  const chartElement = $('productivityChart');
   renderTierSummary(stores, role);
-  if (!stores.length) { c.clear(); return; }
-  const prodValues = stores.map(s => s.storeProductivity).filter(Number.isFinite);
-  const pMin = prodValues.length ? Math.min(...prodValues) : 0;
-  const pMax = prodValues.length ? Math.max(...prodValues) : 1;
-  const size = value => 10 + 31 * Math.sqrt(Math.max(0, (value - pMin) / (pMax - pMin || 1)));
-  const data = stores.map(store => ({
-    value: [store.metrics.customerContribution, store.metrics.grossMargin],
-    store,
-    symbolSize: size(store.storeProductivity),
-    itemStyle: { color: pointColor(store), opacity: Math.min(.7, pointOpacity(store)), borderColor: store.terminal === state.selectedStore ? THEME.goldDark : '#fff', borderWidth: store.terminal === state.selectedStore ? 2 : 1 }
+  const model = ProductivityQuadrant.buildQuadrantModel(stores);
+  const visiblePoints = ProductivityQuadrant.filterQuadrantPoints(model.points, state.selectedQuadrant);
+  renderQuadrantSummary(model);
+  renderRiskStores(stores, role);
+  chartElement.dataset.pointCount = String(visiblePoints.length);
+  chartElement.dataset.scopePointCount = String(model.points.length);
+  chartElement.dataset.medianCc = Number.isFinite(model.medianCC) ? String(model.medianCC) : '';
+  chartElement.dataset.medianExpense = Number.isFinite(model.medianExpense) ? String(model.medianExpense) : '';
+  chartElement.dataset.quadrantCounts = JSON.stringify(model.counts);
+  chartElement.dataset.snapshotRole = role;
+  chartElement.dataset.searchMatchCount = String(model.points.filter(point => searchHit(point.store)).length);
+  if (!model.points.length) { c.clear(); return; }
+  const medianLines = {
+    silent: true,
+    symbol: 'none',
+    lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
+    label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
+    data: [
+      { xAxis: model.medianCC, label: { formatter: `Median CC  ${formatMoney(model.medianCC)}`, position: 'insideEndTop' } },
+      { yAxis: model.medianExpense, label: { formatter: `Median A&P  ${formatMoney(model.medianExpense)}`, position: 'insideEndTop' } }
+    ]
+  };
+  const series = QUADRANT_ORDER.map((quadrant, index) => ({
+    name: quadrant,
+    type: 'scatter',
+    symbolSize: 9,
+    itemStyle: { color: QUADRANT_COLORS[quadrant] },
+    data: visiblePoints.filter(point => point.quadrant === quadrant).map(point => ({
+      value: [point.customerContribution, point.expenseMagnitude],
+      store: point.store,
+      quadrant: point.quadrant,
+      itemStyle: quadrantPointStyle(point)
+    })),
+    emphasis: { scale: 1, itemStyle: { opacity: 1, borderWidth: 2 } },
+    ...(index === 0 ? { markLine: medianLines } : {})
   }));
-  c.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:78,right:30,top:35,bottom:60},tooltip:{...tooltipStyle(),trigger:'item',formatter:p=>bubbleTooltip(p.data.store)},xAxis:{type:'value',scale:true,name:'Customer Contribution',nameLocation:'middle',nameGap:40,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'value',scale:true,name:'Gross Margin',nameLocation:'middle',nameGap:58,nameTextStyle:{color:THEME.muted,fontSize:9},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'scatter',data,emphasis:{scale:1.16,itemStyle:{opacity:1}}}]},{notMerge:true});
+  c.clear();
+  c.setOption({
+    textStyle: baseText(),
+    ...chartNavigation(),
+    legend: { top: 8, left: 78, itemWidth: 8, itemHeight: 8, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: QUADRANT_ORDER },
+    grid: { left: 88, right: 42, top: 64, bottom: 66 },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => quadrantTooltip(params.data) },
+    xAxis: { type:'value', scale:true, name:'Customer Contribution', nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    yAxis: { type:'value', min:0, name:'A&P Expense Spend', nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    graphic: [
+      { type:'text', silent:true, left:94, top:72, style:{text:'Risk',fill:QUADRANT_COLORS.Risk,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, right:48, top:72, style:{text:'Balanced High',fill:QUADRANT_COLORS['Balanced High'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, left:94, bottom:72, style:{text:'Balanced Low',fill:QUADRANT_COLORS['Balanced Low'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, right:48, bottom:72, style:{text:'Star',fill:QUADRANT_COLORS.Star,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} }
+    ],
+    series
+  }, { notMerge: true });
   bindStoreClick(c);
+  requestAnimationFrame(() => c.resize());
+}
+function movementTooltip(data) {
+  const pair = data.movement;
+  if (!pair) return '';
+  return `<b>${esc(pair.current.store)}</b><br>${periodLabel('comparison')}: ${formatMoney(pair.comparisonCC)} CC · ${formatMoney(pair.comparisonExpense)} A&P<br>Quadrant: ${esc(pair.comparisonQuadrant)}<br>${periodLabel('current')}: ${formatMoney(pair.currentCC)} CC · ${formatMoney(pair.currentExpense)} A&P<br>Quadrant: ${esc(pair.currentQuadrant)}<br>Transition: <b>${esc(pair.transition)}</b>`;
+}
+function movementLineData(pairs, changed) {
+  return pairs.filter(pair => pair.changed === changed).map(pair => ({
+    coords: [[pair.comparisonCC, pair.comparisonExpense], [pair.currentCC, pair.currentExpense]],
+    movement: pair
+  }));
+}
+function renderProductivityMovement() {
+  // Movement filters are evaluated on Current store attributes, including Current Tier,
+  // then matched to Comparison strictly by terminal so both observations share one scope.
+  const currentAll = state.service.getStores('current', {});
+  const comparisonAll = state.service.getStores('comparison', {});
+  const model = ProductivityQuadrant.buildMovementModel(currentAll, comparisonAll, activeFilters());
+  const c = chart('productivityChart');
+  const chartElement = $('productivityChart');
+  renderMovementTierSummary(model);
+  renderMovementSummary(model.summary);
+  const currentRiskScope = ProductivityQuadrant.currentScopeStores(currentAll, activeFilters());
+  renderRiskStores(currentRiskScope, 'current');
+  chartElement.dataset.snapshotRole = 'movement';
+  chartElement.dataset.matchedCount = String(model.summary.matched);
+  chartElement.dataset.changedCount = String(model.summary.changed);
+  chartElement.dataset.pooledMedianCc = Number.isFinite(model.pooledMedianCC) ? String(model.pooledMedianCC) : '';
+  chartElement.dataset.pooledMedianExpense = Number.isFinite(model.pooledMedianExpense) ? String(model.pooledMedianExpense) : '';
+  chartElement.dataset.pointCount = String(model.pairs.length * 2);
+  chartElement.dataset.scopePointCount = String(model.pairs.length);
+  if (!model.pairs.length) { c.clear(); return; }
+  const pooledLines = {
+    silent: true,
+    symbol: 'none',
+    lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
+    label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
+    data: [
+      { xAxis: model.pooledMedianCC, label: { formatter: `Pooled Median CC  ${formatMoney(model.pooledMedianCC)}`, position: 'insideEndTop' } },
+      { yAxis: model.pooledMedianExpense, label: { formatter: `Pooled Median A&P  ${formatMoney(model.pooledMedianExpense)}`, position: 'insideEndTop' } }
+    ]
+  };
+  const comparisonPoints = model.pairs.map(pair => ({
+    value: [pair.comparisonCC, pair.comparisonExpense], movement: pair, store: pair.current,
+    itemStyle: { color: '#fff', borderColor: MOVEMENT_COLORS.comparison, borderWidth: 1.5, opacity: pair.changed ? .9 : .35 }
+  }));
+  const currentPoints = model.pairs.map(pair => ({
+    value: [pair.currentCC, pair.currentExpense], movement: pair, store: pair.current,
+    itemStyle: { color: MOVEMENT_COLORS.current, borderColor: '#fff', borderWidth: 1, opacity: pair.changed ? .94 : .4 }
+  }));
+  c.clear();
+  c.setOption({
+    textStyle: baseText(),
+    ...chartNavigation(),
+    legend: { top: 8, left: 78, itemWidth: 9, itemHeight: 9, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: [periodLabel('comparison'), periodLabel('current'), 'Changed trajectory', 'Same quadrant'] },
+    grid: { left: 88, right: 42, top: 64, bottom: 66 },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => movementTooltip(params.data) },
+    xAxis: { type:'value', scale:true, name:'Customer Contribution', nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    yAxis: { type:'value', min:0, name:'A&P Expense Spend', nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    series: [
+      { name:'Same quadrant', type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:5, silent:false, lineStyle:{color:MOVEMENT_COLORS.same,width:.7,opacity:.1}, data:movementLineData(model.pairs,false) },
+      { name:'Changed trajectory', type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:7, silent:false, lineStyle:{color:MOVEMENT_COLORS.changed,width:1.4,opacity:.58}, data:movementLineData(model.pairs,true) },
+      { name:periodLabel('comparison'), type:'scatter', symbolSize:8, itemStyle:{color:'#fff',borderColor:MOVEMENT_COLORS.comparison,borderWidth:1.5}, data:comparisonPoints, emphasis:{scale:1.25}, markLine:pooledLines },
+      { name:periodLabel('current'), type:'scatter', symbolSize:9, itemStyle:{color:MOVEMENT_COLORS.current,borderColor:'#fff',borderWidth:1}, data:currentPoints, emphasis:{scale:1.25} }
+    ]
+  }, { notMerge: true });
+  c.off('click');
+  c.on('click', params => {
+    const pair = params.data?.movement;
+    if (pair && pair.current) openStoreDetail(pair.current.terminal);
+  });
   requestAnimationFrame(() => c.resize());
 }
 function renderStoreRanking() {
@@ -1193,41 +1311,25 @@ function ensureSelectedStore() {
     .map(s => `<option value="${esc(s.terminal)}"${s.terminal === state.selectedStore ? ' selected' : ''}>${esc(s.store)} · ${esc(s.terminal)}</option>`).join('');
 }
 function openStoreDetail(terminal) { state.selectedStore = terminal; switchTab('detail'); }
-function apComponentValue(store, key) {
-  if (!store) return 0;
-  if (key === 'posAdvertising') return Math.abs(store.pnl.posAdvertisingExpense || 0) + Math.abs(store.pnl.posAdvertisingAmortization || 0);
-  return Math.abs(store.pnl[key] || 0);
-}
-function apExpense(store) {
-  if (!store) return NaN;
-  return STORE_AP_COMPONENTS.reduce((sum, comp) => sum + apComponentValue(store, comp.key), 0);
-}
-function storeKpiValue(store, key) {
-  if (!store) return NaN;
-  if (key === 'caNetPctOfGs') {
-    const gs = store.metrics.grossSales;
-    return gs ? store.metrics.netSales / gs : NaN;
+function storeKpiCard(model) {
+  const variance = model.variance;
+  const cls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'favorable' : 'adverse') : 'neutral';
+  const changeCls = cls === 'favorable' ? 'good' : cls === 'adverse' ? 'bad' : 'flat';
+  const currentPrimary = model.type === 'ratio'
+    ? formatPct(model.currentRatio)
+    : model.type === 'combined'
+      ? inlineAmountRatioHtml(model.currentAmount, model.currentRatio)
+      : formatMoney(model.currentAmount);
+  let comparisonValue = '—';
+  if (model.hasComparison) {
+    if (model.type === 'ratio') comparisonValue = formatPct(model.comparisonRatio);
+    else if (model.type === 'combined') comparisonValue = `<span class="kpi-compare-inline">${inlineAmountRatioHtml(model.comparisonAmount, model.comparisonRatio)}</span>`;
+    else comparisonValue = formatMoney(model.comparisonAmount);
   }
-  const value = store.metrics[key];
-  return Number.isFinite(value) ? value : NaN;
-}
-function storeKpiCard(def, current, ly) {
-  const cv = storeKpiValue(current, def.key);
-  const lv = storeKpiValue(ly, def.key);
-  const hasLy = Number.isFinite(lv);
-  let cls = 'neutral', changeCls = 'flat', compareHtml;
-  if (def.type === 'percent') {
-    const pp = hasLy && Number.isFinite(cv) ? cv - lv : NaN;
-    cls = Number.isFinite(pp) && Math.abs(pp) > 1e-9 ? (pp > 0 ? 'favorable' : 'adverse') : 'neutral';
-    changeCls = cls === 'favorable' ? 'good' : cls === 'adverse' ? 'bad' : 'flat';
-    compareHtml = `<span>${periodLabel('comparison')}</span><strong>${formatPct(lv)}</strong><span>pp change</span><strong class="${changeCls}">${formatPp(pp)}</strong>`;
-  } else {
-    const variance = hasLy && Math.abs(lv) > 1e-9 && Number.isFinite(cv) ? (cv - lv) / Math.abs(lv) : NaN;
-    cls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'favorable' : 'adverse') : 'neutral';
-    changeCls = cls === 'favorable' ? 'good' : cls === 'adverse' ? 'bad' : 'flat';
-    compareHtml = `<span>${periodLabel('comparison')}</span><strong>${formatMoney(lv)}</strong><span>Variance</span><strong class="${changeCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</strong>`;
-  }
-  return `<article class="kpi-card ${cls}"><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span></div><div class="kpi-current">${def.type === 'percent' ? formatPct(cv) : formatMoney(cv)}</div><div class="kpi-compare">${compareHtml}</div></article>`;
+  const varianceValue = Number.isFinite(variance)
+    ? model.type === 'amount' ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : formatRatioVariance(variance)
+    : '—';
+  return `<article class="kpi-card ${cls}${model.type === 'combined' ? ' kpi-card-combined' : ''}"><div class="kpi-label-row"><span class="kpi-label">${esc(model.label)}</span></div><div class="kpi-current${model.type === 'combined' ? ' kpi-current-inline' : ''}">${currentPrimary}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>Variance</span><strong class="${changeCls}">${varianceValue}</strong></div></article>`;
 }
 function renderStoreHeader(store, hasComparison) {
   const el = $('storeHeader');
@@ -1255,15 +1357,15 @@ function renderDetail() {
     $('storePnlBody').innerHTML = '';
     $('storeInsights').innerHTML = '<div class="empty-state">No store selected</div>';
     $('storeReconcile').textContent = '—';
-    ['apComparisonChart', 'apWaterfallChart'].forEach(id => { const c = chart(id); if (c) c.clear(); });
-    $('apReconcile').textContent = '—';
+    ['apComparisonChart', 'apMovementChart'].forEach(id => { const c = chart(id); if (c) c.clear(); });
     return;
   }
   $('detailStoreSelect').value = state.selectedStore;
   $('detailTitle').textContent = current.store;
   $('detailMeta').textContent = `${current.city} · ${current.region} · ${current.terminal}`;
   renderStoreHeader(current, Boolean(comparison));
-  $('storeKpis').innerHTML = STORE_KPIS.map(def => storeKpiCard(def, current, comparison)).join('');
+  const kpiModels = StoreDetailModel.buildKpiModels(current, comparison, window.RetailDashboardData.ratioVariance);
+  $('storeKpis').innerHTML = kpiModels.map(storeKpiCard).join('');
   renderStorePnl(current, comparison);
   renderStoreInsights(current, comparison);
   renderApCharts(current, comparison);
@@ -1275,9 +1377,10 @@ function renderStorePnl(current, ly) {
     const cv = Number(current.pnl[line.field]) || 0;
     const lv = ly ? (Number(ly.pnl[line.field]) || 0) : NaN;
     const hasLy = Number.isFinite(lv);
-    const curShare = netSales ? cv / netSales : NaN;
-    const lyShare = Number.isFinite(lyNetSales) && lyNetSales ? lv / lyNetSales : NaN;
-    const variance = hasLy && Math.abs(lv) > 1e-9 ? (cv - lv) / Math.abs(lv) : NaN;
+    const ratioModel = StoreDetailModel.buildPnlRatioModel(cv, netSales, hasLy ? lv : null, hasLy ? lyNetSales : null, window.RetailDashboardData.ratioVariance);
+    const curShare = ratioModel.currentRatio;
+    const lyShare = ratioModel.comparisonRatio;
+    const variance = ratioModel.ratioVariance;
     const vCls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'cell-positive' : 'cell-negative') : '';
     return `<tr class="${line.className || ''}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(line.label)}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
   }).join('');
@@ -1292,15 +1395,17 @@ function renderStoreInsights(current, ly) {
   }
   const l = ly.metrics;
   const nsVariance = Math.abs(l.netSales) > 1e-9 ? (c.netSales - l.netSales) / Math.abs(l.netSales) : NaN;
-  const gmPp = c.grossMarginPct - l.grossMarginPct;
-  const ccPp = c.customerContributionPct - l.customerContributionPct;
-  const apCur = apExpense(current), apLy = apExpense(ly);
-  const apVariance = Math.abs(apLy) > 1e-9 ? (apCur - apLy) / Math.abs(apLy) : NaN;
+  const gmVariance = window.RetailDashboardData.ratioVariance(c.grossMarginPct, l.grossMarginPct);
+  const ccVariance = window.RetailDashboardData.ratioVariance(c.customerContributionPct, l.customerContributionPct);
+  const apModel = StoreDetailModel.buildApExpenseModel(current, ly);
+  const apRelativeMovement = Number.isFinite(apModel.movement) && Math.abs(apModel.comparisonSpend) > 1e-9
+    ? apModel.movement / Math.abs(apModel.comparisonSpend)
+    : NaN;
   const items = [];
   items.push({ tone: nsVariance >= 0 ? 'positive' : 'warning', title: `Net Sales ${nsVariance >= 0 ? 'increased' : 'decreased'} ${Number.isFinite(nsVariance) ? `${nsVariance >= 0 ? '+' : ''}${formatPct(nsVariance)}` : ''}`, detail: `${formatMoney(c.netSales)} current versus ${formatMoney(l.netSales)} comparison.` });
-  if (Math.abs(gmPp) >= 0.01) items.push({ tone: gmPp > 0 ? 'positive' : 'warning', title: `Gross Margin rate changed ${formatPp(gmPp)}`, detail: `Current ${formatPct(c.grossMarginPct)} versus ${formatPct(l.grossMarginPct)}.` });
-  if (Math.abs(ccPp) >= 0.01) items.push({ tone: ccPp > 0 ? 'positive' : 'warning', title: `Customer Contribution rate changed ${formatPp(ccPp)}`, detail: `Current ${formatPct(c.customerContributionPct)} versus ${formatPct(l.customerContributionPct)}.` });
-  if (Number.isFinite(apVariance) && Math.abs(apVariance) >= 0.1) items.push({ tone: apVariance > 0 ? 'warning' : 'positive', title: `A&P expense ${apVariance > 0 ? 'increased' : 'decreased'} ${formatPct(apVariance)}`, detail: `Current ${formatMoney(apCur)} versus ${formatMoney(apLy)}.` });
+  if (Math.abs(gmVariance) >= 0.01) items.push({ tone: gmVariance > 0 ? 'positive' : 'warning', title: `Gross Margin rate changed ${formatRatioVariance(gmVariance)}`, detail: `Current ${formatPct(c.grossMarginPct)} versus ${formatPct(l.grossMarginPct)}.` });
+  if (Math.abs(ccVariance) >= 0.01) items.push({ tone: ccVariance > 0 ? 'positive' : 'warning', title: `Customer Contribution rate changed ${formatRatioVariance(ccVariance)}`, detail: `Current ${formatPct(c.customerContributionPct)} versus ${formatPct(l.customerContributionPct)}.` });
+  if (Number.isFinite(apRelativeMovement) && Math.abs(apRelativeMovement) >= 0.1) items.push({ tone: apModel.movement > 0 ? 'warning' : 'positive', title: `A&P spend ${apModel.movement > 0 ? 'increased' : 'decreased'} ${formatSignedMoney(apModel.movement)}`, detail: `Current ${formatMoney(apModel.currentSpend)} versus ${formatMoney(apModel.comparisonSpend)} canonical Specific A&P spend.` });
   if (!items.length) items.push({ tone: 'positive', title: 'No material store-level movement', detail: 'Key figures remained broadly stable versus the comparison period.' });
   $('storeInsights').innerHTML = insightHtml(items);
 }
@@ -1314,21 +1419,69 @@ function applyPeriodLabels() {
   });
 }
 function renderApCharts(current, ly) {
-  const labels = STORE_AP_COMPONENTS.map(comp => comp.label);
-  const currentValues = STORE_AP_COMPONENTS.map(comp => apComponentValue(current, comp.key));
-  const lyValues = STORE_AP_COMPONENTS.map(comp => apComponentValue(ly, comp.key));
+  const componentModel = StoreDetailModel.buildApComponentModel(current, ly);
+  const labels = componentModel.components.map(component => component.label);
+  const currentValues = componentModel.components.map(component => component.current);
+  const comparisonValues = componentModel.components.map(component => component.comparison);
+  const currentLabel = periodLabel('current');
+  const comparisonLabel = periodLabel('comparison');
   const comparisonChart = chart('apComparisonChart');
-  comparisonChart.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:150,right:25,top:30,bottom:42},legend:{top:0,right:82,textStyle:{color:THEME.muted,fontSize:9}},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>`<b>${esc(params[0].name)}</b><br>${params.map(p=>`${esc(p.seriesName)}: ${formatMoney(p.value)}`).join('<br>')}`},xAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},series:[{name:periodLabel('current'),type:'bar',data:currentValues,barMaxWidth:12,itemStyle:{color:THEME.blue,borderRadius:[0,3,3,0]}},{name:periodLabel('comparison'),type:'bar',data:lyValues,barMaxWidth:12,itemStyle:{color:THEME.gold,borderRadius:[0,3,3,0]}}]},{notMerge:true});
-  const waterfall = chart('apWaterfallChart');
-  if (!ly) { waterfall.clear(); $('apReconcile').textContent = 'No comparison'; $('apReconcile').className = 'reconcile bad'; return; }
-  const lyTotal = lyValues.reduce((s, v) => s + v, 0), currentTotal = currentValues.reduce((s, v) => s + v, 0), deltas = currentValues.map((v, i) => v - lyValues[i]);
-  const names = [`${periodLabel('comparison')} Total`, ...labels, `${periodLabel('current')} Total`];
-  const base = [], values = [], raw = [], types = []; let run = lyTotal; base.push(0); values.push(lyTotal); raw.push(lyTotal); types.push('anchor');
-  deltas.forEach(delta => { if (delta >= 0) { base.push(run); values.push(delta); } else { base.push(run + delta); values.push(Math.abs(delta)); } raw.push(delta); types.push(delta >= 0 ? 'increase' : 'decrease'); run += delta; });
-  base.push(0); values.push(currentTotal); raw.push(currentTotal); types.push('anchor');
-  const diff = lyTotal + deltas.reduce((s, v) => s + v, 0) - currentTotal;
-  $('apReconcile').textContent = Math.abs(diff) < .05 ? 'Reconciled' : `Variance ${formatKrmb(diff)} KRMB`; $('apReconcile').className = `reconcile ${Math.abs(diff) < .05 ? '' : 'bad'}`;
-  waterfall.setOption({textStyle:baseText(),...chartNavigation(),grid:{left:64,right:20,top:28,bottom:100},tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const i=params[0].dataIndex;return `<b>${esc(names[i])}</b><br>${types[i]==='anchor'?'Total expense':'Expense change'}: ${types[i]==='anchor'?formatMoney(raw[i]):formatSignedMoney(raw[i])}`;}},xAxis:{type:'category',data:names,axisTick:{show:false},axisLine:{lineStyle:{color:THEME.axis}},axisLabel:{interval:0,rotate:38,color:THEME.muted,fontSize:8}},yAxis:{type:'value',axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},series:[{type:'bar',stack:'ap',data:base,itemStyle:{color:'transparent'},silent:true},{type:'bar',stack:'ap',barMaxWidth:35,data:values.map((value,i)=>({value,itemStyle:{color:types[i]==='anchor'?THEME.navy:types[i]==='increase'?THEME.orange:THEME.green,borderRadius:[3,3,0,0]}})),label:{show:true,position:'top',color:THEME.muted,fontSize:8,formatter:p=>types[p.dataIndex]==='anchor'?formatMoney(raw[p.dataIndex]):formatSignedMoney(raw[p.dataIndex])}}]},{notMerge:true});
+  const comparisonElement = $('apComparisonChart');
+  comparisonElement.dataset.componentKeys = JSON.stringify(componentModel.components.map(component => component.key));
+  comparisonElement.dataset.formalTotal = componentModel.formalTotalKey;
+  comparisonElement.dataset.currentPool = String(componentModel.currentPool);
+  comparisonElement.dataset.canonicalCurrentSpend = String(componentModel.canonicalCurrentSpend);
+  comparisonChart.clear();
+  comparisonChart.setOption({
+    textStyle:baseText(),
+    grid:{left:172,right:28,top:38,bottom:48},
+    legend:{top:4,right:82,textStyle:{color:THEME.muted,fontSize:9}},
+    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const index=params[0].dataIndex,component=componentModel.components[index];return `<b>${esc(component.label)}</b><br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} of pool<br>${comparisonLabel}: ${componentModel.hasComparison ? `${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} of pool` : '—'}`;}},
+    xAxis:{type:'value',min:0,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},
+    yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},
+    series:[
+      {name:currentLabel,type:'bar',data:currentValues,barMaxWidth:11,itemStyle:{color:THEME.blue,borderRadius:[0,3,3,0]}},
+      {name:comparisonLabel,type:'bar',data:componentModel.hasComparison?comparisonValues:labels.map(()=>'-'),barMaxWidth:11,itemStyle:{color:THEME.gold,borderRadius:[0,3,3,0]}}
+    ]
+  },{notMerge:true});
+  const movementChart = chart('apMovementChart');
+  const movementElement = $('apMovementChart');
+  movementElement.dataset.componentKeys = comparisonElement.dataset.componentKeys;
+  movementElement.dataset.formalTotal = componentModel.formalTotalKey;
+  if (!componentModel.hasComparison) {
+    movementChart.clear();
+    movementChart.setOption({textStyle:baseText(),graphic:[{type:'text',left:'center',top:'middle',style:{text:'No prior-year comparison',fill:THEME.muted,font:'500 10px Segoe UI, sans-serif'}}],series:[]},{notMerge:true});
+    return;
+  }
+  const bridgeModel = StoreDetailModel.buildApComponentBridge(componentModel);
+  const movementSteps = bridgeModel.steps.filter(step => Math.abs(step.movement) > 1e-9);
+  const bridgeItems = [
+    { label: `${comparisonLabel} Component Pool`, type: 'anchor', raw: bridgeModel.comparisonPool, start: 0, end: bridgeModel.comparisonPool },
+    ...movementSteps.map(step => ({ ...step, type: step.movement > 0 ? 'increase' : 'decrease', raw: step.movement })),
+    { label: `${currentLabel} Component Pool`, type: 'anchor', raw: bridgeModel.currentPool, start: 0, end: bridgeModel.currentPool }
+  ];
+  const bridgePath = [0, bridgeModel.comparisonPool, ...movementSteps.map(step => step.end), bridgeModel.currentPool];
+  const bridgeHigh = Math.max(...bridgePath);
+  const bridgeLow = Math.min(...bridgePath);
+  const bridgePad = Math.max((bridgeHigh - bridgeLow) * .14, 4);
+  movementElement.dataset.movementCount = String(movementSteps.length);
+  movementElement.dataset.bridgeType = 'component-pool';
+  movementElement.dataset.bridgeStart = String(bridgeModel.comparisonPool);
+  movementElement.dataset.bridgeEnd = String(bridgeModel.currentPool);
+  movementElement.dataset.bridgeCalculatedEnd = String(bridgeModel.calculatedCurrentPool);
+  movementElement.dataset.canonicalCurrentSpend = String(bridgeModel.canonicalCurrentSpend);
+  movementChart.clear();
+  movementChart.setOption({
+    textStyle:baseText(),
+    grid:{left:58,right:22,top:28,bottom:116},
+    tooltip:{...tooltipStyle(),trigger:'item',formatter:params=>{const item=bridgeItems[params.dataIndex];if(item.type==='anchor')return `<b>${esc(item.label)}</b><br>Component pool: ${formatMoney(item.raw)}`;const component=componentModel.components.find(entry=>entry.key===item.key);return `<b>${esc(item.label)}</b><br>${comparisonLabel}: ${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} of pool<br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} of pool<br>Spend movement: ${formatSignedMoney(item.raw)}`;}},
+    xAxis:{type:'category',data:bridgeItems.map(item=>item.label),axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{interval:0,rotate:28,margin:15,color:THEME.muted,fontSize:7.5,lineHeight:10,formatter:wrapBridgeLabel}},
+    yAxis:{type:'value',min:Math.min(0,bridgeLow-bridgePad),max:bridgeHigh+bridgePad,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatBridgeAxis},splitLine:{lineStyle:{color:THEME.grid}}},
+    series:[
+      {name:'Bridge base',type:'bar',stack:'componentBridge',silent:true,barMaxWidth:32,itemStyle:{color:'rgba(0,0,0,0)'},emphasis:{disabled:true},data:bridgeItems.map(item=>item.type==='anchor'?0:Math.min(item.start,item.end))},
+      {name:'Component spend movement',type:'bar',stack:'componentBridge',barMaxWidth:32,barMinHeight:3,data:bridgeItems.map(item=>({value:item.type==='anchor'?item.raw:Math.abs(item.raw),raw:item.raw,itemStyle:{color:item.type==='anchor'?THEME.navy:item.type==='increase'?THEME.orange:THEME.green,borderRadius:[2,2,0,0]}})),label:{show:true,position:'top',distance:5,color:THEME.ink,fontSize:7.5,fontWeight:600,formatter:params=>formatBridgeMoney(params.data.raw,params.dataIndex>0&&params.dataIndex<bridgeItems.length-1)}}
+    ]
+  },{notMerge:true});
 }
 
 function renderFooter() {
@@ -1348,22 +1501,34 @@ function renderActiveTab() {
   else renderDetail();
   requestAnimationFrame(() => Object.values(state.charts).forEach(c => c.resize()));
 }
-function switchTab(tab) {
+function openPnlSnapshot(value) {
+  const line = PNL_LINE_ALIASES[value] || value;
+  if (!SNAPSHOT_ROWS.some(row => row.key === line)) return;
+  state.selectedPnlLine = line;
+  switchTab('variance', { scrollTop: false });
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`#varianceSnapshotBody [data-snapshot-line="${line}"]`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+function switchTab(tab, { scrollTop = true } = {}) {
   state.activeTab=tab;
   document.querySelectorAll('.rail-link').forEach(button=>button.classList.toggle('active',button.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.panel===tab));
-  renderActiveTab(); window.scrollTo({top:0,behavior:'smooth'});
+  renderActiveTab();
+  if (scrollTop) window.scrollTo({top:0,behavior:'smooth'});
 }
 function setSegment(containerId,value) { document.querySelectorAll(`#${containerId} button[data-value]`).forEach(button=>button.classList.toggle('active',button.dataset.value===value)); }
 
 function clearData() {
   state.book=null; state.model=null; state.service=null;
   state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
-  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedDriver=''; state.search=''; state.warnings=[]; state.dataStats=null;
+  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedPnlLine=''; state.selectedDriver=''; state.selectedQuadrant='all'; state.search=''; state.warnings=[]; state.dataStats=null;
+  state.snapshot='current'; state.portfolioView='productivity';
   Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
-  ['bridgeChart','bubbleChart','apComparisonChart','apWaterfallChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
-  ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores'].forEach(id=>{$(id).innerHTML='';});
-  $('snapshotBody').innerHTML='<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
+  ['bridgeChart','productivityChart','apComparisonChart','apMovementChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
+  ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores','riskStoreBody','quadrantSummary'].forEach(id=>{$(id).innerHTML='';});
+  $('varianceSnapshotBody').innerHTML='<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
   $('overviewInsights').innerHTML='<div class="empty-state">No analysis available</div>';
   $('varianceInsights').innerHTML='<div class="empty-state">No analysis available</div>';
   $('storeInsights').innerHTML='<div class="empty-state">No store selected</div>';
@@ -1373,7 +1538,9 @@ function clearData() {
   $('periodSummary').innerHTML='<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>';
   applyPeriodLabels();
   $('footerMeta').textContent='Files are processed locally and are not transmitted to an external server';
-  $('tierSummary').innerHTML='';$('bridgeReconcile').textContent='—';$('apReconcile').textContent='—';$('storeReconcile').textContent='—';
+  $('tierSummary').innerHTML='';$('bridgeReconcile').textContent='—';$('storeReconcile').textContent='—';
+  $('quadrantSummaryLabel').textContent='Quadrant Summary';
+  setSegment('snapshotToggle','current');setSegment('portfolioView','productivity');
   $('storeSearch').value='';$('fileInput').value='';
   $('detailStoreSelect').innerHTML='<option>No data</option>';
   [['regionFilter','All Regions'],['cityFilter','All Cities'],['statusFilter','All Status'],['tierFilter','All Tiers']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
@@ -1399,20 +1566,22 @@ function importMappingFile(file) {
 
 document.querySelectorAll('.rail-link').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.tab)));
 document.addEventListener('click',event=>{
-  const kpi=event.target.closest('[data-kpi]'); if(kpi){selectVarianceKpi(kpi.dataset.kpi);switchTab('variance');return;}
+  const pnlLine=event.target.closest('[data-pnl-line]'); if(pnlLine){openPnlSnapshot(pnlLine.dataset.pnlLine);return;}
   const driver=event.target.closest('[data-driver]'); if(driver){openDriverPortfolio(driver.dataset.driver);return;}
   const store=event.target.closest('[data-store]'); if(store){openStoreDetail(store.dataset.store);return;}
-  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){selectVarianceKpi(action.dataset.metric);switchTab('variance');}else if(action.dataset.action==='portfolio'){openDriverPortfolio(action.dataset.driver||'');}}
+  const action=event.target.closest('[data-action]'); if(action){if(action.dataset.action==='variance'){openPnlSnapshot(action.dataset.metric);}else if(action.dataset.action==='portfolio'){openDriverPortfolio(action.dataset.driver||'');}}
 });
-
-document.querySelectorAll('#varianceMetric button[data-value]').forEach(button=>button.addEventListener('click',event=>{
-  event.stopPropagation();
-  selectVarianceKpi(button.dataset.value);
-  renderVariance();
-}));
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const pnlLine = event.target.closest('tr[data-pnl-line]');
+  if (!pnlLine) return;
+  event.preventDefault();
+  openPnlSnapshot(pnlLine.dataset.pnlLine);
+});
 $('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
 $('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
-$('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='productivity')renderBubble();});
+$('quadrantSummary').addEventListener('click',event=>{const button=event.target.closest('button[data-quadrant]');if(!button||state.snapshot==='movement')return;const next=button.dataset.quadrant;state.selectedQuadrant=state.selectedQuadrant===next&&next!=='all'?'all':next;renderProductivityQuadrant();});
+$('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='productivity')renderProductivityQuadrant();});
 $('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderStoreRanking();});
 $('detailStoreSelect').addEventListener('change',event=>{state.selectedStore=event.target.value;renderDetail();});
 
@@ -1444,6 +1613,7 @@ function initializeDataService(fileName) {
   state.fileName = fileName;
   state.filters = {};
   state.selectedStore = '';
+  state.selectedPnlLine = '';
   state.warnings = [];
   state.dataStats = {
     records: state.model.detail.current.stores.length + state.model.detail.comparison.stores.length,

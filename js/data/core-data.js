@@ -99,6 +99,7 @@
     daCostAndSpecificDevelopment: ['DA Cost+specific dev.'],
     otherAP: ['Others'],
     specificAP: ['Specific A&P'],
+    specificAPPct: ['Specific A&P% of CA'],
     specificSga: ['Specific SG&A'],
     customerContribution: ['Client Contribution'],
     customerContributionPct: ['Client Contribution%'],
@@ -114,8 +115,12 @@
   const DETAIL_REQUIRED_FIELDS = [
     'terminal', 'store', 'city', 'region', 'status', 'productivityTier',
     'storeProductivity', 'grossSales', 'totalMinorations', 'netSales',
-    'grossMargin', 'customerContribution'
+    'grossMargin', 'specificAP', 'customerContribution'
   ];
+
+  const PORTFOLIO_RATIO_METRICS = new Set([
+    'totalMinorationsPct', 'grossMarginPct', 'customerContributionPct'
+  ]);
 
   const SUMMARY_REQUIRED_LINES = [
     'posNo', 'aup', 'grossSales', 'totalMinorations', 'netSales',
@@ -126,6 +131,7 @@
     totalMinorations: {
       label: 'Total Minorations',
       metric: 'totalMinorations',
+      ratioDenominator: 'grossSales',
       drivers: [
         ['structuralConditionsOn', 'Structural Conditions On'],
         ['structuralConditionsOff', 'Structural Conditions Off'],
@@ -139,6 +145,7 @@
     grossMargin: {
       label: 'Gross Margin',
       metric: 'grossMargin',
+      ratioDenominator: 'netSales',
       drivers: [
         ['netSales', 'CONSO Net Sales'],
         ['stdCos', 'Standard COS'],
@@ -151,6 +158,7 @@
     customerContribution: {
       label: 'Customer Contribution',
       metric: 'customerContribution',
+      ratioDenominator: 'netSales',
       drivers: [
         ['grossMargin', 'Gross Margin'],
         ['customerSamples', 'Customer Samples'],
@@ -168,6 +176,7 @@
     totalMinorations: {
       label: 'Total Minorations',
       metric: 'totalMinorations',
+      ratioDenominator: 'grossSales',
       drivers: [
         ['discount', 'Structural Conditions On'],
         ['rebates', 'Structural Conditions Off'],
@@ -181,6 +190,7 @@
     grossMargin: {
       label: 'Gross Margin',
       metric: 'grossMargin',
+      ratioDenominator: 'netSales',
       drivers: [
         ['netSales', 'CONSO Net Sales'],
         ['stdCos', 'Standard COS'],
@@ -193,6 +203,7 @@
     customerContribution: {
       label: 'Customer Contribution',
       metric: 'customerContribution',
+      ratioDenominator: 'netSales',
       drivers: [
         ['grossMargin', 'Gross Margin'],
         ['specificAP', 'Specific A&P'],
@@ -256,6 +267,30 @@
     const number = toNumber(value);
     if (number == null) return null;
     return Math.abs(number) > 1.5 ? number / 100 : number;
+  }
+
+  function amountVariance(current, comparison) {
+    return Number.isFinite(current) && Number.isFinite(comparison)
+      ? current - comparison
+      : null;
+  }
+
+  function amountRelativeVariance(current, comparison) {
+    return Number.isFinite(current) && Number.isFinite(comparison) && Math.abs(comparison) > 1e-12
+      ? (current - comparison) / Math.abs(comparison)
+      : null;
+  }
+
+  function ratioVariance(currentRatio, comparisonRatio) {
+    return Number.isFinite(currentRatio) && Number.isFinite(comparisonRatio)
+      ? currentRatio - comparisonRatio
+      : null;
+  }
+
+  function safeRatio(numerator, denominator) {
+    return Number.isFinite(numerator) && Number.isFinite(denominator) && Math.abs(denominator) > 1e-12
+      ? numerator / denominator
+      : null;
   }
 
   function uniqueSorted(values) {
@@ -519,6 +554,11 @@
         values[key] = DETAIL_TEXT_FIELDS.has(key) ? normalizeSpace(raw) : toNumber(raw);
       });
       values.posNo = values.terminal ? 1 : 0;
+      const apExpense = values.specificAP;
+      const apExpenseMagnitude = Number.isFinite(apExpense) ? Math.abs(apExpense) : null;
+      const apExpensePct = values.specificAPPct != null
+        ? toRatio(values.specificAPPct)
+        : safeRatio(apExpense, values.netSales);
       stores.push({
         sourceRow: headerRowIndex + offset + 2,
         year,
@@ -532,6 +572,8 @@
         storeProductivity: values.storeProductivity,
         cityPosNo: values.cityPosNo,
         posNo: values.posNo,
+        apExpense,
+        apExpenseMagnitude,
         metrics: {
           posNo: values.posNo,
           storeProductivity: values.storeProductivity,
@@ -543,6 +585,9 @@
           netSalesPct: values.netSalesPct,
           grossMargin: values.grossMargin,
           grossMarginPct: values.grossMarginPct,
+          apExpense,
+          apExpenseMagnitude,
+          apExpensePct,
           customerContribution: values.customerContribution,
           customerContributionPct: values.customerContributionPct
         },
@@ -763,24 +808,29 @@
   function metricVariances(current, comparison) {
     const result = {};
     Object.keys(current).forEach(key => {
-      result[key] = typeof current[key] === 'number' && typeof comparison[key] === 'number'
-        ? current[key] - comparison[key]
-        : null;
+      result[key] = PORTFOLIO_RATIO_METRICS.has(key)
+        ? ratioVariance(current[key], comparison[key])
+        : amountVariance(current[key], comparison[key]);
     });
     return result;
   }
 
-  function buildBridgeResult(config, currentValue, comparisonValue, drivers, mode, tolerance) {
+  function buildBridgeResult(config, currentValue, comparisonValue, drivers, mode, tolerance, ratios) {
     const driverTotal = drivers.reduce((sum, driver) => sum + driver.variance, 0);
     const expectedCurrent = comparisonValue + driverTotal;
     const residual = expectedCurrent - currentValue;
     const ok = Math.abs(residual) <= tolerance;
+    const currentRatio = ratios ? ratios.current : null;
+    const comparisonRatio = ratios ? ratios.comparison : null;
     return {
       metric: config.metric,
       label: config.label,
       mode,
       comparison: comparisonValue,
       current: currentValue,
+      comparisonRatio,
+      currentRatio,
+      ratioVariance: ratioVariance(currentRatio, comparisonRatio),
       drivers,
       reconciliation: {
         ok,
@@ -862,14 +912,49 @@
     function getSummaryBridge(metric) {
       const config = SUMMARY_BRIDGES[metric];
       if (!config) throw new Error(`Unsupported bridge metric: ${metric}`);
-      const currentValue = resolveSummaryValue(model.summary, config.metric, 'current').value;
-      const comparisonValue = resolveSummaryValue(model.summary, config.metric, 'comparison').value;
+      const currentTarget = resolveSummaryValue(model.summary, config.metric, 'current');
+      const comparisonTarget = resolveSummaryValue(model.summary, config.metric, 'comparison');
+      const currentValue = currentTarget.value;
+      const comparisonValue = comparisonTarget.value;
+      const currentDenominator = resolveSummaryValue(model.summary, config.ratioDenominator, 'current').value;
+      const comparisonDenominator = resolveSummaryValue(model.summary, config.ratioDenominator, 'comparison').value;
+      const currentRatio = Number.isFinite(currentTarget.pct)
+        ? currentTarget.pct
+        : safeRatio(currentValue, currentDenominator);
+      const comparisonRatio = Number.isFinite(comparisonTarget.pct)
+        ? comparisonTarget.pct
+        : safeRatio(comparisonValue, comparisonDenominator);
       const drivers = config.drivers.map(([field, label]) => {
-        const current = resolveSummaryValue(model.summary, field, 'current').value || 0;
-        const comparison = resolveSummaryValue(model.summary, field, 'comparison').value || 0;
-        return { field, label, current, comparison, variance: current - comparison };
+        const currentSource = resolveSummaryValue(model.summary, field, 'current');
+        const comparisonSource = resolveSummaryValue(model.summary, field, 'comparison');
+        const current = currentSource.value || 0;
+        const comparison = comparisonSource.value || 0;
+        const driverCurrentRatio = Number.isFinite(currentSource.pct)
+          ? currentSource.pct
+          : safeRatio(current, currentDenominator);
+        const driverComparisonRatio = Number.isFinite(comparisonSource.pct)
+          ? comparisonSource.pct
+          : safeRatio(comparison, comparisonDenominator);
+        return {
+          field,
+          label,
+          current,
+          comparison,
+          variance: amountVariance(current, comparison),
+          currentRatio: driverCurrentRatio,
+          comparisonRatio: driverComparisonRatio,
+          ratioVariance: ratioVariance(driverCurrentRatio, driverComparisonRatio)
+        };
       });
-      return buildBridgeResult(config, currentValue, comparisonValue, drivers, 'total', tolerance);
+      return buildBridgeResult(
+        config,
+        currentValue,
+        comparisonValue,
+        drivers,
+        'total',
+        tolerance,
+        { current: currentRatio, comparison: comparisonRatio }
+      );
     }
 
     function getFilteredBridge(metric, filters) {
@@ -879,12 +964,35 @@
       const comparisonStores = storesFor('comparison', filters);
       const currentValue = sumField(currentStores, config.metric);
       const comparisonValue = sumField(comparisonStores, config.metric);
+      const currentDenominator = sumField(currentStores, config.ratioDenominator);
+      const comparisonDenominator = sumField(comparisonStores, config.ratioDenominator);
+      const currentRatio = safeRatio(currentValue, currentDenominator);
+      const comparisonRatio = safeRatio(comparisonValue, comparisonDenominator);
       const drivers = config.drivers.map(([field, label]) => {
         const current = sumField(currentStores, field);
         const comparison = sumField(comparisonStores, field);
-        return { field, label, current, comparison, variance: current - comparison };
+        const driverCurrentRatio = safeRatio(current, currentDenominator);
+        const driverComparisonRatio = safeRatio(comparison, comparisonDenominator);
+        return {
+          field,
+          label,
+          current,
+          comparison,
+          variance: amountVariance(current, comparison),
+          currentRatio: driverCurrentRatio,
+          comparisonRatio: driverComparisonRatio,
+          ratioVariance: ratioVariance(driverCurrentRatio, driverComparisonRatio)
+        };
       });
-      const result = buildBridgeResult(config, currentValue, comparisonValue, drivers, 'filtered', tolerance);
+      const result = buildBridgeResult(
+        config,
+        currentValue,
+        comparisonValue,
+        drivers,
+        'filtered',
+        tolerance,
+        { current: currentRatio, comparison: comparisonRatio }
+      );
       result.rowCounts = { current: currentStores.length, comparison: comparisonStores.length };
       result.source = 'store-detail-aggregation';
       return result;
@@ -911,6 +1019,8 @@
     createDataService,
     matchStores,
     normalizeFilters,
+    amountRelativeVariance,
+    ratioVariance,
     constants: Object.freeze({
       defaultScope: DEFAULT_SCOPE,
       reconciliationTolerance: RECONCILIATION_TOLERANCE,

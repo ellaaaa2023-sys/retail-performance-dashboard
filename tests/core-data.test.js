@@ -21,6 +21,11 @@ function check(number, label, test) {
   results.push(`${number}. PASS - ${label}`);
 }
 
+function assertClose(actual, expected, message, tolerance = 1e-12) {
+  assert.equal(Number.isFinite(actual), true, `${message}: expected a finite value, received ${actual}`);
+  assert.equal(Math.abs(actual - expected) <= tolerance, true, `${message}: expected ${expected}, received ${actual}`);
+}
+
 check(1, 'Summary Sheet correctly identified', () => {
   assert.equal(model.metadata.sheets.summary, 'P&L review Y26');
 });
@@ -205,6 +210,123 @@ check(20, 'Filtered Portfolio POS no. sums active cityPosNo', () => {
   assert.equal(byTier.rowCounts.current, tierStores.length);
 });
 
+check(21, 'Ratio variance is Current ratio minus Comparison ratio', () => {
+  const cases = [
+    ['Total Minorations %', -0.279, -0.276, -0.003],
+    ['Gross Margin %', 0.714, 0.713, 0.001],
+    ['Customer Contribution %', 0.294, 0.299, -0.005],
+    ['CA Net % of GS', 0.459, 0.455, 0.004],
+    ['P&L line % of Net Sales', -0.279, -0.276, -0.003],
+    ['Expense % of Net Sales', -0.355, -0.348, -0.007]
+  ];
+  cases.forEach(([label, current, comparison, expected]) => {
+    assertClose(DataLayer.ratioVariance(current, comparison), expected, label);
+  });
+  assert.equal(DataLayer.ratioVariance(null, 0.2), null);
+  assert.equal(DataLayer.ratioVariance(0.2, null), null);
+});
+
+check(22, 'Portfolio ratio variances use percentage-point difference semantics', () => {
+  const total = service.getPortfolioMetrics();
+  ['totalMinorationsPct', 'grossMarginPct', 'customerContributionPct'].forEach(key => {
+    assertClose(
+      total.variance[key],
+      total.current[key] - total.comparison[key],
+      `${key} total portfolio variance`
+    );
+  });
+  assert.equal(total.variance.grossMargin, total.current.grossMargin - total.comparison.grossMargin);
+});
+
+check(23, 'Canonical A&P Expense uses the signed Specific A&P subtotal', () => {
+  const currentStores = service.getStores('current', {});
+  const comparisonStores = service.getStores('comparison', {});
+  [...currentStores, ...comparisonStores].forEach(store => {
+    assert.equal(store.metrics.apExpense, store.pnl.specificAP);
+    assert.equal(store.metrics.apExpenseMagnitude, Math.abs(store.pnl.specificAP));
+    assertClose(
+      store.metrics.apExpensePct,
+      store.pnl.specificAPPct != null ? store.pnl.specificAPPct : store.pnl.specificAP / store.pnl.netSales,
+      `${store.terminal} A&P Expense %`
+    );
+  });
+  assert.equal(currentStores.reduce((sum, store) => sum + store.metrics.apExpenseMagnitude, 0), 20760);
+  assert.equal(comparisonStores.reduce((sum, store) => sum + store.metrics.apExpenseMagnitude, 0), 19473);
+});
+
+check(24, 'Customer Contribution Bridge keeps absolute amount reconciliation', () => {
+  const bridge = service.getBridgeData('customerContribution');
+  assert.equal(bridge.comparison, 16702);
+  assert.equal(bridge.current, 17221);
+  assert.equal(bridge.drivers.reduce((sum, driver) => sum + driver.variance, 0), 519);
+  assert.equal(bridge.reconciliation.expectedCurrent, bridge.current);
+  assert.equal(bridge.reconciliation.residual, 0);
+  assert.equal(bridge.reconciliation.ok, true);
+});
+
+check(25, 'Customer Contribution Bridge exposes ratio variance without changing amount drivers', () => {
+  const bridge = service.getBridgeData('customerContribution');
+  const expectedFields = [
+    'grossMargin',
+    'customerSamples',
+    'promotionalGifts',
+    'animations',
+    'posAdvertisingAmortization',
+    'otherPosAdvertising',
+    'specificDevelopment',
+    'specificSga'
+  ];
+  assert.deepEqual(bridge.drivers.map(driver => driver.field), expectedFields);
+  assertClose(bridge.ratioVariance, bridge.currentRatio - bridge.comparisonRatio, 'Customer Contribution ratio variance');
+  bridge.drivers.forEach(driver => {
+    assertClose(driver.ratioVariance, driver.currentRatio - driver.comparisonRatio, `${driver.field} ratio variance`);
+    assert.equal(driver.variance, driver.current - driver.comparison);
+  });
+});
+
+check(26, 'Filtered Bridge ratios use the same filtered Detail scope', () => {
+  const filters = { region: selectedRegion };
+  const bridge = service.getBridgeData('customerContribution', filters);
+  const metrics = service.getPortfolioMetrics(filters);
+  assertClose(bridge.currentRatio, metrics.current.customerContributionPct, 'Filtered current CC ratio');
+  assertClose(bridge.comparisonRatio, metrics.comparison.customerContributionPct, 'Filtered comparison CC ratio');
+  assertClose(bridge.ratioVariance, bridge.currentRatio - bridge.comparisonRatio, 'Filtered CC ratio variance');
+
+  const currentStores = service.getStores('current', filters);
+  const comparisonStores = service.getStores('comparison', filters);
+  const currentNetSales = currentStores.reduce((sum, store) => sum + store.pnl.netSales, 0);
+  const comparisonNetSales = comparisonStores.reduce((sum, store) => sum + store.pnl.netSales, 0);
+  bridge.drivers.forEach(driver => {
+    const currentAmount = currentStores.reduce((sum, store) => sum + (store.pnl[driver.field] || 0), 0);
+    const comparisonAmount = comparisonStores.reduce((sum, store) => sum + (store.pnl[driver.field] || 0), 0);
+    assertClose(driver.currentRatio, currentAmount / currentNetSales, `${driver.field} filtered current ratio`);
+    assertClose(driver.comparisonRatio, comparisonAmount / comparisonNetSales, `${driver.field} filtered comparison ratio`);
+  });
+});
+
+check(27, 'Store variance remains an absolute amount difference', () => {
+  const pair = service.getStoreMatches().existing[0];
+  const current = pair.current.metrics.customerContribution;
+  const comparison = pair.comparison.metrics.customerContribution;
+  const amountVariance = current - comparison;
+  assert.equal(amountVariance, pair.current.pnl.customerContribution - pair.comparison.pnl.customerContribution);
+  assert.equal(Number.isFinite(amountVariance), true);
+});
+
+check(28, 'Non-ratio amount variance uses safe relative change', () => {
+  assertClose(DataLayer.amountRelativeVariance(196, 186), 10 / 186, 'POS relative variance');
+  const total = service.getPortfolioMetrics();
+  assertClose(
+    DataLayer.amountRelativeVariance(total.current.aup, total.comparison.aup),
+    (total.current.aup - total.comparison.aup) / Math.abs(total.comparison.aup),
+    'Mock AUP relative variance'
+  );
+  assertClose(DataLayer.amountRelativeVariance(-80, -100), .2, 'negative comparison uses absolute denominator');
+  assert.equal(DataLayer.amountRelativeVariance(10, 0), null);
+  assert.equal(DataLayer.amountRelativeVariance(10, null), null);
+  assert.equal(DataLayer.amountRelativeVariance(null, 10), null);
+});
+
 const filteredBridgeError = service.getBridgeData('grossMargin', { region: selectedRegion });
 assert.equal(filteredBridgeError.reconciliation.ok, false);
 assert.equal(filteredBridgeError.error.code, 'BRIDGE_RECONCILIATION_ERROR');
@@ -235,6 +357,7 @@ assert.throws(
 );
 
 console.log(results.join('\n'));
-console.log(`\n${results.length}/20 validation checks passed.`);
+assert.equal(results.length, 28);
+console.log(`\n${results.length}/28 validation checks passed.`);
 console.log('Filtered Bridge error handling PASS - non-zero residual is reported without a residual driver.');
 console.log('Period detection edge cases PASS - Full Year and missing prior-year handling verified.');

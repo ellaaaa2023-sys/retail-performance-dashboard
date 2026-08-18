@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Codex Handoff
 
-> 更新时间：2026-08-16（Asia/Shanghai）
+> 更新时间：2026-08-18（Asia/Shanghai）
 > 交接目的：让新的 Codex 对话窗口在不依赖聊天历史的情况下，安全地继续维护本项目。  
 > 事实边界：本文基于当前仓库、`js/app.js`、HTML/CSS、现有文档、Git 状态及 Mock 工作簿的实际审计结果编写。本文不代表 Enterprise Release 已完成。
 
@@ -53,6 +53,33 @@ Store Detail
 - 上述勾稽已固化为 consistency test，位于 `tests/core-data.test.js`（失败抛 `SUMMARY_POS_RECONCILIATION_ERROR`）。
 
 ## 2. 当前状态摘要
+
+### Phase G — Final Product Polish & Portfolio Enhancements（当前最终状态，2026-08-18）
+
+- **Amount · Ratio 同级展示**：同一业务指标的 amount 与 ratio 在 01/02/04 统一为同行、同层级展示；04 Gross Margin % 等 ratio-only 指标仍保持 ratio-only。
+- **01 Executive Overview**：已删除重复的 P&L Snapshot；8 张 Key Figure card 中除 Store Count 外均可直接定位 02 Snapshot 对应行，Bridge 始终保持 Customer Contribution。
+- **02 Driver Analysis**：最终列为 Driver / Current Amount / Current % / Comparison Amount / Comparison % / Variance % / Drill-down；不包含 absolute Variance 或 Contribution 列。
+- **03 Productivity**：包含 Current / Comparison / Movement 三视图。Current/Comparison 提供动态 Quadrant Summary 和 local quadrant selection；Priority Risk Stores 按当前 scope 的 A&P/CC percentile risk score 排序。
+- **Movement**：只使用 exact Terminal 匹配的双期门店，排除 New/Comparison-only store；两期 observations 共用 pooled CC median 和 pooled A&P median。Region/City/Status/Tier 都按 Current store 属性应用，其中 Tier 明确使用 Current Tier。
+- **04 A&P**：canonical total 仍为 `abs(store.pnl.specificAP)`。恢复 A&P Component Composition 和 A&P Component Movement，使用排除 `specificAP` subtotal 的 10 个非重复 source lines；component pool 不冒充 formal total，不显示 Reconciled，不生成 residual。
+- **Tests**：Core 27/27、Quadrant/Risk/Movement 25/25、Store Detail/KPI/A&P 14/14，合计 **66/66**。
+- **Browser regression**：标准 Mock 完成 01→02、02→03 Ranking、03→04、Tier subset、New Store 与 Current/Comparison/Movement。五轮 `Current → Comparison → Movement → Ranking → Productivity → Movement` 连续切换中，canvas 数量稳定，无 stale series / trajectory 累积，console warning/error = 0。
+
+### Phase B–F — Variance / UI Migration / Final Regression（Phase F baseline）
+
+本节是 Phase F 历史基线；当前最终实现以上方 Phase G 摘要为准。下方 Phase 5 / 6A–6D 记录保留为迁移历史，其中旧的三指标 Analyze selector、Productivity Bubble、6-card Store Detail 与 legacy A&P component waterfall 描述均已被 Phase G 取代。
+
+- **全局 Variance 语义**：凡指标存在 ratio / percentage representation，用户可见 Variance 统一为 `Current ratio - Comparison ratio`，显示为 `+0.1%` / `-0.3%`，不显示 relative growth 或 `pp`。金额型且没有 ratio 的指标（如 AUP、Gross Sales、Store Count）保留各自合理的金额/数量比较。
+- **Bridge**：Bridge 始终是 amount-based，`Comparison amount + Σ driver amount variance = Current amount`。Core 继续保留 Total Minorations / Gross Margin / Customer Contribution 三套稳定 API；02 UI 只展示 Customer Contribution Bridge。Summary CC 使用 8 个非重叠 drivers；Filtered CC 只使用 Gross Margin / Specific A&P / Specific SG&A，非零 residual 返回 `BRIDGE_RECONCILIATION_ERROR`，不生成 residual bar。
+- **01 Executive Overview**：Phase F 时为 8 cards + P&L Snapshot；Phase G 已删除 01 Snapshot，并将下钻入口收敛到 KPI cards。
+- **02 P&L Variance**：页面顺序为 P&L Snapshot first，再到 Customer Contribution Bridge Analysis。无 Analyze selector。Bridge、Variance Readout、Driver Analysis、Top Positive/Negative Drivers 成组；Phase G 的 Driver 表最终列为 Driver / Current Amount / Current % / Comparison Amount / Comparison % / Variance % / Drill-down，无 absolute Variance 与 Contribution 列。Top Drivers 仍按 amount movement 排序。
+- **03 Store Portfolio**：Productivity 已由 Bubble 改为 Store Investment Productivity Quadrant。X = Customer Contribution amount；Y = `abs(store.pnl.specificAP)`；每店固定点大小。Current/Comparison、Region、City、Status、Tier 每次变化后重新生成 points、两个 median 与 quadrant classification；`>= median` 视为 High。Ranking 保持 `Current amount - Comparison amount`，02 driver 下钻与非核心 driver fallback 保持稳定。
+- **04 Store Detail**：Phase F 确立 4 cards、ratio variance 与 canonical Specific A&P；Phase G 在不改变 canonical total 的前提下恢复两张非重复 component 分析图。
+- **独立 helper**：`js/productivity-quadrant.js` 与 `js/store-detail.js` 使用 classic-script compatible UMD/global pattern，不依赖 Node-only API；`index.html` 以相对路径在 `app.js` 前加载，保持 `file://` 结构兼容。
+- **Tests**：Phase F baseline 为 Core 27/27、Quadrant 10/10、Store Detail 10/10，总计 47/47。
+- **浏览器回归**：标准 Mock 完成 01→02→03→04、Tier subset、Current/Comparison、Existing/New Store、三轮跨页路径与五轮 Ranking/Productivity 切换；Current 160 points / medians 60.5 CC、121 A&P，Comparison 150 points；console warnings/errors = 0。
+- **视觉回归**：01 8-card grid、02 Snapshot-first、03 median quadrant、04 4-card + canonical A&P 均无阻断性 layout 问题。默认密集散点仍依赖 Tier/Search/zoom 提升可读性。
+- **已知限制**：Filtered CC hierarchy 仍只有 Gross Margin / Specific A&P / Specific SG&A；部分 slice 因 Detail KRMB 取整会正确阻止 Bridge 绘制。尚无独立 Full Year Mock fixture。内置自动化浏览器安全策略禁止直接导航 `file://`，因此本轮只确认相对 classic scripts、CSP 与无网络依赖，仍需目标公司 Edge/Chrome 做一次本地双击实机验收。
 
 ### Phase 5 — Core Data Refactor（已完成）
 
@@ -127,15 +154,17 @@ Store Detail
 - 03→04 `selectedStore` drill-down 正常；`openStoreDetail(terminal)` + `data-store` 复用；返回 03 不清空 Region/City/Status/Tier/selectedDriver。
 - **Store Header**（轻量条 `#storeHeader`）：City / Region / Status / Tier / Store Productivity / `cityPosNo`（真实门店 POS 数，非 derived `posNo`）；Store Name 在 `detailTitle`。Store Productivity 与 AUP 严格区分，不展示 portfolio AUP。
 - **顶部 Key Figures 最终 6 个**（顺序固定）：Gross Sales / CA Net / CA Net % of GS / Gross Margin % / Customer Contribution / Customer Contribution %。金额用 Current/Comparison/Variance %，比例（CA Net % of GS / GM% / CC%）用 Current/Comparison/pp change（非 ratio growth rate）。
-- Operating Profit 不再作为顶部 KPI；A&P Expense 也不再作为顶部 KPI，但 **A&P Expense Comparison / A&P Expense Variance 两图继续保留**（A&P Expense 沿用旧 6 组件语义，映射新版字段）。
+- Operating Profit 不再作为顶部 KPI；Phase 6D 保留了旧 A&P component 图的历史入口。Phase G 已将其替换为经 Workbook hierarchy 审计的非重复 component set。
 - **CA Net** 对应 Detail 真实 `"CA NET "` 字段（header 带尾随空格，`normalizeHeader` 已归一），normalized field 为 `netSales`（`DETAIL_FIELDS.netSales = ['CA NET']`）；CA Net % of GS = `netSales ÷ grossSales`（各自 period 计算）。CA NET 与 Summary 的 CONSO NET SALES 是同一 canonical 字段 `netSales`，04 读 detail 层门店值。
-- **Store P&L 最终列结构**：`P&L Line | Current | Current % of Net Sales | Comparison | Comparison % of Net Sales | Variance %`（6 列，**无 absolute Variance amount 列**）。31 行金额行来自新版 `store.pnl` 真实字段（P&L hierarchy 顺序），**ratio rows 已去重**（GM%/CC% 通过 % of Net Sales 列展示，不另起一行）；% of NS 统一用 Net Sales 分母；Variance % = (current−comparison)÷|comparison|，comparison=0 显示 —。
+- **Store P&L 最终列结构**：`P&L Line | Current | Current % of Net Sales | Comparison | Comparison % of Net Sales | Variance %`（6 列，**无 absolute Variance amount 列**）。当前 active `STORE_PNL_LINES` 为 **32 行**；Phase G 继续使用 ratio difference，comparison 不存在时显示 `—`。
 - **New Store 容错**：Current 有 10 家新店无 prior-year comparison；Comparison 列 / % of NS / Variance % / pp 均显示 `—`，Store Signals 显示「New Store · No Prior-Year Comparison」；不拿 0 当 comparison。
-- 已知限制：Store Detail 的 component 与 subtotal（daCost / specificAP / totalMinorations）存在 KRMB 取整差异，P&L 表展示各列真实值、不做 store-level tie-out；A&P Expense 沿用旧 6 组件（含 specificAP，仅展示参考非 Bridge）。
-- 验证：Core Data 18/18 PASS；`git diff --check` PASS；无头验证 existing store（上海久光）6 KPI / 31 行 P&L / New Store（西安高新万达2店）comparison=— 均正确；01/02/03 渲染函数零改动。
+- 已知限制：Store Detail component/subtotal 存在 whole-KRMB 取整差异。Phase G 已停止使用含 `specificAP` subtotal 的旧 6-component pool，改用非重复 component view，且不声称其 reconcile 到 formal total。
+- 验证：当前 active Store Detail 为 4 KPI / 32 行 P&L / New Store comparison=`—` / 2 张 A&P component charts。
 - 下一步：Final Regression / Cleanup。
 
-### 2.1 已完成并在代码中存在
+### 2.1 历史实现基线（Phase B–G 已取代冲突内容）
+
+本节记录早期 Dashboard 能力，用于理解迁移来源，不代表 2026-08-18 当前 UI。与上方 Phase G 最终状态冲突时，以 Phase G、active code、`docs/DATA_MODEL.md` 和 tests 为准。
 
 #### Mock P&L 数据与数据模型
 
@@ -210,7 +239,7 @@ Store Detail
 #### Excel 读取、字段映射与数据验证
 
 - SheetJS 从用户选择的 `File.arrayBuffer()` 在浏览器内解析工作簿。
-- 自动扫描所有工作表，并在前 60 行中按字段别名得分寻找表头。
+- Active `core-data.js` 会发现 Summary/Detail sheets：Detail header 候选扫描前 30 行，Summary classification 检查前 50 行与可见期间 metadata。前 60 行扫描仅属于尚未清理的 legacy rectangular parser。
 - 列识别按 Header / Alias，不依赖固定列号或列顺序。
 - Data Settings 支持手工选择 Worksheet、Header row 和字段映射。
 - 必要字段缺失时显示 `Missing required field`，不会直接渲染不完整 Dashboard。
@@ -300,7 +329,10 @@ Retail_Performance_Dashboard/
 │   ├── styles.css                     # 全部 UI、响应式、卡片、表格和导航样式
 │   └── favicon.svg                    # 本地图标
 ├── js/
-│   └── app.js                         # 字段层、解析、验证、计算、筛选、图表和联动（944 行）
+│   ├── data/core-data.js              # Workbook adapter、normalized model、Data Service、shared variance/Bridge contracts
+│   ├── productivity-quadrant.js       # Median、A&P magnitude、quadrant classification pure helper
+│   ├── store-detail.js                # 04 KPI / canonical A&P / Store P&L ratio pure helper
+│   └── app.js                         # 页面 state、render、ECharts 和跨页联动
 ├── libs/
 │   ├── echarts.min.js                 # ECharts 5.5.1，本地运行依赖
 │   └── xlsx.full.min.js               # SheetJS CE 0.18.5，本地运行依赖
@@ -312,7 +344,13 @@ Retail_Performance_Dashboard/
 │   └── README.md                      # Mock 文件用途说明
 ├── docs/
 │   ├── DATA_MODEL.md                  # 当前 Source of Truth、期间与比较口径
+│   ├── DASHBOARD_ARCHITECTURE.md      # 最终数据流、页面与 helper 边界
+│   ├── DECISIONS.md                   # 最终业务/架构决策
 │   └── HANDOFF.md                     # 本交接文档
+├── tests/
+│   ├── core-data.test.js              # 27 Core checks
+│   ├── productivity-quadrant.test.js  # 25 Quadrant / Risk / Movement checks
+│   └── store-detail.test.js           # 14 Store Detail / KPI / A&P checks
 ├── README.md                          # 使用、离线运行、图表操作和常见问题
 ├── ARCHITECTURE.md                    # 本地数据流、语义层、比较期和 Drill-down 设计
 ├── DATA_REQUIREMENTS.md               # Excel 必要/推荐字段和 P&L 关系
@@ -341,58 +379,42 @@ Retail_Performance_Dashboard/
 
 | Sheet | 用途 |
 |---|---|
-| README | 粒度、单位、符号、用途和模型流说明 |
-| Counter_PnL | Dashboard 唯一事实源；640 行 × 68 字段（不含表头） |
-| Drivers | Customer Transactions、Average Ticket、费率、成本率等模拟驱动 |
-| Checks | 模型总检查与 PASS/FAIL 状态 |
-| Row_Checks | 640 行逐店逐期间 tie-out 检查 |
-| Data_Dictionary | 68 个事实字段的数据字典 |
+| `P&L review Y26` | Portfolio Summary P&L；multi-row header；2026 S1 vs 2025 S1，保留 Actual / Actual Adj. |
+| `LRP Counter Y26 S1` | Current Store Detail；160 stores + 1 个被 parser 排除的 TOTAL row |
+| `LRP Counter Y25 S1` | Prior Year Same Period Store Detail；150 stores + 1 个被 parser 排除的 TOTAL row |
 
-### 5.3 68 个 `Counter_PnL` 字段
+当前标准 Workbook 不是旧的 `Counter_PnL / Drivers / Checks / Row_Checks / Data_Dictionary` 6-sheet fixture。那一 640 × 68 结构只属于 `sample_data/Mock_Counter_PnL.xlsx` 的 legacy 审计记录，不是当前兼容目标。完整 active 字段与 hierarchy 以 `docs/DATA_MODEL.md` 为准。
+
+### 5.3 Store Detail A&P hierarchy
+
+Formal A&P total 仍为 `Specific A&P`。Phase G component view 使用以下非重复 source lines：
 
 ```text
-Year; Review Period; Period Key; Store ID; Store; City; Province; Region;
-Channel; Store Type; Status; POS Count; City POS Count; Customer Transactions;
-Average Ticket; RSP; Gross Sales; Discount; Discount % of GS; Rebates;
-Rebates % of GS; Structural Conditions On; Structural Conditions Off;
-Active Support; Shopper Investment; Promo Allow On Invoice;
-Promo Allow Applied Separately; Promo Allow Loyalty; Promotional Allowance;
-Promotional Allowance % of GS; Returns; Returns % of GS; OCA; Coupon;
-Minorations; Minorations % of GS; Net Sales; Net Sales % of GS;
-Net Sales / POS; Store Productivity Tier; Std COS; Royal / TA / MS;
-Special Operations Cost; Obsolete / Slow Moving / Return;
-Physical Distribution; Cost of Sales; Cost of Sales % of Net Sales;
-Gross Margin; Gross Margin %; Customer Samples; Promotional Gifts; Animations;
-POS Advertising Amortization; Other POS Advertising; POS Advertising;
-Specific Development; DA Cost; DA HC; Non DA Cost; DA Cost / HC; DA HC / POS;
-Specific A&P; Specific SG&A; Customer Contribution; Customer Contribution %;
-Non-specific Costs; Operating Profit; Operating Margin %
+Trade Relation
+Customer Samples
+Promotional Gifts
+POS Advertising Amortization
+POS Advertising
+Merchandising
+Animations
+Tester
+DA Cost + Specific Development
+Others
 ```
 
-当前分类值：
-
-- Regions：北区、东区、南区、西区。
-- Channels：Shopping Mall、Department Store。
-- Store Types：Prestige Shopping Center、Luxury Department Store、Core Shopping Center、Regional Mall。
-- Status：正常、新开店、装修、暂停营业。
+`Specific A&P` subtotal 不加入 component pool。由于 source workbook 为 whole-KRMB values，component pool 可与 canonical subtotal 存在小额取整差异；因此 component charts 不标记 Reconciled。
 
 ### 5.4 核心计算关系
 
 ```text
-Promotional Allowance
-  = Structural On + Structural Off + Active Support + Shopper Investment
-  + Promo Invoice + Promo Separate + Promo Loyalty
-
-Minorations
-  = Discount + Rebates + Promotional Allowance + Returns + OCA + Coupon
-
-Net Sales = Gross Sales + Minorations
+Net Sales = Gross Sales + Total Minorations
 Cost of Sales = Std COS + Royal + Special Ops + Obsolete + Physical Distribution
 Gross Margin = Net Sales + Cost of Sales
-DA Cost = Samples + Gifts + Animations + POS Advertising + Specific Development
-Customer Contribution = Gross Margin + DA Cost + Specific A&P + Specific SG&A
+Filtered Customer Contribution = Gross Margin + Specific A&P + Specific SG&A
 Operating Profit = Customer Contribution + Non-specific Costs
 ```
+
+Summary Customer Contribution Bridge 使用 8 个非重复 Summary lines；Filtered Bridge 只使用 Gross Margin / Specific A&P / Specific SG&A。不得把 A&P subtotal 与其 component 重复相加。
 
 汇总百分比：
 
@@ -405,7 +427,7 @@ Average Sales per Store = Σ Net Sales ÷ distinct Store ID
 
 工作簿单位为 `RMB 000 / KRMB`；页面显示金额时乘以 1,000 并格式化为 `¥K / ¥M / ¥B`。
 
-## 6. Dashboard Information Architecture
+## 6. Historical Dashboard Information Architecture（已被 Phase B–G 取代）
 
 ### Tab 1 — Executive Overview
 
@@ -456,7 +478,9 @@ KPI click
   → Current vs Comparison Store P&L / A&P
 ```
 
-## 7. 已确认的重要业务与产品决策
+## 7. 历史业务与产品决策
+
+本节保留早期决策背景；当前有效决定以 `docs/DECISIONS.md` 的 Phase G 决定及本文 Phase G 最终状态为准。
 
 1. Review Period 为 S1 / Full Year，不做月度主模型。
 2. Dashboard 必须遵循 `Overview → Variance → Driver → Store → Detail`，不能退回为一页堆满门店散点图。
@@ -515,15 +539,15 @@ KPI click
    另：`retail-performance-dashboard.vercel.app` 已被同一账户中的另一套韩文 Dashboard 占用，**不是本项目，禁止当作本项目网址**。
 
 2. **缺少自动化端到端回归测试。**  
-   当前 `npm run check` 只执行 `node --check js/app.js`。Upload、Mapping、640 行加载、KPI、Median、筛选、Drill-down、Waterfall tie-out 和 Clear Data 没有可重复的浏览器测试。继续改图表前应建立最小 Mock E2E smoke test。
+   当前 `npm run check` 已覆盖 active JavaScript 与 3 个 test 文件，66 项 data/helper tests 已存在；但 Upload、KPI、筛选、跨页 Drill-down 与图表生命周期仍依赖人工/agent browser smoke test，没有持久化的自动浏览器测试套件。
 
-3. **无法解析的数值目前会静默变成 0。**  
-   `toNumber()` 对空值和不可解析文本返回 0。这对可选费用行有便利，但可能掩盖真实 Excel 中的异常文本、错误公式或缺失金额。应设计“missing / invalid / legitimate zero”三态校验，并在不泄露数据的情况下给出行号和字段级错误。
+3. **Active parser 尚未区分 missing / invalid / legitimate zero diagnostics。**
+   Active `js/data/core-data.js` 的 `toNumber()` 对空值和不可解析文本返回 `null`，不会直接返回 0；但尚未生成行号/字段级的三态 diagnostics。`js/app.js` 中返回 0 的是尚未清理、不在标准 Workbook active load path 上的 legacy rectangular parser。
 
 ### P1 — 重要优化
 
-4. **`js/app.js` 为 944 行单文件。**  
-   Mapping、Parsing、Semantic Model、Charts、State 和 UI Event 全部耦合在一个 IIFE。当前可运行，但长期维护和测试成本较高。未来应在保持 classic scripts / file:// 的前提下拆为有明确加载顺序的本地模块，例如 `field-mapping.js`、`data-parser.js`、`analytics.js`、`charts.js`、`app.js`；不要直接改为浏览器 ES Modules。
+4. **`js/app.js` 仍约 1,634 行。**
+   Core Data、Quadrant 与 Store Detail pure logic 已拆出，但 legacy Mapping、旧 parser fallback、Charts、State 和 UI Event 仍集中在 `app.js`。当前可运行，后续只能在有完整 E2E 保护时继续按 classic scripts 小步拆分；不要直接改为浏览器 ES Modules。
 
 5. **必要字段与派生逻辑存在语义不一致。**  
    `netSales`、`grossMargin`、`contribution`、`operatingProfit` 被列为 required，因此校验通过后，它们在 `deriveRecord()` 中的“缺失时派生”分支实际不可达。需要明确未来策略：核心报表值必须由 Excel 提供，还是允许用明细科目派生；确认后同步代码和文档。
@@ -541,7 +565,6 @@ KPI click
    - README 的发布树和 SECURITY 文档提到 `SHA256SUMS.txt`，但当前文件不存在，且 `.gitignore` 忽略它。
    - `ARCHITECTURE.md` 的旧版差异段写“离线版不包含任何 Excel”，但当前仓库明确包含 Mock workbook。
    - `DATA_REQUIREMENTS.md` 支持文件列表未列 `.xlsm`，而 HTML 和 JavaScript 接受 `.xlsm`。
-   - 文档写表头位于前 50 行，代码实际扫描前 60 行。
    这些属于文档修订任务，不应顺手改变业务逻辑。
 
 10. **GitHub About 描述尚未在本次交接中核验。**  
@@ -563,22 +586,18 @@ KPI click
 - 未发现应用代码中的绝对个人路径、外部 CDN 或主动网络请求。
 - 未发现完整业务行的 `console.log`。
 
-## 10. Git 与部署状态（交接时快照）
+## 10. Git 与部署状态（Phase G 快照）
 
 - Branch：`main`
 - Upstream：`origin/main`
-- 交接文档创建前状态：`main...origin/main`，无未提交修改。
+- 当前状态：`main...origin/main [ahead 9]`，Phase B–G 的已验收/待人工验收成果仍在 working tree，未 commit。
 - 最近 commit：
 
   ```text
-  52b8ad5 Use fixed development website URL
-  full: 52b8ad5bec6d0d0a456ff42d093f762e2467fc4c
-  date: 2026-08-14T01:31:40+08:00
+  4ce813d Fix productivity chart resize lifecycle
   ```
 
-- 本文创建后，预期唯一未提交项为：`?? docs/HANDOFF.md`。
-- 按用户要求：**不要在本次交接中 commit 或 push。**
-- 是否建议 commit：建议用户审阅 HANDOFF 后，在下一窗口明确授权时单独提交，commit message 可使用 `Add project handoff documentation`。
+- 按用户要求：**Phase G 不 commit、不 push，不 reset / checkout / stash / revert。**
 - Git Push 到 `main` 会触发 Vercel 部署；但固定 alias 自动跟随问题仍需按 P0 核验。
 - Vercel 项目名：`retail-performance-dashboard`；SSO Protection 已关闭，开发站公开访问，因此必须继续保持 Mock-only。
 
@@ -589,7 +608,7 @@ KPI click
 1. 读取本文件，不要依赖旧聊天记忆。
 2. 运行 `git status --short --branch`，确认只有用户预期的修改。
 3. 只读核验 Vercel Production Domain / alias 是否跟随最新 Git 部署；不要误用被其他项目占用的 `retail-performance-dashboard.vercel.app`。
-4. 建立最小自动化 E2E smoke test，覆盖 Mock 上传、640/160/4、KPI、Comparison、Filter、Driver → Store → Detail、A&P reconcile 和 Clear Data。
+4. 建立最小自动化 E2E smoke test，覆盖标准 Summary + Current/Comparison Detail Workbook 上传、KPI、Filter、Driver → Store → Detail、Quadrant/Movement、A&P component views 和 Clear Data。
 5. 为 invalid numeric / uncached required formula 建立明确的数据验证策略，再修改解析逻辑。
 
 ### P1 — 重要优化
