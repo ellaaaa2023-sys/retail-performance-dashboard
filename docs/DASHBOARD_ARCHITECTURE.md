@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Target Architecture
 
-> Status: implemented architecture through Phase G; updated 2026-08-18.
+> Status: implemented architecture through Phase 4 Data Cleaning UX integration; updated 2026-08-19.
 
 ## 1. Purpose
 
@@ -35,6 +35,21 @@ Shared business contracts:
 - Whenever an amount and ratio describe the same business metric, they use one inline `Amount · Ratio` display model.
 - A&P component charts analyze non-overlapping expense lines and do not redefine or overwrite canonical Specific A&P.
 - `js/productivity-quadrant.js` and `js/store-detail.js` isolate pure, testable UI-domain logic while preserving classic relative script loading and `file://` compatibility.
+
+Phase 3 adds the parser foundation beneath this UI: shared Detail schema metadata, client-side Cleaning, canonical intermediate sheets, scan/capability metadata, and schema-independent role assignment. Phase 4 renders that metadata in a compact, collapsible Data Preparation status area without introducing a fifth analysis page.
+
+### 1.2 Phase 4 Data Preparation UI boundary
+
+```text
+metadata.workbookScan + metadata.capabilities
+  → js/data/data-preparation-ui.js (pure user-facing view model)
+  → js/app.js safe HTML renderer
+  → compact summary + native <details>
+```
+
+The formatter exposes business labels, store counts, role assignments, preserved/ignored statistics, near-compatible warnings, and capability limitations. It deliberately excludes canonical keys, source indices, raw formula metadata, complete rows, and stack traces. Summary P&L is shown as a Dashboard source for which Detail Cleaning is not required.
+
+Capability degradation is a rendering gate, not a new calculation system. Missing fields can disable Tier/Status controls or replace Filtered Bridge, Quadrant/Risk, A&P Components, and unavailable Store P&L values with explicit states. Missing components remain unavailable rather than becoming zero. Standard full-feature workbooks retain the existing 01–04 output.
 
 ## 2. Pre-migration Architecture and Migration Impact (historical)
 
@@ -73,25 +88,27 @@ Classic local scripts with explicit load order are preferred to preserve `file:/
 ## 3. Target Data Pipeline
 
 ```text
-Workbook ArrayBuffer
+Workbook ArrayBuffer / Workbook object
   ↓
-Workbook Reader
+Local SheetJS Reader
   ↓
-Sheet Discovery
-  ├── Summary P&L candidates
-  └── Store Detail candidates
+Summary isolation
+  └── existing Summary detection and parseSummarySheet()
   ↓
-Period Detection
-  ├── S1
-  └── Full Year
+Detail scanner for every non-Summary worksheet
+  ├── compatible → Cleaning IR
+  ├── near-compatible → diagnostics only
+  └── incompatible → ignored unless blocking collision
   ↓
-Header / Row Detection
+Dashboard Core readiness
   ↓
-Field Mapping
-  ├── Summary P&L line mapping
-  └── Store Detail column mapping
+Period metadata extraction
+  └── exact Y<year> S1 / Full Year Sheet-name suffix
   ↓
-Validation and Diagnostics
+Independent role assignment
+  ├── Current = maximum eligible year
+  ├── Comparison = Current - 1, same Review Period
+  └── historical / unassigned compatible sheets are not concatenated
   ↓
 Normalized Workbook Model
   ├── Portfolio Summary by period
@@ -113,34 +130,27 @@ UI renderers must not receive raw SheetJS matrices, Sheet names, column indexes,
 
 ## 4. Adapter Responsibilities
 
-### 4.1 Sheet Discovery
+### 4.1 Sheet Discovery and Cleaning eligibility
 
-Classify every relevant worksheet without hard-coding Y25/Y26:
+Summary is identified first using the existing `P&L review Yxx` rule and Summary structure validation. It retains its multi-row header, Actual/Actual Adj. resolution, year reconciliation, and line mapping, and receives `cleaningStatus = notApplicable`.
 
-- Detail candidate: a tabular sheet whose name matches a Year + `S1`/`Full Year` pattern and whose header contains Terminal/Store plus P&L fields.
-- Summary candidate: a financial-statement sheet with period headers and recognized P&L row labels.
-- Ignore unrelated worksheets unless they are explicitly mapped by the user.
+Every other worksheet is scanned using the shared Detail schema. Cleaning eligibility uses whitespace-normalized, case-insensitive exact aliases and never a Sheet-name rule. Unknown columns are preserved; fuzzy matching is prohibited. Compatible sheets receive cleaned intermediate rows, near-compatible sheets retain missing-field diagnostics, and unrelated sheets are ignored.
 
-Discovery output includes confidence and reasons. Ambiguous classification must open Data Settings instead of silently selecting a sheet.
+Mapping collisions and uncached required numeric formulas are blocking. Successful parses retain sheet diagnostics in model metadata; Phase 4 presents only safe user-facing summaries. Parser errors are mapped to blocking guidance without exposing raw stack traces.
 
 ### 4.2 Period Detection
 
-Period detection combines:
-
-- Detail Sheet name metadata.
-- Summary title and period header cells.
-- User mapping only when automatic detection is ambiguous.
+Cleaning produces no role. A separate function extracts Detail period metadata from an exact `Y<year> S1` or `Y<year> Full Year` Sheet-name suffix. A compatible sheet without that suffix remains unassigned; the parser never guesses from sheet order, row count, or first/last position.
 
 One Workbook contains exactly one Review Period. The adapter detects either S1 or Full Year, groups the current and prior-year Detail sheets under that period, and builds the Prior Year Same Period pair. Multi-period Workbook handling is out of scope.
 
-### 4.3 Field Mapping
+### 4.3 Shared schema and intermediate model
 
-Data Settings needs two mapping modes:
+`js/data/detail-schema.js` is the single Detail field dictionary used by Cleaning and Core. `js/data/data-cleaning.js` returns canonical intermediate sheets containing header matching, source indices, cleaned rows, formula metadata, diagnostics, readiness, and sheet capabilities.
 
-- Portfolio Summary mapping: identify P&L lines and Current/Comparison value columns.
-- Store Detail mapping: identify semantic columns by header.
+Core consumes the cleaned canonical cells directly. It does not repeat header normalization, text cleaning, or numeric-string parsing. Core still owns TOTAL exclusion, store normalization, ratio derivation already supported by the model, P&L calculations, matching, and Data Service construction.
 
-Exact aliases take precedence. Fuzzy matching may suggest, but low-confidence or conflicting mappings require user confirmation. The mapping version must change because the current single-table mapping is not schema-compatible.
+Unknown columns remain in scan metadata but are not copied into final store objects.
 
 ### 4.4 Validation
 
@@ -148,13 +158,20 @@ Load-blocking errors:
 
 - No current Detail sheet.
 - No Prior Year Same Period Detail sheet for a selected Review Period.
-- Missing Terminal or Store identity.
+- No schema-compatible and Dashboard-ready Current or Comparison Detail sheet.
+- Missing one of the eight Cleaning/Dashboard Core fields.
+- Mapping collisions.
+- Uncached required numeric formulas.
 - Duplicate Terminal within one period after total-row removal.
 - Missing Bridge target or required driver lines in Summary.
 - Ambiguous amount/ratio or POS/POS no. mapping.
 
 Warnings:
 
+- Near-compatible Detail sheets and missing optional fields.
+- Uncached optional formulas and conservative numeric conversion diagnostics.
+- Ambiguous unmarked ratio scale; Core retains it as `null` rather than using an unsafe value.
+- Compatible historical or no-period sheets that remain outside the Current/Comparison model.
 - Summary versus Detail rounding differences.
 - Stores present in only one side of the period pair.
 

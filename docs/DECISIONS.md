@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Architecture Decisions
 
-> Confirmed decision log for the Workbook migration and Phase G product polish, updated through Phase G on 2026-08-18.
+> Confirmed decision log for the Workbook migration, Phase G product polish, and Phase 4 Data Cleaning UX integration; updated 2026-08-19.
 
 ## D-001 — Current Mock Dataset
 
@@ -206,6 +206,68 @@ riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
 ## D-034 — Phase G Validation Baseline
 
 **Decision:** Phase G validation is Core 27/27, Quadrant 25/25, and Store Detail 14/14 (66/66 total), plus five consecutive Current → Comparison → Movement → Ranking → Productivity → Movement browser cycles with stable chart canvases and no console warnings/errors.
+
+## D-035 — One Shared Detail Schema
+
+**Decision:** `js/data/detail-schema.js` is the only manually maintained source for Detail canonical keys, exact aliases, data types, Cleaning requirements, Dashboard Core requirements, and capability membership.
+
+**Consequence:** Core derives mappings from shared metadata, and Cleaning cannot maintain a second field dictionary.
+
+## D-036 — Summary P&L Isolation
+
+**Decision:** Summary detection and `parseSummarySheet()` remain unchanged and execute outside Detail Cleaning. Summary receives `classification = summary` and `cleaningStatus = notApplicable`.
+
+**Rejected:** Applying Detail header normalization, blank masks, type normalization, or Detail schema validation to the Summary multi-row financial statement.
+
+## D-037 — Cleaning Eligibility Is Not Role Assignment
+
+**Decision:** Exact Detail schema matches determine Cleaning eligibility. A separate exact Sheet-name suffix supplies `year` and `reviewPeriod`; it never determines whether a Sheet may be cleaned.
+
+**Consequence:** All compatible sheets are cleaned, but only one maximum-year Current and one prior-year same-period Comparison enter the normalized model. Older compatible sheets are historical; compatible sheets without reliable metadata remain unassigned. No concatenation or sheet-order guessing is allowed.
+
+## D-038 — Canonical Intermediate Sheet Boundary
+
+**Decision:** Cleaning returns canonical intermediate sheets with source indices, cleaned cells, formula metadata, diagnostics, readiness, and capabilities. Core consumes this IR and remains responsible for TOTAL exclusion, final store objects, matching, ratios, P&L calculations, and the Data Service.
+
+**Rejected:** Mutating SheetJS worksheets or letting Cleaning create final Dashboard store objects.
+
+## D-039 — Missing and Formula Safety
+
+**Decision:** Missing known values remain `null`; signed amounts remain unchanged. Cached formulas use `.v`; uncached required numeric formulas block Dashboard readiness; uncached optional formulas remain `null` with a warning. Ambiguous unmarked ratios do not enter Core.
+
+## D-040 — Two-period Capability Resolution
+
+**Decision:** The model retains Current and Comparison sheet capabilities plus resolved Dashboard capabilities. Resolved status is available only when both periods are available, unavailable when both are unavailable, and partial otherwise.
+
+**Consequence:** Phase 3 records capability data; Phase 4 consumes resolved capabilities without recomputing schema matches or business calculations.
+
+## D-041 — Phase 3 Validation Baseline
+
+**Decision:** Phase 3 baseline is Cleaning 54/54, Core 60/60, Quadrant 25/25, and Store Detail 15/15, plus syntax, diff, classic-script load-order, Standard Mock, and synthetic Full Year validation.
+
+## D-042 — Data Preparation Is a Status Surface
+
+**Decision:** Workbook Scan / Cleaning / Validation results live in one compact source/status panel after Upload. Success is collapsed by default; details use a native disclosure control. Data Cleaning is not a fifth Dashboard page.
+
+**Consequence:** Summary, Current, Comparison, historical, unassigned, near-compatible, and unrelated sheets receive distinct business wording without exposing canonical keys, source coordinates, full rows, formula payloads, or stack traces.
+
+## D-043 — Capability Limitations Do Not Redefine Calculations
+
+**Decision:** Resolved capability metadata gates UI availability. Missing optional fields may disable a filter or show an unavailable/partial module, but do not block otherwise-ready Dashboard data and are never converted to zero.
+
+**Consequence:** Filtered Customer Contribution Bridge, Investment Quadrant / Productivity Risk, A&P Components, and Store P&L missing values degrade explicitly. The standard full-feature Mock retains unchanged 01–04 calculations and presentation.
+
+## D-044 — Upload and Demo Preparation Lifecycle
+
+**Decision:** A new Workbook upload clears the previous scan state before parsing. Filter Reset preserves the preparation summary; Clear Data removes it. Demo data bypasses Excel Cleaning and may only display `Demo Dataset · Synthetic data · Ready for analysis`.
+
+**Security consequence:** The UX adds no fetch, backend, telemetry, persistence, worker, or external dependency. It consumes anonymous parser metadata and keeps workbook values in browser memory only.
+
+## D-045 — Phase 4 Validation Baseline
+
+**Decision:** Phase 4 adds 16/16 pure Data Preparation UI tests to the existing 154 tests, for 170/170 numbered tests. Browser regression covers Standard Mock 01–04, multi-compatible/near-compatible/no-period sheets, capability limitations, blocking state, new upload replacement, Reset/Clear behavior, and zero console warnings/errors.
+
+**Remaining dependency:** Browser automation policy blocks direct `file://` navigation. Classic-script load order and no-network checks pass; Windows company-browser double-click verification remains a manual acceptance step.
 
 ## Confirmed Filter Dimensions
 

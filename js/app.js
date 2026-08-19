@@ -11,6 +11,7 @@ const THEME = {
 };
 const ProductivityQuadrant = window.RetailProductivityQuadrant;
 const StoreDetailModel = window.RetailStoreDetail;
+const DataPreparationUI = window.RetailDataPreparationUI;
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -130,7 +131,7 @@ const state = {
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
   portfolioView: 'productivity', snapshot: 'current',
   portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all'
+  model: null, service: null, selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -184,6 +185,77 @@ function inlineAmountRatioHtml(amount, ratio) {
 function setNotice(type, title, message) {
   $('notice').className = `notice ${type}`;
   $('notice').innerHTML = `<div><strong>${esc(title)}</strong><span>${esc(message)}</span></div>`;
+}
+
+function preparationSheetHtml(sheet) {
+  const mark = sheet.tone === 'warning' ? '△' : sheet.tone === 'error' ? '!' : sheet.tone === 'neutral' ? '○' : '✓';
+  const missing = sheet.missing && sheet.missing.length
+    ? `<span>${esc(sheet.missing.length === 1 ? 'Missing required field' : 'Missing required fields')}: ${esc(sheet.missing.join(', '))}</span>`
+    : '';
+  const note = sheet.note ? `<span>${esc(sheet.note)}</span>` : '';
+  const stats = sheet.stats && sheet.stats.length
+    ? `<div class="preparation-stats">${sheet.stats.map(item => `<i>${esc(item)}</i>`).join('')}</div>`
+    : '';
+  return `<div class="preparation-sheet ${esc(sheet.tone)}"><div class="preparation-mark">${mark}</div><div><strong>${esc(sheet.name)}</strong><span>${esc(sheet.detail)}</span>${note}${missing}${stats}</div></div>`;
+}
+
+function preparationGroupHtml(title, items, renderer) {
+  if (!items || !items.length) return '';
+  return `<section class="preparation-group"><h3>${esc(title)}</h3>${items.map(renderer).join('')}</section>`;
+}
+
+function renderDataPreparation(view) {
+  const panel = $('dataPreparation');
+  state.preparationView = view || null;
+  if (!panel || !view) {
+    if (panel) { panel.hidden = true; panel.innerHTML = ''; panel.className = 'preparation-panel'; }
+    return;
+  }
+  const icon = view.mode === 'blocked' ? '!' : view.mode === 'warning' ? '△' : view.mode === 'loading' ? '…' : '✓';
+  panel.hidden = false;
+  panel.className = `preparation-panel ${esc(view.mode)}`;
+  const hasDetails = view.steps.length || view.primarySheets.length || view.additionalSheets.length || view.sheetWarnings.length || view.otherSheets.length || view.capabilityWarnings.length || view.privacy;
+  const steps = view.steps.length ? `<div class="preparation-steps">${view.steps.map(step => `<span class="preparation-step">✓ ${esc(step)}</span>`).join('')}</div>` : '';
+  const capabilityWarnings = preparationGroupHtml('Availability', view.capabilityWarnings, warning => `<div class="preparation-warning"><div class="preparation-mark">⚠</div><div><strong>${esc(warning.title)}</strong><span>${esc(warning.detail)}</span></div></div>`);
+  const details = hasDetails ? `<details${view.expanded ? ' open' : ''}><summary>Workbook Scan Details</summary><div class="preparation-details">${steps}${preparationGroupHtml('Dashboard sources', view.primarySheets, preparationSheetHtml)}${preparationGroupHtml('Additional compatible sheets', view.additionalSheets, preparationSheetHtml)}${preparationGroupHtml('Sheets requiring attention', view.sheetWarnings, preparationSheetHtml)}${capabilityWarnings}${preparationGroupHtml('Other sheets', view.otherSheets, preparationSheetHtml)}${view.privacy ? `<div class="preparation-privacy">${esc(view.privacy)}</div>` : ''}</div></details>` : '';
+  panel.innerHTML = `<div class="preparation-summary"><div class="preparation-icon">${icon}</div><div class="preparation-copy"><strong>${esc(view.title)}</strong><span>${esc(view.summary)}</span></div>${view.period ? `<div class="preparation-period">${esc(view.period)}</div>` : ''}</div>${details}`;
+}
+
+function capabilityStatus(key, role = 'resolved') {
+  const capabilities = state.model && state.model.metadata && state.model.metadata.capabilities;
+  return capabilities && capabilities[role] && capabilities[role][key]
+    ? capabilities[role][key].status
+    : 'available';
+}
+
+function snapshotCapabilityStatus(key) {
+  if (state.snapshot === 'movement') return capabilityStatus(key, 'resolved');
+  return capabilityStatus(key, state.snapshot === 'comparison' ? 'comparison' : 'current');
+}
+
+function capabilityWarning(key) {
+  if (!DataPreparationUI || !state.model) return null;
+  return DataPreparationUI.buildCapabilityWarnings(state.model.metadata.capabilities).find(item => item.key === key) || null;
+}
+
+function featureUnavailable(id, title, detail) {
+  disposeChart(id);
+  $(id).innerHTML = `<div class="feature-unavailable"><strong>${esc(title)}</strong><span>${esc(detail)}</span></div>`;
+}
+
+function applyCapabilityControls() {
+  if (!state.model) return;
+  const controls = [
+    ['statusFilter', 'statusFilter', 'Status field is not available in both analysis periods.'],
+    ['tierFilter', 'tierFilter', 'Store Productivity Tier field is not available in both analysis periods.']
+  ];
+  controls.forEach(([id, capability, title]) => {
+    const element = $(id);
+    const available = capabilityStatus(capability) === 'available';
+    element.disabled = !available;
+    element.title = available ? '' : title;
+    if (!available) element.value = '';
+  });
 }
 
 function readMappingStore() {
@@ -858,6 +930,24 @@ function renderVariance() {
   const filters = activeFilters();
   const metrics = state.service.getPortfolioMetrics(filters);
   renderPnlSnapshot(metrics, { bodyId: 'varianceSnapshotBody', subId: 'varianceSnapshotSub' });
+  const filtered = Object.values(filters).some(value => value !== null && value !== undefined && value !== '');
+  if (filtered && capabilityStatus('filteredCustomerContributionBridge') !== 'available') {
+    const warning = capabilityWarning('filteredCustomerContributionBridge');
+    $('bridgeTitle').textContent = 'Customer Contribution Bridge';
+    $('bridgeSub').textContent = 'Filtered detail-level comparison is unavailable';
+    $('varianceScopeStatus').className = 'scope-status filtered';
+    $('varianceScopeStatus').innerHTML = '<span class="scope-dot"></span><span>Filtered Portfolio</span>';
+    $('bridgeReconcile').textContent = 'Unavailable';
+    $('bridgeReconcile').className = 'reconcile neutral';
+    featureUnavailable('bridgeChart', warning ? warning.title : 'Customer Contribution Bridge unavailable', warning ? warning.detail : 'Required detail fields are missing.');
+    $('driverTableBody').innerHTML = '<tr><td colspan="6">Filtered driver analysis is unavailable for this workbook</td></tr>';
+    $('positiveDrivers').innerHTML = '';
+    $('negativeDrivers').innerHTML = '';
+    $('positiveStores').innerHTML = '';
+    $('negativeStores').innerHTML = '';
+    $('varianceInsights').innerHTML = `<div class="empty-state">${esc(warning ? warning.title : 'Filtered Bridge unavailable')}</div>`;
+    return;
+  }
   const bridge = state.service.getBridgeData('customerContribution', filters);
   renderBridge(bridge);
   renderDriverAnalysis(bridge);
@@ -1112,11 +1202,13 @@ function renderTierSummary(stores, role) {
   const netSales = stores.reduce((a, s) => a + s.metrics.netSales, 0);
   const grossMargin = stores.reduce((a, s) => a + s.metrics.grossMargin, 0);
   const contribution = stores.reduce((a, s) => a + s.metrics.customerContribution, 0);
-  const avgProd = stores.reduce((a, s) => a + (s.storeProductivity || 0), 0) / n;
-  const posCount = stores.reduce((a, s) => a + (Number(s.cityPosNo) || 0), 0);
+  const productivityValues = stores.map(store => store.storeProductivity).filter(Number.isFinite);
+  const avgProd = productivityValues.length ? productivityValues.reduce((a, value) => a + value, 0) / productivityValues.length : null;
+  const posValues = stores.map(store => store.cityPosNo).filter(Number.isFinite);
+  const posCount = posValues.length ? posValues.reduce((a, value) => a + value, 0) : null;
   const gmPct = netSales ? grossMargin / netSales : null;
   const ccPct = netSales ? contribution / netSales : null;
-  el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> Stores</span><span><b>${posCount}</b> POS</span><span>Avg Gross Margin <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>Avg Customer Contribution <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
+  el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> Stores</span><span><b>${formatInt(posCount)}</b> POS</span><span>Avg Gross Margin <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>Avg Customer Contribution <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
 }
 function renderMovementTierSummary(model) {
   const el = $('tierSummary');
@@ -1125,11 +1217,20 @@ function renderMovementTierSummary(model) {
   const netSales = stores.reduce((sum, store) => sum + store.metrics.netSales, 0);
   const grossMargin = stores.reduce((sum, store) => sum + store.metrics.grossMargin, 0);
   const contribution = stores.reduce((sum, store) => sum + store.metrics.customerContribution, 0);
-  const avgProd = stores.reduce((sum, store) => sum + (store.storeProductivity || 0), 0) / stores.length;
-  const posCount = stores.reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
-  el.innerHTML = `<span class="tier-summary-label">Movement</span><span><b>${model.summary.matched}</b> Matched Stores</span><span><b>${posCount}</b> POS</span><span>Avg Gross Margin <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>Avg Customer Contribution <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
+  const productivityValues = stores.map(store => store.storeProductivity).filter(Number.isFinite);
+  const avgProd = productivityValues.length ? productivityValues.reduce((sum, value) => sum + value, 0) / productivityValues.length : null;
+  const posValues = stores.map(store => store.cityPosNo).filter(Number.isFinite);
+  const posCount = posValues.length ? posValues.reduce((sum, value) => sum + value, 0) : null;
+  el.innerHTML = `<span class="tier-summary-label">Movement</span><span><b>${model.summary.matched}</b> Matched Stores</span><span><b>${formatInt(posCount)}</b> POS</span><span>Avg Gross Margin <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>Avg Customer Contribution <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
 }
 function renderRiskStores(stores, role) {
+  const capabilityRole = state.snapshot === 'movement' ? 'resolved' : role;
+  if (capabilityStatus('fullProductivityRisk', capabilityRole) !== 'available') {
+    const warning = capabilityWarning('fullProductivityRisk');
+    $('riskStoreSub').textContent = 'Required productivity fields are incomplete';
+    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(warning ? warning.title : 'Productivity Risk analysis unavailable')}</td></tr>`;
+    return;
+  }
   const ranked = ProductivityQuadrant.buildRiskRanking(stores).slice(0, 8);
   $('riskStoreSub').textContent = `${periodLabel(role)} · percentile-ranked within the full selected scope${state.snapshot === 'movement' ? ' · Movement uses Current risk view' : ''}`;
   $('riskStoreBody').innerHTML = ranked.map((point, index) => {
@@ -1146,6 +1247,14 @@ function renderProductivityQuadrant() {
     return;
   }
   const role = state.snapshot === 'comparison' ? 'comparison' : 'current';
+  if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
+    const warning = capabilityWarning('investmentQuadrant');
+    featureUnavailable('productivityChart', warning ? warning.title : 'Investment Quadrant unavailable', warning ? warning.detail : 'Customer Contribution or Specific A&P is missing.');
+    $('tierSummary').innerHTML = '';
+    $('quadrantSummary').innerHTML = '';
+    $('riskStoreBody').innerHTML = '<tr><td colspan="9">Investment Quadrant unavailable</td></tr>';
+    return;
+  }
   const stores = portfolioStores(role);
   const c = chart('productivityChart');
   const chartElement = $('productivityChart');
@@ -1220,6 +1329,14 @@ function movementLineData(pairs, changed) {
 function renderProductivityMovement() {
   // Movement filters are evaluated on Current store attributes, including Current Tier,
   // then matched to Comparison strictly by terminal so both observations share one scope.
+  if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
+    const warning = capabilityWarning('investmentQuadrant');
+    featureUnavailable('productivityChart', warning ? warning.title : 'Investment Quadrant unavailable', warning ? warning.detail : 'Both analysis periods require Customer Contribution and Specific A&P.');
+    $('tierSummary').innerHTML = '';
+    $('quadrantSummary').innerHTML = '';
+    $('riskStoreBody').innerHTML = '<tr><td colspan="9">Movement analysis unavailable</td></tr>';
+    return;
+  }
   const currentAll = state.service.getStores('current', {});
   const comparisonAll = state.service.getStores('comparison', {});
   const model = ProductivityQuadrant.buildMovementModel(currentAll, comparisonAll, activeFilters());
@@ -1374,8 +1491,8 @@ function renderStorePnl(current, ly) {
   const netSales = current.metrics.netSales;
   const lyNetSales = ly ? ly.metrics.netSales : NaN;
   $('storePnlBody').innerHTML = STORE_PNL_LINES.map(line => {
-    const cv = Number(current.pnl[line.field]) || 0;
-    const lv = ly ? (Number(ly.pnl[line.field]) || 0) : NaN;
+    const cv = Number.isFinite(current.pnl[line.field]) ? current.pnl[line.field] : null;
+    const lv = ly && Number.isFinite(ly.pnl[line.field]) ? ly.pnl[line.field] : null;
     const hasLy = Number.isFinite(lv);
     const ratioModel = StoreDetailModel.buildPnlRatioModel(cv, netSales, hasLy ? lv : null, hasLy ? lyNetSales : null, window.RetailDashboardData.ratioVariance);
     const curShare = ratioModel.currentRatio;
@@ -1419,6 +1536,14 @@ function applyPeriodLabels() {
   });
 }
 function renderApCharts(current, ly) {
+  if (capabilityStatus('apComponentAnalysis') !== 'available') {
+    const warning = capabilityWarning('apComponentAnalysis');
+    const title = warning ? warning.title : 'A&P Component Analysis unavailable';
+    const detail = warning ? warning.detail : 'Some component fields are missing. Missing components are not treated as zero.';
+    featureUnavailable('apComparisonChart', title, detail);
+    featureUnavailable('apMovementChart', title, detail);
+    return;
+  }
   const componentModel = StoreDetailModel.buildApComponentModel(current, ly);
   const labels = componentModel.components.map(component => component.label);
   const currentValues = componentModel.components.map(component => component.current);
@@ -1520,10 +1645,10 @@ function switchTab(tab, { scrollTop = true } = {}) {
 }
 function setSegment(containerId,value) { document.querySelectorAll(`#${containerId} button[data-value]`).forEach(button=>button.classList.toggle('active',button.dataset.value===value)); }
 
-function clearData() {
+function clearData(announce = true) {
   state.book=null; state.model=null; state.service=null;
   state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
-  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedPnlLine=''; state.selectedDriver=''; state.selectedQuadrant='all'; state.search=''; state.warnings=[]; state.dataStats=null;
+  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedPnlLine=''; state.selectedDriver=''; state.selectedQuadrant='all'; state.search=''; state.warnings=[]; state.dataStats=null; state.preparationView=null;
   state.snapshot='current'; state.portfolioView='productivity';
   Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
   ['bridgeChart','productivityChart','apComparisonChart','apMovementChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
@@ -1544,8 +1669,11 @@ function clearData() {
   $('storeSearch').value='';$('fileInput').value='';
   $('detailStoreSelect').innerHTML='<option>No data</option>';
   [['regionFilter','All Regions'],['cityFilter','All Cities'],['statusFilter','All Status'],['tierFilter','All Tiers']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
+  ['statusFilter','tierFilter'].forEach(id => { $(id).title = ''; });
   updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
-  enableDashboard(false); setNotice('info','Data cleared from browser memory','No workbook values are retained by the dashboard. Field Mapping settings remain available locally.');
+  renderDataPreparation(null);
+  enableDashboard(false);
+  if (announce) setNotice('info','Data cleared from browser memory','No workbook values are retained by the dashboard. Field Mapping settings remain available locally.');
 }
 function saveMapping() {
   if(!state.book)return;
@@ -1594,18 +1722,31 @@ $('resetFiltersBtn').addEventListener('click',()=>{['regionFilter','cityFilter',
 const WORKBOOK_FILE_PATTERN=/\.(xlsx|xls|xlsm|csv)$/i;
 function isWorkbookFile(file){return Boolean(file&&WORKBOOK_FILE_PATTERN.test(file.name||''));}
 async function loadWorkbookFile(file){
-  if(!isWorkbookFile(file)){setNotice('error','Unsupported file type','Use an .xlsx, .xls, .xlsm or .csv workbook.');return;}
+  clearData(false);
+  if(!isWorkbookFile(file)){
+    const error = new Error('Unsupported file type');
+    setNotice('error','Could not prepare this workbook','Use an .xlsx, .xls, .xlsm or .csv workbook.');
+    if (DataPreparationUI) renderDataPreparation(DataPreparationUI.buildBlockingPreparation(error));
+    return;
+  }
   const dropZone=$('uploadDropZone');dropZone.classList.add('is-loading');dropZone.setAttribute('aria-busy','true');
   try{
     if(!window.XLSX||!window.echarts)throw new Error('Local libraries are missing. Keep the libs folder beside index.html.');
     if(!window.RetailDashboardData)throw new Error('Workbook data layer (RetailDashboardData) is missing.');
-    setNotice('info','Reading workbook locally',file.name);
+    if(!DataPreparationUI)throw new Error('Workbook preparation UI is missing.');
+    renderDataPreparation(DataPreparationUI.buildLoadingPreparation(file.name));
+    setNotice('info','Preparing workbook…','Reading workbook and scanning sheets locally.');
     state.book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});
     state.model=window.RetailDashboardData.parseWorkbook(state.book,{XLSX:window.XLSX,fileName:file.name});
     state.service=window.RetailDashboardData.createDataService(state.model);
     initializeDataService(file.name);
   }
-  catch(error){setNotice('error','Unable to load workbook',error.message);}
+  catch(error){
+    state.book=null; state.model=null; state.service=null;
+    const view = DataPreparationUI ? DataPreparationUI.buildBlockingPreparation(error) : null;
+    setNotice('error','Could not prepare this workbook.',view ? view.summary : 'Review the workbook structure and try again.');
+    renderDataPreparation(view);
+  }
   finally{dropZone.classList.remove('is-loading','is-dragging');dropZone.removeAttribute('aria-busy');}
 }
 
@@ -1624,10 +1765,13 @@ function initializeDataService(fileName) {
   };
   populateGlobalFilters();
   enableDashboard(true);
+  applyCapabilityControls();
   updatePeriodSummary();
   renderAll();
   const md = state.model.metadata;
-  setNotice('success', `Loaded ${md.reviewPeriod} workbook locally`, `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
+  renderDataPreparation(DataPreparationUI.buildWorkbookPreparation(state.model));
+  const limitations = state.preparationView && state.preparationView.mode === 'warning';
+  setNotice(limitations ? 'warning' : 'success',limitations ? 'Data ready with limitations' : 'Data ready for analysis',`${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
 }
 
 $('fileInput').addEventListener('change',async event=>{const file=event.target.files[0];if(file)await loadWorkbookFile(file);event.target.value='';});

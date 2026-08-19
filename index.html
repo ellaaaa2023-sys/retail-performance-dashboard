@@ -11,7 +11,10 @@
   <link rel="stylesheet" href="./assets/styles.css">
   <script defer src="./libs/xlsx.full.min.js"></script>
   <script defer src="./libs/echarts.min.js"></script>
+  <script defer src="./js/data/detail-schema.js"></script>
+  <script defer src="./js/data/data-cleaning.js"></script>
   <script defer src="./js/data/core-data.js"></script>
+  <script defer src="./js/data/data-preparation-ui.js"></script>
   <script defer src="./js/productivity-quadrant.js"></script>
   <script defer src="./js/store-detail.js"></script>
   <script defer src="./js/app.js"></script>
@@ -59,6 +62,8 @@
     <section class="notice info" id="notice" aria-live="polite">
       <div><strong>No workbook loaded</strong><span>Select a local Excel file. Workbook values stay in this browser session.</span></div>
     </section>
+
+    <section class="preparation-panel" id="dataPreparation" aria-live="polite" hidden></section>
 
     <section class="context-bar is-disabled" id="contextBar" aria-label="Review context">
       <div class="context-primary">

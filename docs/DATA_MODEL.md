@@ -1,7 +1,7 @@
 # Retail Performance Dashboard — Data Model
 
-> Status: implemented data contract through Phase F.
-> Audit date: 2026-08-18 (Asia/Shanghai).
+> Status: implemented data contract through Phase 3 Data Cleaning parser integration.
+> Audit date: 2026-08-19 (Asia/Shanghai).
 
 ## 1. Source of Truth and Security Boundary
 
@@ -94,6 +94,25 @@ specific dev.; DA Cost+specific dev.; Others; Specific A&P; Specific SG&A;
 Client Contribution; Unspecific Costs; Operating Profit
 ```
 
+### 2.3 Integrated Detail Cleaning contract
+
+`js/data/detail-schema.js` is the single source for Detail canonical keys, exact aliases, types, Cleaning requirements, Dashboard Core requirements, and feature capability membership. The active browser sequence is:
+
+```text
+XLSX Workbook
+  → isolate and parse Summary P&L unchanged
+  → scan every remaining worksheet by Detail schema
+  → clean compatible sheets into canonical intermediate sheets
+  → validate Dashboard Core readiness
+  → extract period metadata independently
+  → assign exactly one Current and one Prior-Year Same-Period Comparison
+  → normalize only those assigned sheets into store records
+```
+
+Cleaning compatibility requires exact, whitespace-normalized matches for `terminal`, `store`, `city`, `region`, `grossSales`, `netSales`, `grossMargin`, and `customerContribution`. It never depends on the Sheet name. Unknown columns are preserved in scan metadata; near-compatible and incompatible sheets do not enter the normalized Detail model.
+
+The canonical intermediate sheet retains source row/column indices, raw and cleaned cell values, formula metadata, diagnostics, and per-sheet capabilities. It is an adapter boundary only: it does not create store objects and does not assign Current/Comparison roles.
+
 ## 3. Review Period Contract
 
 The only valid Review Periods are:
@@ -137,11 +156,13 @@ Multi-period Workbooks are out of scope. They may be added later only if the bus
 
 ### 3.2 Period detection
 
-Detail sheet discovery must parse, without hard-coded years:
+After schema-based Cleaning eligibility succeeds, period metadata may be extracted from an exact Sheet-name suffix, without hard-coded years:
 
 ```text
-LRP Counter Y<year> <S1|Full Year>
+... Y<year> <S1|Full Year>
 ```
+
+Examples include `LRP Counter Y26 S1` and `Counter Data Y26 S1`. A compatible sheet named only `Counter Data` is cleaned but remains `unassigned`; Sheet order and row count are never used to guess its role.
 
 Summary period detection must use visible report metadata such as the title and period header cells, because `P&L review Y26` does not include `S1` in the Sheet name.
 
@@ -178,6 +199,8 @@ There is no user-selectable Comparison mode and no Previous Review comparison. T
 ```text
 WorkbookModel
 ├── metadata
+│   ├── workbookScan
+│   └── capabilities { current, comparison, resolved }
 ├── periods[]
 ├── periodPairs{}
 ├── portfolioSummaryByPeriod{}
@@ -245,6 +268,10 @@ Each Detail row becomes:
 ```
 
 `TOTAL` and other total/subtotal rows are excluded before duplicate-key checks. The store key is `Terminal + periodKey`.
+
+Cleaning retains `TOTAL` in the intermediate rows; only the Core Detail parser excludes it. Known optional fields that are absent or invalid remain `null`, not zero. Signed financial values, including `specificAP`, pass through unchanged.
+
+Resolved Dashboard capabilities combine the Current and Comparison sheet capabilities. A capability is `available` only when both sides are available, `unavailable` when both are unavailable, and otherwise `partial`; missing fields remain separated by period.
 
 ## 6. Field Mapping Rules
 

@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Codex Handoff
 
-> 更新时间：2026-08-18（Asia/Shanghai）
+> 更新时间：2026-08-19（Asia/Shanghai）
 > 交接目的：让新的 Codex 对话窗口在不依赖聊天历史的情况下，安全地继续维护本项目。  
 > 事实边界：本文基于当前仓库、`js/app.js`、HTML/CSS、现有文档、Git 状态及 Mock 工作簿的实际审计结果编写。本文不代表 Enterprise Release 已完成。
 
@@ -54,7 +54,29 @@ Store Detail
 
 ## 2. 当前状态摘要
 
-### Phase G — Final Product Polish & Portfolio Enhancements（当前最终状态，2026-08-18）
+### Phase 4 — Data Cleaning UX Integration（当前 UI 基线，2026-08-19）
+
+- **轻量状态区**：Upload 成功后，顶部 source/status 区显示折叠式 `Data Ready` summary，不新增主导航或分析页。
+- **用户语义**：Summary 显示 `Summary P&L · Dashboard Source · Cleaning not required`；Current / Comparison 显示已解析的 period、store count 和 `Cleaned`。Historical 与 no-period compatible Sheet 明确显示已清洗但未用于当前分析，不 concat。
+- **诊断分层**：near-compatible 是不阻断 warning，Notes / Mapping 类 Sheet 只在 details 中显示为与 store-level Detail 无关。Unknown columns 表述为 `additional fields preserved`，blank row/column 表述为 `ignored`，不声称删除 workbook 内容。
+- **Capability degradation**：两期 resolved capabilities 转换成面向用户的 limitation warnings。Tier / Status filter 可禁用；Filtered CC Bridge、Investment Quadrant、Productivity Risk 与 A&P Components 在缺字段时显示 unavailable/partial 状态，不继续计算出假 0、空图或 reconciliation error。Store P&L 的 missing amount 显示 `—`。
+- **Blocking / lifecycle**：缺 Current/Comparison 等 parser 阻断情况显示安全的主要原因与可展开 details，不显示 raw stack/internal keys。新 Upload 会先清掉上一份 scan state；Filter Reset 保留 Data Preparation；Clear Data 清掉它。
+- **Demo boundary**：当前 active UI 没有 Demo Mode 入口。Pure formatter 已固化 `Demo Dataset · Synthetic data · Ready for analysis`，不声称 Excel Cleaning，为未来 Demo 路径保留边界。
+- **测试与实际浏览器**：新增 Data Preparation UI pure tests 16/16；全部编号测试为 170/170。本地浏览器已覆盖 Standard Mock、01–04、multi-compatible/near-compatible/no-period、feature limitation、blocking、new upload replacement、Reset/Clear，console warning/error = 0。自动浏览器策略不允许直接导航 `file://`，本轮通过 classic-script/load-order/无网络调用检查，Windows Edge/Chrome 双击实机仍是人工验收项。
+
+### Phase 3 — Data Cleaning Parser Integration（当前数据基线，2026-08-19）
+
+- **正式接入 parser**：`detail-schema.js → data-cleaning.js → core-data.js` 已按 classic-script 顺序加载，保持 `file://` 和纯 client-side。
+- **Summary isolation**：`P&L review Yxx` 继续使用原 Summary detection / `parseSummarySheet()`；在 scan metadata 中为 `summary / notApplicable`，不运行 Detail header、blank mask、text/numeric normalization 或 capability validation。
+- **Schema-based Detail eligibility**：除 Summary 外的所有 Sheet 都进入 Detail scanner。是否可 Cleaning 由 8 个 shared-schema required fields 和 collision 决定，不再由 `LRP Counter` Sheet name 决定。
+- **Role 独立**：精确 `Y<year> S1|Full Year` 后缀只提供 period metadata。Current 仍为最大可用年，Comparison 仍为同 Review Period 的 Current - 1。Historical 和无 period 的 compatible Sheet 都保留 scan metadata，但不 concat。
+- **Canonical IR**：Cleaning 保留 source row/column、raw/cleaned cell、formula metadata、unknown columns、diagnostics 和 sheet capabilities。Core 直接消费 IR，不二次清洗；`TOTAL` 仍由 Core 排除。
+- **Missing / formula**：optional missing 保持 `null`；signed `specificAP` 保持原符号；cached formula 使用 `.v`，uncached required numeric formula 阻止 role assignment，uncached optional 为 `null + warning`。
+- **Capability metadata**：model 新增 `metadata.workbookScan` 和 `metadata.capabilities { current, comparison, resolved }`；Phase 4 仅消费这些 metadata，未重新扫描 Workbook。
+- **回归基线**：Cleaning 54/54，Core 60/60，Quadrant 25/25，Store Detail 15/15；Standard Mock 保持 160/150 stores、196/186 POS、CC Bridge `16,702 + 519 = 17,221`、residual 0，Full Year synthetic role detection 通过。
+- **仍未实现**：没有人工 role selector，也没有独立 Data Quality 主页或全量技术 diagnostics console。
+
+### Phase G — Final Product Polish & Portfolio Enhancements（当前 UI 基线，2026-08-18）
 
 - **Amount · Ratio 同级展示**：同一业务指标的 amount 与 ratio 在 01/02/04 统一为同行、同层级展示；04 Gross Margin % 等 ratio-only 指标仍保持 ratio-only。
 - **01 Executive Overview**：已删除重复的 P&L Snapshot；8 张 Key Figure card 中除 Store Count 外均可直接定位 02 Snapshot 对应行，Bridge 始终保持 Customer Contribution。
@@ -539,10 +561,10 @@ KPI click
    另：`retail-performance-dashboard.vercel.app` 已被同一账户中的另一套韩文 Dashboard 占用，**不是本项目，禁止当作本项目网址**。
 
 2. **缺少自动化端到端回归测试。**  
-   当前 `npm run check` 已覆盖 active JavaScript 与 3 个 test 文件，66 项 data/helper tests 已存在；但 Upload、KPI、筛选、跨页 Drill-down 与图表生命周期仍依赖人工/agent browser smoke test，没有持久化的自动浏览器测试套件。
+   当前 `npm run check` 已覆盖 active JavaScript 与 5 个 test 文件，170 项编号 data/helper tests 已存在；但 Upload、KPI、筛选、跨页 Drill-down 与图表生命周期仍依赖人工/agent browser smoke test，没有持久化的自动浏览器测试套件。
 
-3. **Active parser 尚未区分 missing / invalid / legitimate zero diagnostics。**
-   Active `js/data/core-data.js` 的 `toNumber()` 对空值和不可解析文本返回 `null`，不会直接返回 0；但尚未生成行号/字段级的三态 diagnostics。`js/app.js` 中返回 0 的是尚未清理、不在标准 Workbook active load path 上的 legacy rectangular parser。
+3. **Blocking error 已保留匿名 sheet-by-sheet scan，但不是可持久化诊断导出。**
+   Role assignment 失败时，Core 在 Error 上附加 sanitized `workbookScan`，UI 可显示已识别 Summary/Detail/other Sheet 与安全原因；不包含 cleaned rows、raw cell values 或 stack。若未来增加 diagnostics export，仍必须保持这一匿名边界。
 
 ### P1 — 重要优化
 
@@ -552,11 +574,11 @@ KPI click
 5. **必要字段与派生逻辑存在语义不一致。**  
    `netSales`、`grossMargin`、`contribution`、`operatingProfit` 被列为 required，因此校验通过后，它们在 `deriveRecord()` 中的“缺失时派生”分支实际不可达。需要明确未来策略：核心报表值必须由 Excel 提供，还是允许用明细科目派生；确认后同步代码和文档。
 
-6. **模糊字段自动映射存在误配风险。**  
-   当前别名允许 `includes()` 模糊匹配。相近字段（例如 amount 与 percentage、subtotal 与 component）可能被错误命中。真实数据阶段应显示 mapping confidence、冲突提示，并要求用户确认低置信度字段。
+6. **Legacy Mapping UI 与 active Cleaning mapping 的边界需继续保持。**
+   Active Detail Cleaning 只使用 whitespace-normalized、case-insensitive exact alias matching，并阻止 collision。`js/app.js` 内的 legacy rectangular Mapping UI 仍含旧逻辑；不得将其 fuzzy/includes 匹配重新带回 active Cleaning path。
 
-7. **公式无缓存时只警告并以 0 继续。**  
-   这可能导致 Dashboard 加载出严重失真的结果。关键 required 字段出现 uncached formula 时应考虑阻止加载；recommended 字段可警告降级。需由用户确认严格程度。
+7. **Formula 安全规则与呈现边界已落地。**
+   Cached formula 使用 `.v`；uncached required numeric formula 阻止 Dashboard readiness；uncached optional formula 保持 `null + warning`。UI 只显示用户可理解的 warning/blocking 摘要，不展示 formula/cell 技术 payload，不重算 Excel 公式。
 
 8. **比较期完整性检查有限。**  
    单店缺少 Comparison 时会显示提示，但组合层未明确报告新增店、退出店、只在一侧出现的 Store 数量及其对 Variance 的影响。可增加 Bridge scope reconciliation / cohort indicator。
@@ -586,18 +608,18 @@ KPI click
 - 未发现应用代码中的绝对个人路径、外部 CDN 或主动网络请求。
 - 未发现完整业务行的 `console.log`。
 
-## 10. Git 与部署状态（Phase G 快照）
+## 10. Git 与部署状态（Phase 4 快照）
 
 - Branch：`main`
 - Upstream：`origin/main`
-- 当前状态：`main...origin/main [ahead 9]`，Phase B–G 的已验收/待人工验收成果仍在 working tree，未 commit。
+- 当前状态：`main...origin/main [ahead 10]`；Phase 2/3/4 Data Cleaning 变更仍在 working tree，未 commit。
 - 最近 commit：
 
   ```text
-  4ce813d Fix productivity chart resize lifecycle
+  6346bfb Finalize dashboard analytics and interactions
   ```
 
-- 按用户要求：**Phase G 不 commit、不 push，不 reset / checkout / stash / revert。**
+- 按用户要求：**Phase 4 不 commit、不 push，不 reset / checkout / stash / revert。**
 - Git Push 到 `main` 会触发 Vercel 部署；但固定 alias 自动跟随问题仍需按 P0 核验。
 - Vercel 项目名：`retail-performance-dashboard`；SSO Protection 已关闭，开发站公开访问，因此必须继续保持 Mock-only。
 
@@ -607,9 +629,9 @@ KPI click
 
 1. 读取本文件，不要依赖旧聊天记忆。
 2. 运行 `git status --short --branch`，确认只有用户预期的修改。
-3. 只读核验 Vercel Production Domain / alias 是否跟随最新 Git 部署；不要误用被其他项目占用的 `retail-performance-dashboard.vercel.app`。
-4. 建立最小自动化 E2E smoke test，覆盖标准 Summary + Current/Comparison Detail Workbook 上传、KPI、Filter、Driver → Store → Detail、Quadrant/Movement、A&P component views 和 Clear Data。
-5. 为 invalid numeric / uncached required formula 建立明确的数据验证策略，再修改解析逻辑。
+3. 等待用户完成 Phase 4 最终人工验收；不要自动进入新 Phase。
+4. 后续 UI 仍只消费 `metadata.workbookScan` 和 resolved capabilities，不要重新扫描 Workbook 或在 `app.js` 重写 schema/cleaning 逻辑。
+5. 保持 Summary `notApplicable`、Current/Comparison role 独立、unknown columns 保留和匿名 diagnostics 边界。
 
 ### P1 — 重要优化
 

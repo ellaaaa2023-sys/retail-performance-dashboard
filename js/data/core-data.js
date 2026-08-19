@@ -1,16 +1,29 @@
 (function (root, factory) {
   'use strict';
 
-  const api = factory();
+  const detailSchema = typeof module === 'object' && module.exports
+    ? require('./detail-schema.js')
+    : root.RetailDetailSchema;
+  const dataCleaning = typeof module === 'object' && module.exports
+    ? require('./data-cleaning.js')
+    : root.RetailDataCleaning;
+  const api = factory(detailSchema, dataCleaning);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RetailDashboardData = api;
-}(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (DetailSchema, DataCleaning) {
   'use strict';
+
+  if (!DetailSchema || !Array.isArray(DetailSchema.FIELDS)) {
+    throw new Error('RetailDetailSchema must be loaded before RetailDashboardData.');
+  }
+  if (!DataCleaning || typeof DataCleaning.scanWorkbook !== 'function') {
+    throw new Error('RetailDataCleaning must be loaded before RetailDashboardData.');
+  }
 
   const VERSION = '1.0.0';
   const DEFAULT_SCOPE = 'actualAdjusted';
   const RECONCILIATION_TOLERANCE = 1e-6;
-  const DETAIL_SHEET_PATTERN = /^LRP Counter Y(\d{2,4})\s+(S1|Full Year)$/i;
+  const DETAIL_PERIOD_SUFFIX_PATTERN = /(?:^|\s)Y(\d{2,4})\s+(S1|Full Year)$/i;
   const SUMMARY_SHEET_PATTERN = /^P&L review Y(\d{2,4})$/i;
 
   const SUMMARY_LINE_ALIASES = {
@@ -53,70 +66,6 @@
     nonSpecificCosts: ['Total non-specific costs'],
     operatingProfit: ['OP. PROFIT after FX excl PS']
   };
-
-  const DETAIL_FIELDS = {
-    terminal: ['Terminal'],
-    store: ['Store'],
-    city: ['City'],
-    region: ['Region'],
-    status: ['Status'],
-    productivityTier: ['门店单产等级'],
-    cityPosNo: ['城市POS数'],
-    storeProductivity: ['门店总单产'],
-    rsp: ['RSP'],
-    grossSales: ['Gross Sales'],
-    discount: ['Discount'],
-    rebates: ['Rebates'],
-    bomPa: ['Bom PA'],
-    paRetroFunding: ['PA Retro Funding'],
-    promotionalAllowance: ['TTL PA'],
-    totalReturns: ['Actual Returns'],
-    vipRedemption: ['VIP Redemp.'],
-    oca: ['OCA'],
-    coupon: ['Coupon'],
-    totalMinorations: ['Total Minorations'],
-    totalMinorationsPct: ['Total Minorations% of GS'],
-    netSales: ['CA NET'],
-    netSalesPct: ['CA NET % of GS'],
-    stdCos: ['COGS'],
-    royalTaMs: ['Royalty'],
-    physicalDistribution: ['PD'],
-    specialOperationsCost: ['PLV1'],
-    obsoleteSlowMovingReturns: ['OBSL'],
-    grossMargin: ['Gross Margin'],
-    grossMarginPct: ['Gross Margin% of CA'],
-    tradeRelation: ['Trade Relation'],
-    customerSamples: ['Sample'],
-    promotionalGifts: ['PLV2'],
-    posAdvertisingAmortization: ['Amort. + Writeoff'],
-    posAdvertisingExpense: ['POS.'],
-    merchandising: ['Mer.'],
-    animations: ['ANM.'],
-    tester: ['Tester'],
-    daHeadcount: ['DA HC'],
-    daCost: ['DA Cost'],
-    specificDevelopment: ['specific dev.'],
-    daCostAndSpecificDevelopment: ['DA Cost+specific dev.'],
-    otherAP: ['Others'],
-    specificAP: ['Specific A&P'],
-    specificAPPct: ['Specific A&P% of CA'],
-    specificSga: ['Specific SG&A'],
-    customerContribution: ['Client Contribution'],
-    customerContributionPct: ['Client Contribution%'],
-    nonSpecificCosts: ['Unspecific Costs'],
-    operatingProfit: ['Operating Profit'],
-    operatingProfitPct: ['Operating Profit%']
-  };
-
-  const DETAIL_TEXT_FIELDS = new Set([
-    'terminal', 'store', 'city', 'region', 'status', 'productivityTier'
-  ]);
-
-  const DETAIL_REQUIRED_FIELDS = [
-    'terminal', 'store', 'city', 'region', 'status', 'productivityTier',
-    'storeProductivity', 'grossSales', 'totalMinorations', 'netSales',
-    'grossMargin', 'specificAP', 'customerContribution'
-  ];
 
   const PORTFOLIO_RATIO_METRICS = new Set([
     'totalMinorationsPct', 'grossMarginPct', 'customerContributionPct'
@@ -312,26 +261,13 @@
     });
   }
 
-  function findDetailHeaderRow(matrix) {
-    let best = { rowIndex: -1, score: -1 };
-    matrix.slice(0, 30).forEach((row, rowIndex) => {
-      const headers = new Set(row.map(normalizeHeader));
-      const score = ['terminal', 'store', 'city', 'region', 'status', '门店单产等级',
-        'gross sales', 'total minorations', 'ca net', 'gross margin', 'client contribution']
-        .reduce((total, header) => total + (headers.has(header) ? 1 : 0), 0);
-      if (score > best.score) best = { rowIndex, score };
-    });
-    if (best.score < 8) throw new Error('Store Detail header row could not be identified reliably.');
-    return best.rowIndex;
-  }
-
-  function detailSheetInfo(name) {
-    const match = normalizeSpace(name).match(DETAIL_SHEET_PATTERN);
+  function extractDetailPeriodMetadata(name) {
+    const match = normalizeSpace(name).match(DETAIL_PERIOD_SUFFIX_PATTERN);
     if (!match) return null;
     return {
-      name,
       year: parseYear(match[1]),
-      reviewPeriod: normalizeReviewPeriod(match[2])
+      reviewPeriod: normalizeReviewPeriod(match[2]),
+      source: 'sheet-name-suffix'
     };
   }
 
@@ -347,56 +283,152 @@
       && top.includes('actual adj');
   }
 
+  function classifyScanRole(scan, periodMetadata, assignments) {
+    if (scan.classification === 'summary') return 'summary';
+    if (assignments.current && scan.sheetName === assignments.current.sheetName) return 'current';
+    if (assignments.comparison && scan.sheetName === assignments.comparison.sheetName) return 'comparison';
+    if (scan.cleaningStatus === 'compatible' && scan.dashboardReadiness.status === 'ready') {
+      return periodMetadata ? 'historical' : 'unassigned';
+    }
+    if (scan.cleaningStatus === 'nearCompatible') return 'nearCompatible';
+    if (scan.diagnostics.some(item => item.severity === 'blocking')) return 'blocked';
+    if (scan.cleaningStatus === 'compatible' && scan.dashboardReadiness.status === 'blocked') return 'blocked';
+    return 'ignored';
+  }
+
+  function sanitizeScanSheet(scan, periodMetadata, role) {
+    const fields = scan.fields ? {
+      matchedRequired: scan.fields.matchedRequired.slice(),
+      missingRequired: scan.fields.missingRequired.slice(),
+      matchedOptional: scan.fields.matchedOptional.slice(),
+      missingOptional: scan.fields.missingOptional.slice(),
+      unknownColumns: scan.fields.unknownColumns.map(column => ({ ...column })),
+      evidence: { ...scan.fields.evidence }
+    } : null;
+    return {
+      sheetName: scan.sheetName,
+      sheetIndex: scan.sheetIndex,
+      classification: scan.classification,
+      cleaningStatus: scan.cleaningStatus,
+      dashboardReadiness: {
+        status: scan.dashboardReadiness.status,
+        missing: scan.dashboardReadiness.missing.slice()
+      },
+      periodMetadata: periodMetadata ? { ...periodMetadata } : null,
+      role,
+      header: scan.header ? {
+        sourceRowNumber: scan.header.sourceRowNumber,
+        sourceRowIndex: scan.header.sourceRowIndex
+      } : null,
+      fields,
+      counts: { ...scan.counts },
+      diagnostics: scan.diagnostics.map(item => ({ ...item })),
+      capabilities: scan.capabilities
+    };
+  }
+
+  function buildWorkbookScanMetadata(cleaningScan, detailScans, assignments) {
+    const periodMetadataBySheet = new Map(
+      detailScans.map(scan => [scan.sheetName, extractDetailPeriodMetadata(scan.sheetName)])
+    );
+    const scanSheets = cleaningScan.sheets.map(scan => {
+      const periodMetadata = periodMetadataBySheet.get(scan.sheetName) || null;
+      return sanitizeScanSheet(scan, periodMetadata, classifyScanRole(scan, periodMetadata, assignments || {}));
+    });
+    return {
+      version: cleaningScan.version,
+      sheets: scanSheets,
+      compatibleSheets: scanSheets.filter(sheet => sheet.cleaningStatus === 'compatible').map(sheet => sheet.sheetName),
+      unassignedCompatible: scanSheets.filter(sheet => sheet.role === 'unassigned').map(sheet => sheet.sheetName),
+      historicalCompatible: scanSheets.filter(sheet => sheet.role === 'historical').map(sheet => sheet.sheetName),
+      nearCompatible: scanSheets.filter(sheet => sheet.cleaningStatus === 'nearCompatible').map(sheet => sheet.sheetName),
+      assigned: {
+        current: assignments && assignments.current ? assignments.current.sheetName : null,
+        comparison: assignments && assignments.comparison ? assignments.comparison.sheetName : null
+      },
+      diagnostics: cleaningScan.diagnostics.map(item => ({ ...item }))
+    };
+  }
+
+  function workbookPreparationError(message, workbookScan) {
+    const error = new Error(message);
+    error.workbookScan = workbookScan;
+    return error;
+  }
+
   function discoverWorkbookSheets(workbook, XLSX) {
     const sheetNames = Array.isArray(workbook.SheetNames) ? workbook.SheetNames : [];
     const summaryCandidates = [];
-    const detailCandidates = [];
 
     sheetNames.forEach(name => {
       const summaryInfo = summarySheetInfo(name);
-      if (summaryInfo) {
-        const matrix = sheetToMatrix(workbook, name, XLSX);
-        if (validateSummaryCandidate(matrix)) summaryCandidates.push({ ...summaryInfo, matrix });
-      }
-      const detailInfo = detailSheetInfo(name);
-      if (detailInfo) {
-        const matrix = sheetToMatrix(workbook, name, XLSX);
-        const headerRowIndex = findDetailHeaderRow(matrix);
-        detailCandidates.push({ ...detailInfo, matrix, headerRowIndex });
-      }
+      if (!summaryInfo) return;
+      const matrix = sheetToMatrix(workbook, name, XLSX);
+      if (validateSummaryCandidate(matrix)) summaryCandidates.push({ ...summaryInfo, matrix });
     });
 
     if (summaryCandidates.length !== 1) {
       throw new Error(`Expected exactly one Summary P&L sheet; found ${summaryCandidates.length}.`);
     }
-    if (!detailCandidates.length) throw new Error('Store Detail sheets were not found.');
 
-    const periods = uniqueSorted(detailCandidates.map(item => item.reviewPeriod));
+    const summary = summaryCandidates[0];
+    const cleaningScan = DataCleaning.scanWorkbook(workbook, {
+      XLSX,
+      summarySheetNames: [summary.name]
+    });
+    const detailScans = cleaningScan.sheets.filter(scan => scan.classification !== 'summary');
+    const compatibleReady = detailScans
+      .filter(scan => scan.cleaningStatus === 'compatible' && scan.dashboardReadiness.status === 'ready')
+      .map(scan => ({
+        sheetName: scan.sheetName,
+        scan,
+        periodMetadata: extractDetailPeriodMetadata(scan.sheetName)
+      }));
+    const roleCandidates = compatibleReady.filter(item => item.periodMetadata);
+    const preliminaryScan = buildWorkbookScanMetadata(cleaningScan, detailScans, {});
+
+    if (!roleCandidates.length) {
+      throw workbookPreparationError('No cleaned Store Detail sheet has reliable year and review-period metadata.', preliminaryScan);
+    }
+
+    const periods = uniqueSorted(roleCandidates.map(item => item.periodMetadata.reviewPeriod));
     if (periods.length !== 1) {
-      throw new Error('One Workbook must contain exactly one Review Period.');
+      throw workbookPreparationError('One Workbook must contain exactly one Review Period.', preliminaryScan);
     }
     const reviewPeriod = periods[0];
-    const currentYear = Math.max(...detailCandidates.map(item => item.year));
+    const currentYear = Math.max(...roleCandidates.map(item => item.periodMetadata.year));
     const comparisonYear = currentYear - 1;
-    const currentCandidates = detailCandidates.filter(item => item.year === currentYear && item.reviewPeriod === reviewPeriod);
-    const comparisonCandidates = detailCandidates.filter(item => item.year === comparisonYear && item.reviewPeriod === reviewPeriod);
+    const currentCandidates = roleCandidates.filter(item => (
+      item.periodMetadata.year === currentYear && item.periodMetadata.reviewPeriod === reviewPeriod
+    ));
+    const comparisonCandidates = roleCandidates.filter(item => (
+      item.periodMetadata.year === comparisonYear && item.periodMetadata.reviewPeriod === reviewPeriod
+    ));
+    const diagnosticAssignments = {
+      current: currentCandidates.length === 1 ? currentCandidates[0] : null,
+      comparison: comparisonCandidates.length === 1 ? comparisonCandidates[0] : null
+    };
+    const diagnosticScan = buildWorkbookScanMetadata(cleaningScan, detailScans, diagnosticAssignments);
     if (currentCandidates.length !== 1) {
-      throw new Error(`Current Store Detail sheet is ambiguous for Y${String(currentYear).slice(-2)} ${reviewPeriod}.`);
+      throw workbookPreparationError(`Current Store Detail sheet is ambiguous for Y${String(currentYear).slice(-2)} ${reviewPeriod}.`, diagnosticScan);
     }
     if (comparisonCandidates.length !== 1) {
-      throw new Error('Prior-year same-period detail sheet not found.');
+      throw workbookPreparationError('Prior-year same-period detail sheet not found.', diagnosticScan);
     }
-    if (summaryCandidates[0].year !== currentYear) {
-      throw new Error('Summary P&L year does not match the current Store Detail year.');
+    if (summary.year !== currentYear) {
+      throw workbookPreparationError('Summary P&L year does not match the current Store Detail year.', diagnosticScan);
     }
 
+    const assignments = { current: currentCandidates[0], comparison: comparisonCandidates[0] };
+
     return {
-      summary: summaryCandidates[0],
+      summary,
       currentDetail: currentCandidates[0],
       comparisonDetail: comparisonCandidates[0],
       reviewPeriod,
       currentYear,
-      comparisonYear
+      comparisonYear,
+      workbookScan: buildWorkbookScanMetadata(cleaningScan, detailScans, assignments)
     };
   }
 
@@ -510,57 +542,55 @@
     };
   }
 
-  function mapDetailHeaders(headers) {
-    const normalized = headers.map(normalizeHeader);
-    const mappings = {};
-    Object.entries(DETAIL_FIELDS).forEach(([key, aliases]) => {
-      const matches = [];
-      aliases.map(normalizeHeader).forEach(alias => {
-        normalized.forEach((header, columnIndex) => {
-          if (header === alias) matches.push(columnIndex);
-        });
-      });
-      const uniqueMatches = Array.from(new Set(matches));
-      if (uniqueMatches.length > 1) throw new Error(`Detail field mapping is ambiguous for ${key}.`);
-      mappings[key] = uniqueMatches.length === 1
-        ? { columnIndex: uniqueMatches[0], header: normalizeSpace(headers[uniqueMatches[0]]), match: 'exact-header' }
-        : null;
+  function mappingsFromCleanedSheet(cleanedSheet) {
+    const mappings = Object.fromEntries(DetailSchema.FIELDS.map(field => [field.key, null]));
+    cleanedSheet.header.columns.forEach(column => {
+      if (!column.canonicalKey) return;
+      mappings[column.canonicalKey] = {
+        columnIndex: column.sourceColumnIndex,
+        header: column.cleanedHeader,
+        match: 'cleaned-exact-header'
+      };
     });
     mappings.posNo = { columnIndex: null, header: null, match: 'derived-distinct-terminal' };
-    const missing = DETAIL_REQUIRED_FIELDS.filter(key => !mappings[key]);
-    if (missing.length) throw new Error(`Store Detail is missing required fields: ${missing.join(', ')}.`);
     return mappings;
   }
 
-  function isTotalOrBlankRow(row, mappings) {
-    const terminal = normalizeHeader(row[mappings.terminal.columnIndex]);
-    const store = normalizeHeader(row[mappings.store.columnIndex]);
+  function isTotalOrBlankDetailValues(values) {
+    const terminal = normalizeHeader(values.terminal);
+    const store = normalizeHeader(values.store);
     if (!terminal && !store) return true;
     return terminal === 'total' || store === 'total' || terminal.startsWith('total ') || store.startsWith('total ');
   }
 
   function parseDetailSheet(detailInfo) {
-    const { matrix, headerRowIndex, name, year, reviewPeriod } = detailInfo;
-    const headers = matrix[headerRowIndex] || [];
-    const mappings = mapDetailHeaders(headers);
+    const cleanedSheet = detailInfo.scan;
+    const { year, reviewPeriod } = detailInfo.periodMetadata;
+    if (cleanedSheet.cleaningStatus !== 'compatible' || cleanedSheet.dashboardReadiness.status !== 'ready') {
+      throw new Error(`Store Detail sheet is not ready for Dashboard parsing: ${cleanedSheet.sheetName}.`);
+    }
+    const mappings = mappingsFromCleanedSheet(cleanedSheet);
+    const ambiguousRatioCells = new Set(cleanedSheet.diagnostics
+      .filter(item => item.code === 'RATIO_SCALE_AMBIGUOUS')
+      .map(item => `${item.sourceRowNumber}:${item.sourceColumnIndex}`));
     const stores = [];
 
-    matrix.slice(headerRowIndex + 1).forEach((row, offset) => {
-      if (isTotalOrBlankRow(row, mappings)) return;
-      const values = {};
-      Object.entries(mappings).forEach(([key, mapping]) => {
-        if (!mapping || mapping.columnIndex == null) return;
-        const raw = row[mapping.columnIndex];
-        values[key] = DETAIL_TEXT_FIELDS.has(key) ? normalizeSpace(raw) : toNumber(raw);
+    cleanedSheet.cleanedRows.forEach(row => {
+      const values = Object.fromEntries(DetailSchema.FIELDS.map(field => [field.key, null]));
+      row.cells.forEach(cell => {
+        if (!cell.canonicalKey) return;
+        const location = `${row.sourceRowNumber}:${cell.sourceColumnIndex}`;
+        values[cell.canonicalKey] = ambiguousRatioCells.has(location) ? null : cell.cleanedValue;
       });
+      if (isTotalOrBlankDetailValues(values)) return;
       values.posNo = values.terminal ? 1 : 0;
       const apExpense = values.specificAP;
       const apExpenseMagnitude = Number.isFinite(apExpense) ? Math.abs(apExpense) : null;
-      const apExpensePct = values.specificAPPct != null
-        ? toRatio(values.specificAPPct)
+      const apExpensePct = Number.isFinite(values.specificAPPct)
+        ? values.specificAPPct
         : safeRatio(apExpense, values.netSales);
       stores.push({
-        sourceRow: headerRowIndex + offset + 2,
+        sourceRow: row.sourceRowNumber,
         year,
         reviewPeriod,
         terminal: values.terminal,
@@ -596,12 +626,13 @@
     });
 
     return {
-      sheetName: name,
+      sheetName: cleanedSheet.sheetName,
       year,
       reviewPeriod,
-      headerRow: headerRowIndex + 1,
+      headerRow: cleanedSheet.header.sourceRowNumber,
       mappings,
-      stores
+      stores,
+      capabilities: cleanedSheet.capabilities
     };
   }
 
@@ -686,6 +717,25 @@
     };
   }
 
+  function resolveDashboardCapabilities(currentCapabilities, comparisonCapabilities) {
+    const resolved = {};
+    Object.keys(DetailSchema.CAPABILITY_RULES).forEach(key => {
+      const current = currentCapabilities[key];
+      const comparison = comparisonCapabilities[key];
+      let status = 'partial';
+      if (current.status === 'available' && comparison.status === 'available') status = 'available';
+      else if (current.status === 'unavailable' && comparison.status === 'unavailable') status = 'unavailable';
+      resolved[key] = {
+        status,
+        missing: {
+          current: current.missing.slice(),
+          comparison: comparison.missing.slice()
+        }
+      };
+    });
+    return resolved;
+  }
+
   function parseWorkbook(workbook, options) {
     const settings = options || {};
     const XLSX = settings.XLSX || (typeof globalThis !== 'undefined' ? globalThis.XLSX : null);
@@ -696,6 +746,11 @@
     const storeMatches = matchStores(current.stores, comparison.stores);
     const currentSummary = summaryMetrics(summary, 'current');
     const comparisonSummary = summaryMetrics(summary, 'comparison');
+    const capabilities = {
+      current: current.capabilities,
+      comparison: comparison.capabilities,
+      resolved: resolveDashboardCapabilities(current.capabilities, comparison.capabilities)
+    };
 
     return {
       version: VERSION,
@@ -709,6 +764,8 @@
         comparisonPeriodKey: `${discovered.comparisonYear} ${discovered.reviewPeriod}`,
         comparisonRule: 'prior-year-same-period',
         unit: 'KRMB',
+        workbookScan: discovered.workbookScan,
+        capabilities,
         sheets: {
           summary: summary.sheetName,
           currentDetail: current.sheetName,
@@ -740,7 +797,7 @@
     const settings = options || {};
     const XLSX = settings.XLSX || (typeof globalThis !== 'undefined' ? globalThis.XLSX : null);
     if (!XLSX || typeof XLSX.read !== 'function') throw new Error('A compatible local SheetJS runtime is required.');
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true, cellFormula: true });
     return parseWorkbook(workbook, settings);
   }
 
@@ -780,7 +837,23 @@
   }
 
   function sumField(stores, field) {
-    return stores.reduce((sum, store) => sum + (Number(store.pnl[field]) || 0), 0);
+    let total = 0;
+    for (const store of stores) {
+      const value = store.pnl[field];
+      if (!Number.isFinite(value)) return null;
+      total += value;
+    }
+    return total;
+  }
+
+  function sumStoreValue(stores, field) {
+    let total = 0;
+    for (const store of stores) {
+      const value = store[field];
+      if (!Number.isFinite(value)) return null;
+      total += value;
+    }
+    return total;
   }
 
   function aggregateStores(stores, aup) {
@@ -789,7 +862,7 @@
     const netSales = sumField(stores, 'netSales');
     const grossMargin = sumField(stores, 'grossMargin');
     const customerContribution = sumField(stores, 'customerContribution');
-    const posNo = stores.reduce((sum, store) => sum + (Number(store.cityPosNo) || 0), 0);
+    const posNo = sumStoreValue(stores, 'cityPosNo');
     return {
       posNo,
       aup,
@@ -1016,6 +1089,8 @@
     parseWorkbook,
     parseArrayBuffer,
     discoverWorkbookSheets,
+    extractDetailPeriodMetadata,
+    resolveDashboardCapabilities,
     createDataService,
     matchStores,
     normalizeFilters,
