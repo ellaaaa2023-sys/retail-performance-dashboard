@@ -185,9 +185,19 @@ check(14, 'Blocking parser error becomes a user-facing reason', () => {
 });
 
 check(15, 'Demo mode never claims Excel cleaning', () => {
-  const view = PreparationUI.buildDemoPreparation();
-  assert.equal(view.title, 'Demo Dataset');
-  assert.doesNotMatch(JSON.stringify(view), /cleaned|workbook/i);
+  const model = standardModel();
+  model.metadata.demo = { datasetLabel: 'Synthetic Demo Dataset', summaryLabel: 'Synthetic Summary' };
+  const view = PreparationUI.buildDemoPreparation(model);
+  assert.equal(view.title, 'Data Ready');
+  assert.equal(view.summary, 'Synthetic Demo Dataset · 2 store-level data sheets ready · 2 used in current analysis');
+  assert.equal(view.period, '2026 S1 vs 2025 S1');
+  assert.equal(view.detailsLabel, 'View details');
+  assert.deepEqual(view.primarySheets.map(sheet => [sheet.name, sheet.detail]), [
+    ['Summary P&L', 'Synthetic Summary · Dashboard Source'],
+    ['Current Detail', '160 stores · Ready'],
+    ['Comparison Detail', '150 stores · Ready']
+  ]);
+  assert.doesNotMatch(JSON.stringify(view), /cleaned|workbook scanned|cleaning completed/i);
 });
 
 check(16, 'A newly built view does not retain prior scan state', () => {

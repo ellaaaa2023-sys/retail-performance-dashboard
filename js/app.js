@@ -12,6 +12,7 @@ const THEME = {
 const ProductivityQuadrant = window.RetailProductivityQuadrant;
 const StoreDetailModel = window.RetailStoreDetail;
 const DataPreparationUI = window.RetailDataPreparationUI;
+const SourceLifecycle = window.RetailSourceLifecycle;
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -131,7 +132,7 @@ const state = {
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
   portfolioView: 'productivity', snapshot: 'current',
   portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null
+  model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -217,7 +218,7 @@ function renderDataPreparation(view) {
   const hasDetails = view.steps.length || view.primarySheets.length || view.additionalSheets.length || view.sheetWarnings.length || view.otherSheets.length || view.capabilityWarnings.length || view.privacy;
   const steps = view.steps.length ? `<div class="preparation-steps">${view.steps.map(step => `<span class="preparation-step">✓ ${esc(step)}</span>`).join('')}</div>` : '';
   const capabilityWarnings = preparationGroupHtml('Availability', view.capabilityWarnings, warning => `<div class="preparation-warning"><div class="preparation-mark">⚠</div><div><strong>${esc(warning.title)}</strong><span>${esc(warning.detail)}</span></div></div>`);
-  const details = hasDetails ? `<details${view.expanded ? ' open' : ''}><summary>Workbook Scan Details</summary><div class="preparation-details">${steps}${preparationGroupHtml('Dashboard sources', view.primarySheets, preparationSheetHtml)}${preparationGroupHtml('Additional compatible sheets', view.additionalSheets, preparationSheetHtml)}${preparationGroupHtml('Sheets requiring attention', view.sheetWarnings, preparationSheetHtml)}${capabilityWarnings}${preparationGroupHtml('Other sheets', view.otherSheets, preparationSheetHtml)}${view.privacy ? `<div class="preparation-privacy">${esc(view.privacy)}</div>` : ''}</div></details>` : '';
+  const details = hasDetails ? `<details${view.expanded ? ' open' : ''}><summary>${esc(view.detailsLabel || 'Workbook Scan Details')}</summary><div class="preparation-details">${steps}${preparationGroupHtml(view.primaryGroupLabel || 'Dashboard sources', view.primarySheets, preparationSheetHtml)}${preparationGroupHtml('Additional compatible sheets', view.additionalSheets, preparationSheetHtml)}${preparationGroupHtml('Sheets requiring attention', view.sheetWarnings, preparationSheetHtml)}${capabilityWarnings}${preparationGroupHtml('Other sheets', view.otherSheets, preparationSheetHtml)}${view.privacy ? `<div class="preparation-privacy">${esc(view.privacy)}</div>` : ''}</div></details>` : '';
   panel.innerHTML = `<div class="preparation-summary"><div class="preparation-icon">${icon}</div><div class="preparation-copy"><strong>${esc(view.title)}</strong><span>${esc(view.summary)}</span></div>${view.period ? `<div class="preparation-period">${esc(view.period)}</div>` : ''}</div>${details}`;
 }
 
@@ -540,7 +541,15 @@ function refreshCityOptions() {
 }
 function enableDashboard(on) {
   $('contextBar').classList.toggle('is-disabled',!on);
-  ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect','clearBtn'].forEach(id => { if ($(id)) $(id).disabled = !on; });
+  ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect'].forEach(id => { if ($(id)) $(id).disabled = !on; });
+  updateSourceUi();
+}
+
+function updateSourceUi() {
+  const uploaded = state.sourceType === 'upload';
+  $('clearBtn').disabled = !uploaded;
+  $('sourceLabel').textContent = uploaded ? 'Uploaded Workbook' : 'Demo Data';
+  $('sourceDetail').textContent = uploaded ? state.fileName : 'Synthetic dataset';
 }
 
 const OVERVIEW_KPIS_PRIMARY = [
@@ -1645,35 +1654,61 @@ function switchTab(tab, { scrollTop = true } = {}) {
 }
 function setSegment(containerId,value) { document.querySelectorAll(`#${containerId} button[data-value]`).forEach(button=>button.classList.toggle('active',button.dataset.value===value)); }
 
-function clearData(announce = true) {
-  state.book=null; state.model=null; state.service=null;
-  state.fileName=''; state.sheetName=''; state.headerRow=0; state.headers=[]; state.matrix=[]; state.mapping={}; state.signature='';
-  state.records=[]; state.periods=[]; state.currentPeriodKey=''; state.filters={}; state.selectedStore=''; state.selectedPnlLine=''; state.selectedDriver=''; state.selectedQuadrant='all'; state.search=''; state.warnings=[]; state.dataStats=null; state.preparationView=null;
-  state.snapshot='current'; state.portfolioView='productivity';
-  Object.values(state.charts).forEach(c=>c.dispose()); state.charts={};
-  ['bridgeChart','productivityChart','apComparisonChart','apMovementChart'].forEach(id=>{$(id).innerHTML='<div class="chart-empty">Upload a workbook to view analysis</div>';});
-  ['primaryKpis','secondaryKpis','storeKpis','driverTableBody','storePnlBody','positiveDrivers','negativeDrivers','positiveStores','negativeStores','riskStoreBody','quadrantSummary'].forEach(id=>{$(id).innerHTML='';});
-  $('varianceSnapshotBody').innerHTML='<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
-  $('overviewInsights').innerHTML='<div class="empty-state">No analysis available</div>';
-  $('varianceInsights').innerHTML='<div class="empty-state">No analysis available</div>';
-  $('storeInsights').innerHTML='<div class="empty-state">No store selected</div>';
-  $('detailTitle').textContent='Select a store to review';$('detailMeta').textContent='Current versus comparison period';
-  $('storeHeader').hidden = true;
-  $('reviewPeriodValue').textContent='—';
-  $('periodSummary').innerHTML='<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>';
-  applyPeriodLabels();
-  $('footerMeta').textContent='Files are processed locally and are not transmitted to an external server';
-  $('tierSummary').innerHTML='';$('bridgeReconcile').textContent='—';$('storeReconcile').textContent='—';
-  $('quadrantSummaryLabel').textContent='Quadrant Summary';
-  setSegment('snapshotToggle','current');setSegment('portfolioView','productivity');
-  $('storeSearch').value='';$('fileInput').value='';
-  $('detailStoreSelect').innerHTML='<option>No data</option>';
-  [['regionFilter','All Regions'],['cityFilter','All Cities'],['statusFilter','All Status'],['tierFilter','All Tiers']].forEach(([id,label])=>{$(id).innerHTML=`<option value="">${label}</option>`;});
-  ['statusFilter','tierFilter'].forEach(id => { $(id).title = ''; });
-  updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
-  renderDataPreparation(null);
-  enableDashboard(false);
-  if (announce) setNotice('info','Data cleared from browser memory','No workbook values are retained by the dashboard. Field Mapping settings remain available locally.');
+function disposeAllCharts() {
+  Object.values(state.charts).forEach(chart => chart.dispose());
+  state.charts = {};
+}
+
+function resetInteractionUi() {
+  ['regionFilter','cityFilter','statusFilter','tierFilter'].forEach(id => { $(id).value = ''; });
+  $('storeSearch').value = '';
+  $('rankingMetric').value = state.portfolioMetric;
+  setSegment('snapshotToggle', state.snapshot);
+  setSegment('portfolioView', state.portfolioView);
+  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioView));
+}
+
+function activateDataSource(candidate) {
+  disposeAllCharts();
+  SourceLifecycle.activate(state, candidate);
+  resetInteractionUi();
+  populateGlobalFilters();
+  enableDashboard(true);
+  applyCapabilityControls();
+  updatePeriodSummary();
+  renderAll();
+
+  const md = state.model.metadata;
+  if (state.sourceType === 'demo') {
+    renderDataPreparation(DataPreparationUI.buildDemoPreparation(state.model));
+    setNotice('success', 'Demo data ready', `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · Synthetic Demo Dataset`);
+  } else {
+    renderDataPreparation(DataPreparationUI.buildWorkbookPreparation(state.model));
+    const limitations = state.preparationView && state.preparationView.mode === 'warning';
+    setNotice(limitations ? 'warning' : 'success', limitations ? 'Uploaded data ready with limitations' : 'Uploaded data ready', `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
+  }
+  updateSourceUi();
+}
+
+function loadDemoDataset() {
+  if (!window.RetailDemoData) throw new Error('Bundled demo data is missing.');
+  const service = window.RetailDashboardData.createDataService(window.RetailDemoData);
+  activateDataSource({ sourceType: 'demo', model: window.RetailDemoData, service, fileName: '' });
+}
+
+function resetDashboard() {
+  SourceLifecycle.resetInteractions(state);
+  resetInteractionUi();
+  populateGlobalFilters();
+  applyCapabilityControls();
+  renderAll();
+  setNotice('info', 'Dashboard selections reset', state.sourceType === 'upload' ? 'Uploaded Workbook remains active.' : 'Synthetic Demo Dataset remains active.');
+}
+
+function clearUploadedData() {
+  if (state.sourceType !== 'upload') return;
+  loadDemoDataset();
+  setNotice('success', 'Returned to Demo Data', 'The uploaded workbook was cleared from dashboard memory. Synthetic Demo Dataset is active.');
 }
 function saveMapping() {
   if(!state.book)return;
@@ -1717,61 +1752,35 @@ $('regionFilter').addEventListener('change',()=>{refreshCityOptions();renderAll(
 $('statusFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
 $('tierFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
 $('cityFilter').addEventListener('change',()=>{renderAll();});
-$('resetFiltersBtn').addEventListener('click',()=>{['regionFilter','cityFilter','statusFilter','tierFilter'].forEach(id=>$(id).value='');renderAll();});
+$('resetFiltersBtn').addEventListener('click',resetDashboard);
 
 const WORKBOOK_FILE_PATTERN=/\.(xlsx|xls|xlsm|csv)$/i;
 function isWorkbookFile(file){return Boolean(file&&WORKBOOK_FILE_PATTERN.test(file.name||''));}
 async function loadWorkbookFile(file){
-  clearData(false);
   if(!isWorkbookFile(file)){
-    const error = new Error('Unsupported file type');
-    setNotice('error','Could not prepare this workbook','Use an .xlsx, .xls, .xlsm or .csv workbook.');
-    if (DataPreparationUI) renderDataPreparation(DataPreparationUI.buildBlockingPreparation(error));
+    setNotice('error','Upload failed · current data retained','Use an .xlsx, .xls, .xlsm or .csv workbook.');
     return;
   }
   const dropZone=$('uploadDropZone');dropZone.classList.add('is-loading');dropZone.setAttribute('aria-busy','true');
+  const retainedPreparation = state.preparationView;
   try{
     if(!window.XLSX||!window.echarts)throw new Error('Local libraries are missing. Keep the libs folder beside index.html.');
     if(!window.RetailDashboardData)throw new Error('Workbook data layer (RetailDashboardData) is missing.');
     if(!DataPreparationUI)throw new Error('Workbook preparation UI is missing.');
     renderDataPreparation(DataPreparationUI.buildLoadingPreparation(file.name));
     setNotice('info','Preparing workbook…','Reading workbook and scanning sheets locally.');
-    state.book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});
-    state.model=window.RetailDashboardData.parseWorkbook(state.book,{XLSX:window.XLSX,fileName:file.name});
-    state.service=window.RetailDashboardData.createDataService(state.model);
-    initializeDataService(file.name);
+    const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});
+    const model=window.RetailDashboardData.parseWorkbook(book,{XLSX:window.XLSX,fileName:file.name});
+    model.metadata.sourceType = 'upload';
+    const service=window.RetailDashboardData.createDataService(model);
+    activateDataSource({ sourceType: 'upload', book, model, service, fileName: file.name });
   }
   catch(error){
-    state.book=null; state.model=null; state.service=null;
     const view = DataPreparationUI ? DataPreparationUI.buildBlockingPreparation(error) : null;
-    setNotice('error','Could not prepare this workbook.',view ? view.summary : 'Review the workbook structure and try again.');
-    renderDataPreparation(view);
+    setNotice('error','Upload failed · current data retained',view ? view.summary : 'Review the workbook structure and try again.');
+    renderDataPreparation(retainedPreparation);
   }
   finally{dropZone.classList.remove('is-loading','is-dragging');dropZone.removeAttribute('aria-busy');}
-}
-
-function initializeDataService(fileName) {
-  state.fileName = fileName;
-  state.filters = {};
-  state.selectedStore = '';
-  state.selectedPnlLine = '';
-  state.warnings = [];
-  state.dataStats = {
-    records: state.model.detail.current.stores.length + state.model.detail.comparison.stores.length,
-    stores: state.model.detail.current.stores.length,
-    periods: 1,
-    tieErrorRows: 0,
-    duplicateKeys: 0
-  };
-  populateGlobalFilters();
-  enableDashboard(true);
-  applyCapabilityControls();
-  updatePeriodSummary();
-  renderAll();
-  const md = state.model.metadata;
-  renderDataPreparation(DataPreparationUI.buildWorkbookPreparation(state.model));
-  const limitations = state.preparationView && state.preparationView.mode === 'warning';
-  setNotice(limitations ? 'warning' : 'success',limitations ? 'Data ready with limitations' : 'Data ready for analysis',`${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
 }
 
 $('fileInput').addEventListener('change',async event=>{const file=event.target.files[0];if(file)await loadWorkbookFile(file);event.target.value='';});
@@ -1788,7 +1797,7 @@ uploadDropZone.addEventListener('drop',async event=>{
 });
 document.addEventListener('dragover',event=>{if(Array.from(event.dataTransfer?.types||[]).includes('Files'))event.preventDefault();});
 document.addEventListener('drop',event=>{if(Array.from(event.dataTransfer?.files||[]).length)event.preventDefault();});
-$('settingsBtn').addEventListener('click',openSettings);$('clearBtn').addEventListener('click',clearData);
+$('settingsBtn').addEventListener('click',openSettings);$('clearBtn').addEventListener('click',clearUploadedData);
 $('saveMappingBtn').addEventListener('click',saveMapping);$('exportMappingBtn').addEventListener('click',exportMapping);
 $('importMappingBtn').addEventListener('click',()=>$('mappingFileInput').click());
 $('mappingFileInput').addEventListener('change',event=>{if(event.target.files[0])importMappingFile(event.target.files[0]);event.target.value='';});
@@ -1798,5 +1807,10 @@ $('headerRow').addEventListener('change',event=>{if(!state.book)return;state.hea
 
 window.addEventListener('resize',()=>Object.values(state.charts).forEach(c=>c.resize()));
 window.addEventListener('pagehide',()=>{state.book=null;state.model=null;state.service=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
-if(!window.XLSX||!window.echarts)setNotice('error','Local libraries could not load','Keep index.html, libs, js and assets in the same local folder.');
+if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle){
+  setNotice('error','Local libraries could not load','Keep index.html, libs, js and assets in the same local folder.');
+} else {
+  try { loadDemoDataset(); }
+  catch (error) { setNotice('error','Demo data could not load',error.message); }
+}
 })();

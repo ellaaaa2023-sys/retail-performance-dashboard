@@ -15,6 +15,8 @@
   <script defer src="./js/data/data-cleaning.js"></script>
   <script defer src="./js/data/core-data.js"></script>
   <script defer src="./js/data/data-preparation-ui.js"></script>
+  <script defer src="./js/data/source-lifecycle.js"></script>
+  <script defer src="./js/data/demo-data.js"></script>
   <script defer src="./js/productivity-quadrant.js"></script>
   <script defer src="./js/store-detail.js"></script>
   <script defer src="./js/app.js"></script>
@@ -46,13 +48,13 @@
         <p>Half-year performance review · Overview to store-level P&amp;L</p>
       </div>
       <div class="topbar-tools">
-        <div class="local-badge"><span class="secure-dot"></span><div><strong>Offline workspace</strong><small>Browser-only processing</small></div></div>
+        <div class="local-badge"><span class="secure-dot"></span><div><strong id="sourceLabel">Demo Data</strong><small id="sourceDetail">Synthetic dataset</small></div></div>
         <div class="actions">
           <button class="button secondary" id="settingsBtn" type="button">Data Settings</button>
-          <button class="button secondary" id="clearBtn" type="button" disabled>Clear Data</button>
-          <label class="upload-dropzone" id="uploadDropZone" for="fileInput" tabindex="0" aria-label="Drop a mock Excel workbook here or click to choose a file">
+          <button class="button secondary" id="clearBtn" type="button" disabled>Clear Uploaded Data</button>
+          <label class="upload-dropzone" id="uploadDropZone" for="fileInput" tabindex="0" aria-label="Upload an Excel workbook or drop it here">
             <span class="upload-drop-icon" aria-hidden="true">↓</span>
-            <span class="upload-drop-copy"><strong>Drop Mock Excel here</strong><small>Development only · no real company data</small></span>
+            <span class="upload-drop-copy"><strong>Upload Your Data</strong><small>Excel is processed locally in this browser</small></span>
             <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.csv">
           </label>
         </div>
@@ -60,7 +62,7 @@
     </header>
 
     <section class="notice info" id="notice" aria-live="polite">
-      <div><strong>No workbook loaded</strong><span>Select a local Excel file. Workbook values stay in this browser session.</span></div>
+      <div><strong>Loading demo data…</strong><span>The bundled synthetic dataset will be ready automatically.</span></div>
     </section>
 
     <section class="preparation-panel" id="dataPreparation" aria-live="polite" hidden></section>

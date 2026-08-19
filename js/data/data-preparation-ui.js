@@ -293,14 +293,29 @@
     };
   }
 
-  function buildDemoPreparation() {
+  function buildDemoPreparation(model) {
+    const metadata = model && model.metadata ? model.metadata : {};
+    const demo = metadata.demo || {};
+    const currentStores = Number.isFinite(demo.currentStores) ? demo.currentStores : sheetStoreCount(model, 'current');
+    const comparisonStores = Number.isFinite(demo.comparisonStores) ? demo.comparisonStores : sheetStoreCount(model, 'comparison');
     return {
       mode: 'demo',
-      title: 'Demo Dataset',
-      summary: 'Synthetic data · Ready for analysis',
-      period: '',
-      steps: [], primarySheets: [], additionalSheets: [], sheetWarnings: [], otherSheets: [], capabilityWarnings: [],
-      privacy: '', expanded: false
+      title: 'Data Ready',
+      summary: `${demo.datasetLabel || 'Synthetic Demo Dataset'} · 2 store-level data sheets ready · 2 used in current analysis`,
+      period: metadata.currentPeriodKey && metadata.comparisonPeriodKey
+        ? `${metadata.currentPeriodKey} vs ${metadata.comparisonPeriodKey}`
+        : '',
+      steps: [],
+      primarySheets: [
+        { name: 'Summary P&L', role: 'summary', tone: 'success', detail: `${demo.summaryLabel || 'Synthetic Summary'} · Dashboard Source`, note: '', stats: [], missing: [] },
+        { name: demo.currentLabel || 'Current Detail', role: 'current', tone: 'success', detail: `${currentStores} stores · Ready`, note: '', stats: [], missing: [] },
+        { name: demo.comparisonLabel || 'Comparison Detail', role: 'comparison', tone: 'success', detail: `${comparisonStores} stores · Ready`, note: '', stats: [], missing: [] }
+      ],
+      additionalSheets: [], sheetWarnings: [], otherSheets: [], capabilityWarnings: [],
+      privacy: 'Synthetic demo data is bundled with this dashboard. Uploaded workbooks are processed locally in your browser.',
+      detailsLabel: 'View details',
+      primaryGroupLabel: 'Dashboard sources',
+      expanded: false
     };
   }
 

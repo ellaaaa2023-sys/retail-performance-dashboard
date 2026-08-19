@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",
-    "check": "node --check js/app.js && node --check js/data/detail-schema.js && node --check js/data/data-cleaning.js && node --check js/data/core-data.js && node --check js/data/data-preparation-ui.js && node --check js/productivity-quadrant.js && node --check js/store-detail.js && node --check tests/core-data.test.js && node --check tests/data-cleaning.test.js && node --check tests/data-preparation-ui.test.js && node --check tests/productivity-quadrant.test.js && node --check tests/store-detail.test.js",
+    "generate:demo": "node scripts/generate-demo-data.js",
+    "check": "node --check js/app.js && node --check js/data/detail-schema.js && node --check js/data/data-cleaning.js && node --check js/data/core-data.js && node --check js/data/data-preparation-ui.js && node --check js/data/source-lifecycle.js && node --check js/data/demo-data.js && node --check js/productivity-quadrant.js && node --check js/store-detail.js && node --check scripts/generate-demo-data.js && node --check tests/core-data.test.js && node --check tests/data-cleaning.test.js && node --check tests/data-preparation-ui.test.js && node --check tests/productivity-quadrant.test.js && node --check tests/store-detail.test.js && node --check tests/demo-data.test.js && node --check tests/source-lifecycle.test.js",
     "test:data": "node tests/core-data.test.js",
     "test:cleaning": "node tests/data-cleaning.test.js",
     "test:preparation": "node tests/data-preparation-ui.test.js",
     "test:quadrant": "node tests/productivity-quadrant.test.js",
-    "test:detail": "node tests/store-detail.test.js"
+    "test:detail": "node tests/store-detail.test.js",
+    "test:demo": "node tests/demo-data.test.js",
+    "test:source": "node tests/source-lifecycle.test.js",
+    "test": "node tests/core-data.test.js && node tests/data-cleaning.test.js && node tests/data-preparation-ui.test.js && node tests/productivity-quadrant.test.js && node tests/store-detail.test.js && node tests/demo-data.test.js && node tests/source-lifecycle.test.js"
   },
   "devDependencies": {
     "vite": "^7.1.0"
