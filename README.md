@@ -1,31 +1,72 @@
 # Retail Performance Dashboard
 
-一个面向零售财务分析场景的交互式作品集 Demo。页面打开后会自动加载固定的 Synthetic / Mock Dataset，无需上传文件或进行初始化操作，即可完整体验：
+An interactive retail finance portfolio demo that turns portfolio-level P&L movement into store-level actions.
+
+[**Open the Live Demo →**](https://counter-performance-dashboard.vercel.app/)
+
+> The live demo uses synthetic data for product demonstration and loads automatically—no upload or setup required.
+
+## Product Preview
+
+### Executive Overview
+
+Portfolio-level performance, period comparison, filters, and management signals in one review surface.
+
+![Executive Overview with portfolio KPIs, filters, and management signals](docs/images/dashboard-overview.jpg)
+
+### Variance Analysis
+
+Trace Customer Contribution movement from the P&L snapshot to a reconciled bridge and its key drivers.
+
+![Customer Contribution bridge with reconciled variance and driver analysis](docs/images/variance-analysis.jpg)
+
+### Store Portfolio
+
+Compare store positioning and movement while surfacing quadrant transitions and portfolio risk context.
+
+![Store Portfolio movement view with trajectory chart and movement summary](docs/images/store-portfolio.jpg)
+
+### Store Detail
+
+Drill into a single store's key figures, review signals, detailed P&L, and A&P economics.
+
+![Existing Store detail with KPIs, review signals, and store P&L](docs/images/store-detail.jpg)
+
+## Analysis Flow
 
 ```text
 Executive Overview → P&L Variance → Store Portfolio → Store Detail
 ```
 
-Demo 当前展示 `2026 S1 vs 2025 S1`，包含 160 家 Current 门店和 150 家 Comparison 门店。所有页面、筛选、计算、图表和下钻都使用同一套 normalized model 与 Dashboard engine。
+The demo presents `2026 S1 vs 2025 S1` across 160 Current stores and 150 Comparison stores. Every page, filter, calculation, chart, and drill-down uses the same normalized model and Dashboard engine.
 
-## Demo highlights
+## Key Features
 
-- **01 Executive Overview**：组合级 KPI、同比变化和规则式 Management Signals。
-- **02 P&L Variance**：P&L Snapshot、可核对的 Customer Contribution Bridge、正负 Driver 排名。
-- **03 Store Portfolio**：Current / Comparison / Movement、A&P × Customer Contribution 四象限、Risk Stores 和 Store Variance Ranking。
-- **04 Store Detail**：默认选中有效门店，支持 Existing Store 与 New Store，展示 KPI、完整 P&L、A&P composition 与 movement。
-- **Filters**：Region、City、Status、Store Productivity Tier；Reset 只重置筛选与选择，不改变当前数据源。
-- **Source switching**：上传成功后切换到 Uploaded Workbook；上传失败保留当前数据；Clear Uploaded Data 返回 Demo，页面不会进入空 Dashboard。
+- **Executive Overview** — Portfolio KPIs, period movement, and rule-based management signals.
+- **P&L Variance** — P&L snapshot, reconciled Customer Contribution bridge, and positive/negative driver ranking.
+- **Store Portfolio** — Current, Comparison, and Movement views; A&P × Customer Contribution quadrants; risk stores; and variance ranking.
+- **Store Detail** — Existing and New Store profiles with KPIs, detailed P&L, A&P composition, and component movement.
+- **Interactive filters** — Region, City, Status, and Store Productivity Tier.
+- **Source switching** — Replace the demo with an uploaded workbook, reset selections without changing the source, or clear the upload to return to Demo.
 
 ## Data Preparation
 
-Demo 模式只展示 normalized source readiness：
+```text
+Excel Upload
+  → Sheet Detection
+  → Data Cleaning
+  → Validation
+  → Current / Comparison
+  → Dashboard
+```
+
+Demo mode reports normalized source readiness without pretending that an Excel workbook was scanned or cleaned at runtime:
 
 - Synthetic Summary
 - Current Detail · 160 stores · Ready
 - Comparison Detail · 150 stores · Ready
 
-它不会伪造 `Workbook scanned`、`Cleaned Excel rows` 或 `Cleaning completed`。只有用户实际上传工作簿时，浏览器才会执行 workbook discovery、cleaning 与 normalization。
+Workbook discovery, cleaning, and normalization run only after a user selects a workbook.
 
 ## Architecture
 
@@ -39,34 +80,44 @@ Demo artifact / Uploaded Workbook
           └─ shared state, filters, calculations, charts, drill-down, rendering
 ```
 
-`scripts/generate-demo-data.js` 将 `sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx` 确定性转换为 committed classic-script artifact。Fresh Load 不读取 Excel，也不执行 workbook cleaning。
+`scripts/generate-demo-data.js` converts `sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx` into a deterministic, committed classic-script artifact. Fresh Load does not fetch or parse Excel.
+
+## Tech Stack
+
+- Vanilla HTML, CSS, and JavaScript
+- Apache ECharts 5.5.1
+- SheetJS Community Edition 0.18.5
+- Node.js test suite
+- Static deployment on Vercel
+
+Runtime dependencies are committed under `libs/`; the dashboard does not depend on a CDN, external API, analytics, or telemetry.
 
 ## Run locally
 
-直接打开 `index.html`，或启动静态服务器：
+Open `index.html` directly, or start a static server:
 
 ```bash
 python3 -m http.server 4173 --bind 127.0.0.1
 ```
 
-然后访问 `http://127.0.0.1:4173/`。
+Then visit `http://127.0.0.1:4173/`.
 
-如需开发模式：
+For the package-based development workflow:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-## Upload behavior
+## Upload and Privacy
 
-点击 **Upload Your Data** 可选择 `.xlsx`、`.xls`、`.xlsm` 或 `.csv`：
+Select **Upload Your Data** to use an `.xlsx`, `.xls`, `.xlsm`, or `.csv` file:
 
-- 工作簿只在当前浏览器页面内存中解析。
-- 页面 CSP 设置 `connect-src 'none'`，应用不通过 fetch、XHR 或 WebSocket 发送文件内容。
-- 上传成功后复用 Demo 相同的 Dashboard engine。
-- 上传失败不会清空当前 Demo 或已加载的 Uploaded Workbook。
-- **Clear Uploaded Data** 会释放上传数据并立即恢复 Synthetic Demo Dataset。
+- Workbook parsing and transformation happen client-side in the local browser session.
+- The page CSP sets `connect-src 'none'`; the application does not send workbook content through fetch, XHR, or WebSocket.
+- A successful upload reuses the same Dashboard engine as Demo mode.
+- A failed upload preserves the currently active source.
+- **Clear Uploaded Data** releases the upload and restores the Synthetic Demo Dataset.
 
 ## Tests
 
@@ -75,15 +126,15 @@ pnpm run check
 pnpm test
 ```
 
-测试覆盖 Core Data、Cleaning、Data Preparation、Quadrant / Movement / Risk、Store Detail、Demo artifact，以及 Demo / Upload source lifecycle。
+The suite covers Core Data, Cleaning, Data Preparation, Quadrant / Movement / Risk, Store Detail, the deterministic Demo artifact, and Demo / Upload source lifecycle.
 
-重新生成 Demo artifact：
+Regenerate the Demo artifact with:
 
 ```bash
 pnpm run generate:demo
 ```
 
-生成结果必须与已提交的 `js/data/demo-data.js` 完全一致。
+The generated output must match the committed `js/data/demo-data.js` artifact.
 
 ## Main files
 
@@ -101,5 +152,3 @@ scripts/generate-demo-data.js
 sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx
 tests/
 ```
-
-运行依赖固定在 `libs/`（Apache ECharts 5.5.1、SheetJS Community Edition 0.18.5），页面不依赖 CDN、外部 API、Analytics 或 Telemetry。

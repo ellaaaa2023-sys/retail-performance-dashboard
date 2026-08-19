@@ -7,7 +7,7 @@
 ## 1. 项目基本信息
 
 - **当前名称**：Retail Performance Dashboard
-- **本地路径**：`/Users/ellaaa/Documents/AI黑客松--财务自动化/Retail_Performance_Dashboard`
+- **本地路径**：仓库根目录（各维护者本地 checkout 路径不同）
 - **GitHub 仓库**：`git@github.com:ellaaaa2023-sys/retail-performance-dashboard.git`（private）
 - **开发预览站**：<https://retail-performance-dashboard-dev.vercel.app>
 - **技术形态**：纯 HTML + CSS + JavaScript 的静态 Dashboard；Vite 只用于本地开发和 Vercel 构建，不是本地离线运行的必要条件。
@@ -653,7 +653,7 @@ KPI click
 从项目目录执行：
 
 ```bash
-cd "/Users/ellaaa/Documents/AI黑客松--财务自动化/Retail_Performance_Dashboard"
+cd Retail_Performance_Dashboard
 git status --short --branch
 npm install
 npm run dev
