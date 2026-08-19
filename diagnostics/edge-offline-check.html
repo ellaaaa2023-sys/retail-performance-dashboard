@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Microsoft Edge Offline Compatibility Check</title>
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./diagnostics.css">
+  <script defer src="./local-probe.js"></script>
+  <script defer src="../libs/xlsx.full.min.js"></script>
+  <script defer src="../libs/echarts.min.js"></script>
+  <script defer src="./edge-offline-check.js"></script>
+</head>
+<body>
+<main>
+  <h1>Microsoft Edge Offline Compatibility Check</h1>
+  <p>This page checks local browser capabilities only. It does not read or display business values.</p>
+  <table aria-label="Compatibility results">
+    <thead><tr><th>Check</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>JavaScript</td><td id="checkJavaScript" class="fail">FAIL</td></tr>
+      <tr><td>Local JS</td><td id="checkLocalJs" class="fail">FAIL</td></tr>
+      <tr><td>SheetJS</td><td id="checkSheetJs" class="fail">FAIL</td></tr>
+      <tr><td>ECharts</td><td id="checkEcharts" class="fail">FAIL</td></tr>
+      <tr><td>File API</td><td id="checkFileApi" class="fail">FAIL</td></tr>
+      <tr><td>ArrayBuffer</td><td id="checkArrayBuffer" class="fail">FAIL</td></tr>
+      <tr><td>FileReader</td><td id="checkFileReader" class="fail">FAIL</td></tr>
+      <tr><td>Canvas</td><td id="checkCanvas" class="fail">FAIL</td></tr>
+      <tr><td>ResizeObserver</td><td id="checkResizeObserver" class="info">INFO</td></tr>
+      <tr><td>CSP basic compatibility</td><td id="checkCsp" class="info">INFO</td></tr>
+    </tbody>
+  </table>
+  <section class="test-panel">
+    <h2>Select Test Excel</h2>
+    <p class="small">Use only the approved safe Mock Workbook. The check reports file selection and basic workbook metadata, not worksheet names or values.</p>
+    <input id="testFile" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv">
+    <div id="fileResult" class="info">INFO: No test file selected</div>
+  </section>
+</main>
+</body>
+</html>

@@ -13,6 +13,8 @@ const ProductivityQuadrant = window.RetailProductivityQuadrant;
 const StoreDetailModel = window.RetailStoreDetail;
 const DataPreparationUI = window.RetailDataPreparationUI;
 const SourceLifecycle = window.RetailSourceLifecycle;
+const RuntimeConfig = window.RetailDashboardRuntime || Object.freeze({ mode: 'public-demo' });
+const IS_INTERNAL_EDGE = RuntimeConfig.mode === 'internal-edge';
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -548,8 +550,8 @@ function enableDashboard(on) {
 function updateSourceUi() {
   const uploaded = state.sourceType === 'upload';
   $('clearBtn').disabled = !uploaded;
-  $('sourceLabel').textContent = uploaded ? 'Uploaded Workbook' : 'Demo Data';
-  $('sourceDetail').textContent = uploaded ? state.fileName : 'Synthetic dataset';
+  $('sourceLabel').textContent = uploaded ? 'Uploaded Workbook' : (IS_INTERNAL_EDGE ? 'Internal Offline' : 'Demo Data');
+  $('sourceDetail').textContent = uploaded ? state.fileName : (IS_INTERNAL_EDGE ? 'Upload Workbook' : 'Synthetic dataset');
 }
 
 const OVERVIEW_KPIS_PRIMARY = [
@@ -1707,6 +1709,10 @@ function resetDashboard() {
 
 function clearUploadedData() {
   if (state.sourceType !== 'upload') return;
+  if (IS_INTERNAL_EDGE) {
+    window.location.reload();
+    return;
+  }
   loadDemoDataset();
   setNotice('success', 'Returned to Demo Data', 'The uploaded workbook was cleared from dashboard memory. Synthetic Demo Dataset is active.');
 }
@@ -1756,6 +1762,15 @@ $('resetFiltersBtn').addEventListener('click',resetDashboard);
 
 const WORKBOOK_FILE_PATTERN=/\.(xlsx|xls|xlsm|csv)$/i;
 function isWorkbookFile(file){return Boolean(file&&WORKBOOK_FILE_PATTERN.test(file.name||''));}
+function readFileAsArrayBuffer(file) {
+  if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Browser could not read the selected file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
 async function loadWorkbookFile(file){
   if(!isWorkbookFile(file)){
     setNotice('error','Upload failed · current data retained','Use an .xlsx, .xls, .xlsm or .csv workbook.');
@@ -1769,7 +1784,7 @@ async function loadWorkbookFile(file){
     if(!DataPreparationUI)throw new Error('Workbook preparation UI is missing.');
     renderDataPreparation(DataPreparationUI.buildLoadingPreparation(file.name));
     setNotice('info','Preparing workbook…','Reading workbook and scanning sheets locally.');
-    const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,cellFormula:true});
+    const book=XLSX.read(await readFileAsArrayBuffer(file),{type:'array',cellDates:true,cellFormula:true});
     const model=window.RetailDashboardData.parseWorkbook(book,{XLSX:window.XLSX,fileName:file.name});
     model.metadata.sourceType = 'upload';
     const service=window.RetailDashboardData.createDataService(model);
@@ -1807,10 +1822,22 @@ $('headerRow').addEventListener('change',event=>{if(!state.book)return;state.hea
 
 window.addEventListener('resize',()=>Object.values(state.charts).forEach(c=>c.resize()));
 window.addEventListener('pagehide',()=>{state.book=null;state.model=null;state.service=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
-if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle){
-  setNotice('error','Local libraries could not load','Keep index.html, libs, js and assets in the same local folder.');
+if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle||!ProductivityQuadrant||!StoreDetailModel){
+  if (window.RetailStartupGuard) window.RetailStartupGuard.fail('Spreadsheet, chart, or local application library unavailable');
+  else setNotice('error','Dashboard initialization failed','Spreadsheet, chart, or local application library unavailable.');
+} else if (IS_INTERNAL_EDGE) {
+  enableDashboard(false);
+  renderDataPreparation(null);
+  setNotice('info','Ready for local workbook','Select an approved Excel workbook. Data is processed in this browser session.');
+  if (window.RetailStartupGuard) window.RetailStartupGuard.ready();
 } else {
-  try { loadDemoDataset(); }
-  catch (error) { setNotice('error','Demo data could not load',error.message); }
+  try {
+    loadDemoDataset();
+    if (window.RetailStartupGuard) window.RetailStartupGuard.ready();
+  }
+  catch (error) {
+    if (window.RetailStartupGuard) window.RetailStartupGuard.fail('Bundled demo data unavailable');
+    else setNotice('error','Dashboard initialization failed','Bundled demo data unavailable.');
+  }
 }
 })();

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Minimal Local Dashboard Check</title>
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./diagnostics.css">
+  <script defer src="./local-probe.js"></script>
+  <script defer src="../libs/xlsx.full.min.js"></script>
+  <script defer src="../libs/echarts.min.js"></script>
+  <script defer src="./minimal-dashboard-check.js"></script>
+</head>
+<body>
+<main>
+  <h1>Minimal Local Dashboard Check</h1>
+  <p id="minimalStatus" class="info">INFO: Starting local classic scripts…</p>
+  <div id="minimalChart" aria-label="Simple local chart"></div>
+  <section class="test-panel">
+    <label for="minimalFile"><strong>Select safe Mock Workbook</strong></label>
+    <input id="minimalFile" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv">
+    <div id="minimalFileResult" class="info">INFO: No test file selected</div>
+  </section>
+</main>
+</body>
+</html>
