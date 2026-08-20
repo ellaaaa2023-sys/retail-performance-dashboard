@@ -143,6 +143,7 @@ const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
   portfolioView: 'productivity', snapshot: 'current',
+  bridgeMode: 'amount',
   portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
   model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null,
   noticeSpec: null
@@ -580,7 +581,7 @@ function updateSourceUi() {
 
 const OVERVIEW_KPIS_PRIMARY = [
   { key: 'storeCount', label: 'Store Count', type: 'count', drill: null },
-  { key: 'posNo', label: 'POS no.', type: 'count', drill: 'posNo' },
+  { key: 'daHeadcount', label: 'DA HC', type: 'count', drill: null, descriptionKey: 'metric.daHeadcountDescription' },
   { key: 'aup', label: 'AUP', type: 'money', drill: 'aup' },
   { key: 'grossSales', label: 'Gross Sales', type: 'money', drill: 'grossSales' }
 ];
@@ -616,14 +617,18 @@ function overviewKpiCard(def, metrics) {
     : overviewMetricDelta(current, comparison, def.type, ratioVariance);
   const tone = (!Number.isFinite(displayVariance) || Math.abs(displayVariance) < 1e-9) ? 'neutral' : displayVariance > 0 ? 'favorable' : 'adverse';
   const tag = def.drill ? 'button' : 'article';
-  const attrs = tag === 'button' ? ` type="button" data-pnl-line="${def.drill}"` : '';
-  const comparisonText = Number.isFinite(comparison) ? overviewMetricFormat(comparison, def.type) : '—';
-  const currentText = Number.isFinite(current) ? overviewMetricFormat(current, def.type) : '—';
+  const description = def.descriptionKey ? t(def.descriptionKey) : '';
+  const attrs = tag === 'button'
+    ? ` type="button" data-pnl-line="${def.drill}"${description ? ` title="${esc(description)}"` : ''}`
+    : (description ? ` title="${esc(description)}"` : '');
+  const missingText = def.key === 'daHeadcount' ? t('common.unavailable') : '—';
+  const comparisonText = Number.isFinite(comparison) ? overviewMetricFormat(comparison, def.type) : missingText;
+  const currentText = Number.isFinite(current) ? overviewMetricFormat(current, def.type) : missingText;
   const comparisonValue = def.ratioKey
     ? `<span class="kpi-compare-inline">${inlineAmountRatioHtml(comparison, ratioComparison)}</span>`
     : comparisonText;
   const currentValue = def.ratioKey ? inlineAmountRatioHtml(current, ratioCurrent) : currentText;
-  return `<${tag} class="kpi-card ${tone}${def.ratioKey ? ' kpi-card-combined' : ''}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(metricLabel(def.key, def.label))}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current${def.ratioKey ? ' kpi-current-inline' : ''}">${currentValue}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>${esc(t('common.variance'))}</span><strong class="${deltaText == null ? 'flat' : Number.isFinite(displayVariance) && displayVariance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
+  return `<${tag} class="kpi-card ${tone}${def.ratioKey ? ' kpi-card-combined' : ''}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(metricLabel(def.key, def.label))}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current${def.ratioKey ? ' kpi-current-inline' : ''}">${currentValue}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>${esc(t('common.variance'))}</span><strong class="${deltaText == null ? 'flat' : Number.isFinite(displayVariance) && displayVariance >= 0 ? 'good' : 'bad'}">${deltaText == null ? (def.key === 'daHeadcount' ? esc(t('common.unavailable')) : 'N/A') : deltaText}</strong></div></${tag}>`;
 }
 function updateScopeStatus(metrics) {
   const el = $('scopeStatus');
@@ -644,8 +649,17 @@ function renderOverview() {
   const filters = activeFilters();
   const metrics = state.service.getPortfolioMetrics(filters);
   const view = { ...metrics, current: { ...metrics.current }, comparison: { ...metrics.comparison } };
+  const headcount = state.service.getDAHeadcountSummary(filters);
   view.current.storeCount = state.service.getStores('current', filters).length;
   view.comparison.storeCount = state.service.getStores('comparison', filters).length;
+  view.current.daHeadcount = headcount.current.total;
+  view.comparison.daHeadcount = headcount.comparison.total;
+  view.variance = {
+    ...metrics.variance,
+    daHeadcount: Number.isFinite(headcount.current.total) && Number.isFinite(headcount.comparison.total)
+      ? headcount.current.total - headcount.comparison.total
+      : null
+  };
   updateScopeStatus(view);
   $('primaryKpis').innerHTML = OVERVIEW_KPIS_PRIMARY.map(def => overviewKpiCard(def, view)).join('');
   $('secondaryKpis').innerHTML = OVERVIEW_KPIS_SECONDARY.map(def => overviewKpiCard(def, view)).join('');
@@ -888,6 +902,13 @@ function formatBridgeAxis(value) {
     : `${sign}¥${trimZeros(amount, 0)}K`;
 }
 
+function formatPercentagePoints(value, compact = true) {
+  if (!Number.isFinite(value)) return '—';
+  const points = value * 100;
+  const sign = points > 0 ? '+' : '';
+  return `${sign}${points.toFixed(1)} ${compact ? 'pp' : t('common.percentagePoints')}`;
+}
+
 function wrapBridgeLabel(value) {
   const words = String(value || '').split(/\s+/);
   const lines = [];
@@ -905,27 +926,43 @@ function wrapBridgeLabel(value) {
   return lines.join('\n');
 }
 
-function buildBridgeWaterfall(bridge) {
+function bridgeView(bridge) {
+  const mode = state.bridgeMode === 'ratio' ? 'ratio' : 'amount';
+  const source = bridge[mode];
+  return {
+    mode,
+    comparison: source.comparison,
+    current: source.current,
+    drivers: source.drivers.map(driver => ({
+      ...driver,
+      movement: mode === 'ratio' ? driver.movement : driver.variance
+    })),
+    reconciliation: source.reconciliation,
+    error: source.error
+  };
+}
+
+function buildBridgeWaterfall(bridge, view) {
   const items = [{
     label: `${periodLabel('comparison')} ${metricLabel(bridge.metric, bridge.label)}`,
     start: 0,
-    end: bridge.comparison,
+    end: view.comparison,
     connector: null,
     type: 'anchor',
-    raw: bridge.comparison
+    raw: view.comparison
   }];
-  const path = [bridge.comparison];
-  let running = bridge.comparison;
-  bridge.drivers.forEach(driver => {
-    const next = running + driver.variance;
+  const path = [view.comparison];
+  let running = view.comparison;
+  view.drivers.forEach(driver => {
+    const next = running + driver.movement;
     items.push({
       label: pnlLabel(driver.field, driver.label),
       field: driver.field,
       start: running,
       end: next,
       connector: running,
-      type: driver.variance > 0 ? 'positive' : driver.variance < 0 ? 'negative' : 'zero',
-      raw: driver.variance
+      type: driver.movement > 0 ? 'positive' : driver.movement < 0 ? 'negative' : 'zero',
+      raw: driver.movement
     });
     running = next;
     path.push(running);
@@ -933,12 +970,12 @@ function buildBridgeWaterfall(bridge) {
   items.push({
     label: `${periodLabel('current')} ${metricLabel(bridge.metric, bridge.label)}`,
     start: 0,
-    end: bridge.current,
-    connector: bridge.current,
+    end: view.current,
+    connector: view.current,
     type: 'anchor',
-    raw: bridge.current
+    raw: view.current
   });
-  path.push(bridge.current);
+  path.push(view.current);
   return { items, path };
 }
 
@@ -952,12 +989,13 @@ function disposeChart(id) {
 function renderVariance() {
   if (!state.service) {
     $('varianceSnapshotBody').innerHTML = `<tr><td colspan="6">${esc(t('error.uploadForPnlSnapshot'))}</td></tr>`;
-    $('bridgeTitle').textContent = t('variance.bridge');
+    $('bridgeTitle').textContent = t(state.bridgeMode === 'ratio' ? 'variance.ratioBridge' : 'variance.amountBridge');
     $('bridgeSub').textContent = t('variance.bridgeSub');
     $('bridgeReconcile').textContent = '—';
     $('bridgeReconcile').className = 'reconcile';
     $('varianceScopeStatus').className = 'scope-status';
     $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${esc(t('common.totalPortfolio'))}</span>`;
+    setSegment('bridgeModeToggle', state.bridgeMode);
     $('driverTableBody').innerHTML = '';
     $('positiveDrivers').innerHTML = '';
     $('negativeDrivers').innerHTML = '';
@@ -970,13 +1008,13 @@ function renderVariance() {
   const filtered = Object.values(filters).some(value => value !== null && value !== undefined && value !== '');
   if (filtered && capabilityStatus('filteredCustomerContributionBridge') !== 'available') {
     const warning = capabilityWarning('filteredCustomerContributionBridge');
-    $('bridgeTitle').textContent = t('variance.bridge');
+    $('bridgeTitle').textContent = t(state.bridgeMode === 'ratio' ? 'variance.ratioBridge' : 'variance.amountBridge');
     $('bridgeSub').textContent = t('error.filteredUnavailable');
     $('varianceScopeStatus').className = 'scope-status filtered';
     $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${esc(t('common.filteredPortfolio'))}</span>`;
     $('bridgeReconcile').textContent = t('common.unavailable');
     $('bridgeReconcile').className = 'reconcile neutral';
-    featureUnavailable('bridgeChart', warning ? warning.title : `${t('variance.bridge')} ${t('common.unavailable')}`, warning ? warning.detail : t('error.requiredFieldsMissing'));
+    featureUnavailable('bridgeChart', warning ? warning.title : `${t('variance.bridgeAnalysis')} ${t('common.unavailable')}`, warning ? warning.detail : t('error.requiredFieldsMissing'));
     $('driverTableBody').innerHTML = `<tr><td colspan="6">${esc(t('error.driverUnavailable'))}</td></tr>`;
     $('positiveDrivers').innerHTML = '';
     $('negativeDrivers').innerHTML = '';
@@ -993,35 +1031,41 @@ function renderVariance() {
 
 function renderBridge(bridge) {
   const md = state.service.getMetadata();
+  const view = bridgeView(bridge);
+  const ratioMode = view.mode === 'ratio';
   const scopeLabel = varianceScopeLabel(bridge);
-  $('bridgeTitle').textContent = t('variance.bridge');
+  $('bridgeTitle').textContent = t(ratioMode ? 'variance.ratioBridge' : 'variance.amountBridge');
   $('bridgeSub').textContent = `${md.comparisonPeriodKey} ${t('common.vs')} ${md.currentPeriodKey}`;
   $('varianceScopeStatus').className = `scope-status${bridge.mode === 'filtered' ? ' filtered' : ''}`;
   $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${scopeLabel}</span>`;
 
-  if (bridge.error && bridge.error.code === 'BRIDGE_RECONCILIATION_ERROR') {
-    $('bridgeReconcile').textContent = t('variance.reconciliationError');
+  setSegment('bridgeModeToggle', view.mode);
+
+  if (view.error) {
+    $('bridgeReconcile').textContent = t('common.unavailable');
     $('bridgeReconcile').className = 'reconcile bad';
     disposeChart('bridgeChart');
-    $('bridgeChart').innerHTML = `<div class="bridge-error"><strong>${esc(t('error.bridgeUnsafe'))}</strong><span>${esc(t('error.bridgeUnsafeDetail'))}</span></div>`;
+    const roundingError = bridge.mode === 'filtered' && view.error.code === 'BRIDGE_RECONCILIATION_ERROR';
+    $('bridgeChart').innerHTML = `<div class="bridge-error"><strong>${esc(t(roundingError ? 'error.filteredBridgeRounding' : 'error.bridgeUnavailable'))}</strong><span>${esc(t(roundingError ? 'error.filteredBridgeRoundingDetail' : 'error.requiredFieldsMissing'))}</span></div>`;
     return;
   }
 
   $('bridgeReconcile').textContent = t('variance.reconciled');
   $('bridgeReconcile').className = 'reconcile';
-  const { items, path } = buildBridgeWaterfall(bridge);
+  const { items, path } = buildBridgeWaterfall(bridge, view);
   const low = Math.min(...path), high = Math.max(...path);
   const pathSpan = high - low;
-  const pad = pathSpan > 1e-9 ? Math.max(pathSpan * .16, 20) : Math.max(Math.abs(high) * .01, 1);
+  const minimumPad = ratioMode ? 0.002 : 20;
+  const pad = pathSpan > 1e-9 ? Math.max(pathSpan * .16, minimumPad) : Math.max(Math.abs(high) * .01, ratioMode ? 0.001 : 1);
   const yMin = low - pad, yMax = high + pad;
   const typeCode = { anchor: 0, positive: 1, negative: -1, zero: 2 };
   const c = chart('bridgeChart');
   c.setOption({
     textStyle: baseText(),
     grid: { left: 72, right: 22, top: 38, bottom: 112 },
-    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; const base = `<b>${esc(item.label)}</b><br>${item.type === 'anchor' ? t('variance.balance') : t('variance.pnlImpact')}: ${formatBridgeMoney(item.raw, item.type !== 'anchor')}`; return item.type !== 'anchor' && item.field ? `${base}<br>${t('variance.clickStoreImpact')}` : base; } },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; const value = ratioMode ? (item.type === 'anchor' ? formatPct(item.raw) : formatPercentagePoints(item.raw, false)) : formatBridgeMoney(item.raw, item.type !== 'anchor'); const label = ratioMode && item.type !== 'anchor' ? t('variance.percentagePointMovement') : item.type === 'anchor' ? t('variance.balance') : t('variance.pnlImpact'); const base = `<b>${esc(item.label)}</b><br>${esc(label)}: ${value}`; return item.type !== 'anchor' && item.field ? `${base}<br>${t('variance.clickStoreImpact')}` : base; } },
     xAxis: { type: 'category', data: items.map(item => item.label), axisTick: { show: false }, axisLine: { lineStyle: { color: THEME.axis } }, axisLabel: { interval: 0, rotate: 24, margin: 15, color: THEME.muted, fontSize: 8, lineHeight: 11, formatter: wrapBridgeLabel } },
-    yAxis: { type: 'value', min: yMin, max: yMax, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatBridgeAxis }, splitLine: { lineStyle: { color: THEME.grid } } },
+    yAxis: { type: 'value', min: yMin, max: yMax, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: ratioMode ? formatPct : formatBridgeAxis }, splitLine: { lineStyle: { color: THEME.grid } } },
     series: [{
       name: t('chart.varianceBridge'),
       type: 'custom',
@@ -1067,7 +1111,7 @@ function renderBridge(bridge) {
           type: 'text',
           silent: true,
           style: {
-            text: formatBridgeMoney(item.raw, item.type !== 'anchor'),
+            text: ratioMode ? (item.type === 'anchor' ? formatPct(item.raw) : formatPercentagePoints(item.raw)) : formatBridgeMoney(item.raw, item.type !== 'anchor'),
             x: valuePoint[0],
             y: valuePoint[1] + (labelAbove ? -7 : 7),
             fill: THEME.ink,
@@ -1115,7 +1159,7 @@ function renderVarianceInsights(bridge) {
   const amountTone = amountVariance > 0 ? 'cell-positive' : amountVariance < 0 ? 'cell-negative' : '';
   const summary = `<div class="variance-summary"><div class="summary-kpi"><span>${esc(t('variance.selectedKpi'))}</span><strong>${esc(metricLabel(bridge.metric, bridge.label))}</strong></div><div><span>${periodLabel('current')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.current, bridge.currentRatio)}</strong></div><div><span>${periodLabel('comparison')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.comparison, bridge.comparisonRatio)}</strong></div><div class="summary-variance"><span>${esc(t('common.variance'))}</span><strong class="${ratioTone}">${formatRatioVariance(bridge.ratioVariance)}</strong></div><div><span>${esc(t('variance.amountMovement'))}</span><strong class="${amountTone}">${formatSignedMoney(amountVariance)}</strong></div></div>`;
   const items = [];
-  if (bridge.error) items.push({tone:'warning',title:t('variance.detailAttention'),detail:t('variance.detailAttentionDetail')});
+  if (bridge[state.bridgeMode]?.error) items.push({tone:'warning',title:t('variance.detailAttention'),detail:t('variance.detailAttentionDetail')});
   if (positive) items.push({tone:'positive',title:t('variance.largestPositive',{driver:pnlLabel(positive.field,positive.label)}),detail:t('variance.lineContribution',{value:formatSignedMoney(positive.variance)}),action:'portfolio',driver:positive.field});
   if (negative) items.push({tone:'warning',title:t('variance.largestNegative',{driver:pnlLabel(negative.field,negative.label)}),detail:t('variance.lineContribution',{value:formatSignedMoney(negative.variance)}),action:'portfolio',driver:negative.field});
   $('varianceInsights').innerHTML = summary + insightHtml(items);
@@ -1485,19 +1529,25 @@ function storeKpiCard(model) {
     : '—';
   return `<article class="kpi-card ${cls}${model.type === 'combined' ? ' kpi-card-combined' : ''}"><div class="kpi-label-row"><span class="kpi-label">${esc(metricLabel(model.key, model.label))}</span></div><div class="kpi-current${model.type === 'combined' ? ' kpi-current-inline' : ''}">${currentPrimary}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>${esc(t('common.variance'))}</span><strong class="${changeCls}">${varianceValue}</strong></div></article>`;
 }
-function renderStoreHeader(store, hasComparison) {
+function renderStoreHeader(store, comparison) {
   const el = $('storeHeader');
   if (!el) return;
   const items = [
-    [t('common.city'), store.city],
-    [t('common.region'), store.region],
-    [t('common.status'), store.status],
-    [t('common.tier'), store.productivityTier],
-    [t('metric.storeProductivity'), formatMoney(store.storeProductivity)],
-    [t('metric.posNo'), formatInt(store.cityPosNo)]
+    { label: t('common.city'), value: store.city },
+    { label: t('common.region'), value: store.region },
+    { label: t('common.status'), value: store.status },
+    { label: t('common.tier'), value: store.productivityTier },
+    { label: t('metric.storeProductivity'), value: formatMoney(store.storeProductivity) },
+    {
+      label: t('metric.daHeadcount'),
+      value: formatInt(store.daHeadcount),
+      secondary: comparison && Number.isFinite(comparison.daHeadcount)
+        ? `${periodLabel('comparison')}: ${formatInt(comparison.daHeadcount)}`
+        : null
+    }
   ];
-  if (!hasComparison) items.push([t('common.comparison'), t('detail.noPriorRecord')]);
-  el.innerHTML = items.map(([label, value]) => `<div class="sh-item"><span class="sh-label">${esc(label)}</span><span class="sh-value">${esc(value)}</span></div>`).join('');
+  if (!comparison) items.push({ label: t('common.comparison'), value: t('detail.noPriorRecord') });
+  el.innerHTML = items.map(item => `<div class="sh-item"><span class="sh-label">${esc(item.label)}</span><span class="sh-value">${esc(item.value)}</span>${item.secondary ? `<span class="sh-sub">${esc(item.secondary)}</span>` : ''}</div>`).join('');
   el.hidden = false;
 }
 function renderDetail() {
@@ -1511,13 +1561,15 @@ function renderDetail() {
     $('storePnlBody').innerHTML = '';
     $('storeInsights').innerHTML = `<div class="empty-state">${esc(t('detail.noStoreSelected'))}</div>`;
     $('storeReconcile').textContent = '—';
-    ['apComparisonChart', 'apMovementChart'].forEach(id => { const c = chart(id); if (c) c.clear(); });
+    const comparisonChart = state.charts.apComparisonChart;
+    if (comparisonChart) comparisonChart.clear();
+    $('apTotalSummary').innerHTML = '';
     return;
   }
   $('detailStoreSelect').value = state.selectedStore;
   $('detailTitle').textContent = current.store;
   $('detailMeta').textContent = `${current.city} · ${current.region} · ${current.terminal}`;
-  renderStoreHeader(current, Boolean(comparison));
+  renderStoreHeader(current, comparison);
   const kpiModels = StoreDetailModel.buildKpiModels(current, comparison, window.RetailDashboardData.ratioVariance);
   $('storeKpis').innerHTML = kpiModels.map(storeKpiCard).join('');
   renderStorePnl(current, comparison);
@@ -1578,12 +1630,12 @@ function applyPeriodLabels() {
   });
 }
 function renderApCharts(current, ly) {
+  renderApTotalSummary(current, ly);
   if (capabilityStatus('apComponentAnalysis') !== 'available') {
     const warning = capabilityWarning('apComponentAnalysis');
     const title = warning ? warning.title : t('error.apComponentUnavailable');
     const detail = warning ? warning.detail : t('error.apComponentMissing');
     featureUnavailable('apComparisonChart', title, detail);
-    featureUnavailable('apMovementChart', title, detail);
     return;
   }
   const componentModel = StoreDetailModel.buildApComponentModel(current, ly);
@@ -1611,44 +1663,32 @@ function renderApCharts(current, ly) {
       {name:comparisonLabel,type:'bar',data:componentModel.hasComparison?comparisonValues:labels.map(()=>'-'),barMaxWidth:11,itemStyle:{color:THEME.gold,borderRadius:[0,3,3,0]}}
     ]
   },{notMerge:true});
-  const movementChart = chart('apMovementChart');
-  const movementElement = $('apMovementChart');
-  movementElement.dataset.componentKeys = comparisonElement.dataset.componentKeys;
-  movementElement.dataset.formalTotal = componentModel.formalTotalKey;
-  if (!componentModel.hasComparison) {
-    movementChart.clear();
-    movementChart.setOption({textStyle:baseText(),graphic:[{type:'text',left:'center',top:'middle',style:{text:t('error.noPriorComparison'),fill:THEME.muted,font:'500 10px Segoe UI, sans-serif'}}],series:[]},{notMerge:true});
-    return;
+}
+
+function renderApTotalSummary(current, comparison) {
+  const model = StoreDetailModel.buildApExpenseModel(current, comparison);
+  const movement = model.movement;
+  let movementText = t('detail.noPriorRecord');
+  let movementTone = 'neutral';
+  if (Number.isFinite(movement)) {
+    if (Math.abs(movement) < 1e-9) movementText = t('detail.apSpendUnchanged');
+    else if (movement > 0) {
+      movementText = t('detail.apSpendIncrease', { value: formatMoney(Math.abs(movement)) });
+      movementTone = 'increase';
+    } else {
+      movementText = t('detail.apSpendDecrease', { value: formatMoney(Math.abs(movement)) });
+      movementTone = 'decrease';
+    }
   }
-  const bridgeModel = StoreDetailModel.buildApComponentBridge(componentModel);
-  const movementSteps = bridgeModel.steps.filter(step => Math.abs(step.movement) > 1e-9);
-  const bridgeItems = [
-    { label: `${comparisonLabel} ${t('detail.componentPool')}`, type: 'anchor', raw: bridgeModel.comparisonPool, start: 0, end: bridgeModel.comparisonPool },
-    ...movementSteps.map(step => ({ ...step, label: componentLabel(step.key, step.label), type: step.movement > 0 ? 'increase' : 'decrease', raw: step.movement })),
-    { label: `${currentLabel} ${t('detail.componentPool')}`, type: 'anchor', raw: bridgeModel.currentPool, start: 0, end: bridgeModel.currentPool }
-  ];
-  const bridgePath = [0, bridgeModel.comparisonPool, ...movementSteps.map(step => step.end), bridgeModel.currentPool];
-  const bridgeHigh = Math.max(...bridgePath);
-  const bridgeLow = Math.min(...bridgePath);
-  const bridgePad = Math.max((bridgeHigh - bridgeLow) * .14, 4);
-  movementElement.dataset.movementCount = String(movementSteps.length);
-  movementElement.dataset.bridgeType = 'component-pool';
-  movementElement.dataset.bridgeStart = String(bridgeModel.comparisonPool);
-  movementElement.dataset.bridgeEnd = String(bridgeModel.currentPool);
-  movementElement.dataset.bridgeCalculatedEnd = String(bridgeModel.calculatedCurrentPool);
-  movementElement.dataset.canonicalCurrentSpend = String(bridgeModel.canonicalCurrentSpend);
-  movementChart.clear();
-  movementChart.setOption({
-    textStyle:baseText(),
-    grid:{left:58,right:22,top:28,bottom:116},
-    tooltip:{...tooltipStyle(),trigger:'item',formatter:params=>{const item=bridgeItems[params.dataIndex];if(item.type==='anchor')return `<b>${esc(item.label)}</b><br>${esc(t('detail.componentPool'))}: ${formatMoney(item.raw)}`;const component=componentModel.components.find(entry=>entry.key===item.key);return `<b>${esc(item.label)}</b><br>${comparisonLabel}: ${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} ${esc(t('detail.ofPool'))}<br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} ${esc(t('detail.ofPool'))}<br>${esc(t('detail.spendMovement'))}: ${formatSignedMoney(item.raw)}`;}},
-    xAxis:{type:'category',data:bridgeItems.map(item=>item.label),axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{interval:0,rotate:28,margin:15,color:THEME.muted,fontSize:7.5,lineHeight:10,formatter:wrapBridgeLabel}},
-    yAxis:{type:'value',min:Math.min(0,bridgeLow-bridgePad),max:bridgeHigh+bridgePad,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatBridgeAxis},splitLine:{lineStyle:{color:THEME.grid}}},
-    series:[
-      {name:t('chart.bridgeBase'),type:'bar',stack:'componentBridge',silent:true,barMaxWidth:32,itemStyle:{color:'rgba(0,0,0,0)'},emphasis:{disabled:true},data:bridgeItems.map(item=>item.type==='anchor'?0:Math.min(item.start,item.end))},
-      {name:t('chart.componentMovement'),type:'bar',stack:'componentBridge',barMaxWidth:32,barMinHeight:3,data:bridgeItems.map(item=>({value:item.type==='anchor'?item.raw:Math.abs(item.raw),raw:item.raw,itemStyle:{color:item.type==='anchor'?THEME.navy:item.type==='increase'?THEME.orange:THEME.green,borderRadius:[2,2,0,0]}})),label:{show:true,position:'top',distance:5,color:THEME.ink,fontSize:7.5,fontWeight:600,formatter:params=>formatBridgeMoney(params.data.raw,params.dataIndex>0&&params.dataIndex<bridgeItems.length-1)}}
-    ]
-  },{notMerge:true});
+  const el = $('apTotalSummary');
+  el.dataset.formalTotal = 'specificAP';
+  el.dataset.currentSpend = Number.isFinite(model.currentSpend) ? String(model.currentSpend) : '';
+  el.dataset.comparisonSpend = Number.isFinite(model.comparisonSpend) ? String(model.comparisonSpend) : '';
+  el.dataset.movement = Number.isFinite(movement) ? String(movement) : '';
+  el.innerHTML = `
+    <div><span>${esc(t('detail.currentTotalAP'))}</span><strong>${formatMoney(model.currentSpend)}</strong></div>
+    <div><span>${esc(t('detail.comparisonTotalAP'))}</span><strong>${model.hasComparison ? formatMoney(model.comparisonSpend) : '—'}</strong></div>
+    <div class="ap-total-movement ${movementTone}"><span>${esc(t('common.variance'))}</span><strong>${esc(movementText)}</strong></div>`;
 }
 
 function renderFooter() {
@@ -1698,6 +1738,7 @@ function resetInteractionUi() {
   $('rankingMetric').value = state.portfolioMetric;
   setSegment('snapshotToggle', state.snapshot);
   setSegment('portfolioView', state.portfolioView);
+  setSegment('bridgeModeToggle', state.bridgeMode);
   document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioView));
 }
 
@@ -1780,6 +1821,7 @@ document.addEventListener('keydown', event => {
 });
 $('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
 $('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
+$('bridgeModeToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.bridgeMode=button.dataset.value==='ratio'?'ratio':'amount';setSegment('bridgeModeToggle',state.bridgeMode);renderVariance();});
 $('quadrantSummary').addEventListener('click',event=>{const button=event.target.closest('button[data-quadrant]');if(!button||state.snapshot==='movement')return;const next=button.dataset.quadrant;state.selectedQuadrant=state.selectedQuadrant===next&&next!=='all'?'all':next;renderProductivityQuadrant();});
 $('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='productivity')renderProductivityQuadrant();});
 $('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderStoreRanking();});

@@ -27,6 +27,9 @@ if (html.indexOf('./js/store-portfolio.js') > html.indexOf('./js/data/core-data.
 if (html.indexOf('./js/data/internal-mode.js') > html.indexOf('./js/i18n.js')) throw new Error('Internal language mode must load before i18n');
 if (!html.includes('Ready for local workbook')) throw new Error('Internal index is not Upload-first');
 if (/id="languageSwitch"|class="language-switch"/.test(html)) throw new Error('Internal index must not contain a language switch');
+if (!html.includes('id="bridgeModeToggle"')) throw new Error('Internal package is missing the Customer Contribution Bridge toggle');
+if (!html.includes('id="apTotalSummary"')) throw new Error('Internal package is missing the formal Total A&P summary');
+if (html.includes('id="apMovementChart"')) throw new Error('Internal package must not render the removed A&P Movement Bridge');
 if (files.some(file => forbidden.some(pattern => pattern.test(file)))) throw new Error('Internal package contains a prohibited file');
 if (!files.includes('diagnostics/edge-offline-check.html') || !files.includes('diagnostics/minimal-dashboard-check.html')) throw new Error('Diagnostic pages are missing');
 if (files.includes('README.md') || files.includes('README.zh-CN.md') || files.some(file => /^docs\//.test(file))) throw new Error('Internal package contains Public portfolio content');

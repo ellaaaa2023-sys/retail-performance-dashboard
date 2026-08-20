@@ -477,7 +477,16 @@ Core retains the three Summary Bridge APIs: Total Minorations, Gross Margin, and
 - Each Bridge and driver exposes `currentRatio`, `comparisonRatio`, and `ratioVariance` for readouts/tables.
 - Those ratio fields never replace the amount fields used by waterfall reconciliation or Store Variance Ranking.
 
-## 9. Known Limitations After Phase F
+Page 02 presents the parallel contracts through one `Amount | %` control. Amount is the default. Ratio anchors are formatted as percentages and driver movements as percentage points; the two reconciliation gates remain independent, so one mode may remain available when the other is blocked. The Driver Analysis table continues to show both amount and `% OF SALES` columns regardless of the selected Bridge mode.
+
+## 9. Phase 3 UI Consumption Contracts
+
+- Page 01 obtains Current and Comparison DA HC only through `getDAHeadcountSummary(filters)`. Total Portfolio follows the authoritative Summary/Detail rule; filtered scopes use the Data Service aggregate. Missing or partial formal totals display unavailable and are never converted to zero.
+- Page 04 reads Current and Comparison DA HC from the matched store payload. The visible metadata uses Current DA HC and may show LY DA HC as secondary context.
+- Formal Total A&P is the spend magnitude `abs(store.pnl.specificAP)` for each period. Its displayed spend movement is `Current spend - Comparison spend`; canonical signed P&L amounts remain unchanged.
+- The A&P component pool stays a descriptive composition dataset. It is not substituted for formal Total A&P and is not adjusted to close a rounding difference.
+
+## 10. Known Limitations After Phase F
 
 - No separate Full Year Mock fixture exists yet.
 - Filtered Customer Contribution cannot safely expand beyond Gross Margin / Specific A&P / Specific SG&A with the current Detail hierarchy.

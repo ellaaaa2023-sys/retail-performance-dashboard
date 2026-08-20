@@ -325,6 +325,8 @@ Driver
 
 Bridge definitions come from normalized non-overlapping P&L rows and must pass Current level, Comparison level, and movement reconciliation before receiving `reconciled` status. Amount and ratio views use the same canonical amounts and expose separate centralized gates.
 
+Page 02 renders those parallel Core results through a lightweight `Amount | %` segmented control. Amount is the default. Ratio anchors use percentage formatting and ratio-driver movements use percentage points (`pp`). Switching modes changes only local presentation state; it does not replace the active filters, data source, page, or reconciliation result. A blocked amount mode does not block ratio, and a blocked ratio mode does not block amount.
+
 ### 8.3 Page 03 — Store Portfolio
 
 The active UI below remains unchanged in Phase 2B. The new shared comparison and distribution service is a data foundation only; no new chart, tab, tooltip, or classification is rendered in this phase.
@@ -386,12 +388,15 @@ Store P&L Variance % uses Current ratio − Comparison ratio on the registered d
 
 CA Net and Customer Contribution use inline `Amount · Ratio`; Gross Margin % remains ratio-only.
 
-The two A&P component views use the Workbook's finest available non-overlapping lines: Trade Relation, Customer Samples, Promotional Gifts, POS Advertising Amortization, POS Advertising Expense, Merchandising, Animations, Tester, DA Cost and Specific Development, and Other A&P. Specific A&P is excluded from the component pool because it is the formal subtotal.
+The A&P component view uses the Workbook's finest available non-overlapping lines: Trade Relation, Customer Samples, Promotional Gifts, POS Advertising Amortization, POS Advertising Expense, Merchandising, Animations, Tester, DA Cost and Specific Development, and Other A&P. Specific A&P is excluded from the component pool because it is the formal subtotal.
 
 - A&P Component Composition compares Current and Comparison amount plus share of the component pool.
-- A&P Component Movement shows each component's signed spend change.
+- The former A&P Component Movement Bridge is no longer rendered on Page 04; its pure helper remains available for later dead-code review.
+- Total A&P is displayed beside the composition using formal `abs(store.pnl.specificAP)` for Current and Comparison. Variance wording states whether spend increased, decreased, or stayed unchanged.
 
-These views are analytical and never claim reconciliation when rounded components do not exactly tie to the formal subtotal. They never add a residual. Canonical signed A&P remains `store.pnl.specificAP`, and canonical spend remains `abs(store.pnl.specificAP)`.
+The composition is analytical and never claims reconciliation when rounded components do not exactly tie to the formal subtotal. It never adds a residual. Canonical signed A&P remains `store.pnl.specificAP`, and canonical spend remains `abs(store.pnl.specificAP)`.
+
+The Store Detail metadata includes Current DA HC and LY DA HC when the exact-Terminal comparison exists. Page 01 exposes DA HC in place of the visible POS no. KPI, but the normalized POS fields and other consumers remain intact.
 
 ## 9. Drill-down Contract
 

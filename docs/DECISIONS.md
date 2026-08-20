@@ -321,6 +321,28 @@ riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
 
 **Safety:** Overlap metadata is screening evidence only. It does not create a Risk Score, staffing recommendation, or automated action.
 
+## D-055 — Page 01 DA HC Presentation
+
+**Decision:** The visible Page 01 POS no. card is replaced by DA HC. The page consumes `getDAHeadcountSummary(filters)` and shows Current, Comparison, and absolute headcount movement. It does not aggregate stores in `app.js`.
+
+**Consequence:** POS remains in the normalized model and existing non-Page-01 consumers. A missing or partial formal DA HC total is unavailable, not zero.
+
+## D-056 — One Customer Contribution Bridge Control
+
+**Decision:** Page 02 uses one compact `Amount | %` toggle over the parallel Core amount and ratio Bridge results. Amount is the default; ratio-driver movements display in percentage points. Each mode reads and displays its own reconciliation gate.
+
+**Consequence:** The Driver Analysis table remains a combined amount and `% OF SALES` reference. Language changes preserve Bridge mode, filters, source, and navigation state.
+
+## D-057 — Page 04 Formal A&P Summary
+
+**Decision:** Page 04 removes the A&P Component Movement Bridge from active UI and widens A&P Component Composition. A separate Total A&P summary uses formal `abs(specificAP)` for Current and Comparison and labels the magnitude difference as spend increase, decrease, or no change.
+
+**Rejected:** Treating the component pool as formal Total A&P, adjusting components to force reconciliation, or changing the canonical signed P&L amount. The existing pure movement helper is retained for later dependency cleanup.
+
+## D-058 — Store Detail DA HC Metadata
+
+**Decision:** Store Detail metadata displays Current DA HC and, for an exact-Terminal match, LY DA HC as secondary context. It does not add a large KPI card or reimplement matching.
+
 ## Confirmed Filter Dimensions
 
 The only store-level filters are Region, City, Status, and Store Productivity Tier. `Nature`, Channel, and Store Type are not valid analysis dimensions and are excluded from the normalized model and Dashboard filters.
