@@ -1,7 +1,7 @@
 # Retail Performance Dashboard — Data Model
 
-> Status: implemented data contract through Phase 3 Data Cleaning parser integration.
-> Audit date: 2026-08-19 (Asia/Shanghai).
+> Status: implemented data contract through Phase 2A Finance Contract Fix.
+> Audit date: 2026-08-20 (Asia/Shanghai).
 
 ## 1. Source of Truth and Security Boundary
 
@@ -25,14 +25,51 @@ ratioVariance = currentRatio - comparisonRatio
 
 Example: Current `-27.9%` minus Comparison `-27.6%` displays `-0.3%`. It is never divided by the comparison ratio, and a negative comparison base does not reverse the direction.
 
-This contract applies to Total Minorations %, Gross Margin %, Customer Contribution %, CA Net % of Gross Sales, every P&L line % of Net Sales, expense ratios, and Bridge driver ratio metadata. Metrics without an explicit ratio representation keep their existing amount/count comparison semantics.
+This contract applies to Total Minorations %, Gross Margin %, Customer Contribution %, CA Net % of Gross Sales, every P&L line `% OF SALES`, expense ratios, and Bridge driver ratio metadata. Metrics without an explicit ratio representation keep their existing amount/count comparison semantics.
 
-Bridge reconciliation remains independent and amount-based:
+Summary workbook percent columns use percentage-point representation. Parsing is semantic and unconditional:
+
+```text
+parseWorkbookPercentagePoint(71.4) = 0.714
+parseWorkbookPercentagePoint(-0.2) = -0.002
+```
+
+There is no magnitude heuristic. Core-calculated ratios are already decimal ratios and are never sent through the workbook percentage-point parser. Formal finance ratios are calculated from canonical amounts, not selected from workbook percent cells; the workbook percentages remain available only as source-comparison metadata.
+
+`js/data/core-data.js` owns the single line-level denominator registry:
+
+| Denominator | P&L lines |
+|---|---|
+| Gross Sales | Gross Sales, Discount, Rebates, Promotional Allowance, Returns, VIP Redemption, OCA, Coupon, Total Minorations, and their Summary commercial-investment components |
+| CONSO Net Sales | CONSO Net Sales onward: cost lines, Gross Margin, all A&P lines, Specific A&P, Specific SG&A, Customer Contribution, Non-specific Costs, Operating Profit |
+
+Therefore Gross Sales and CONSO Net Sales each display `100%` on their own registered basis. The separate top-card `CA Net % of GS` remains `CONSO Net Sales / Gross Sales` and is not a P&L-line ratio.
+
+Reconciliation validates levels before movement. Reported subtotals remain authoritative display values; component sums and residuals are metadata and never overwrite source values:
+
+```text
+level residual = derived component sum - reported subtotal
+movement residual = derived component movement - reported subtotal movement
+```
+
+The centralized tolerance is `1 KRMB` for amounts because Detail and parts of Summary are whole-KRMB source values. The centralized ratio tolerance is `0.0001` decimal, equal to `0.01` percentage points and below the UI's `0.1` percentage-point display precision. Values outside either tolerance block the applicable Bridge view. No `Other`, `Rounding`, or residual driver is inserted.
+
+Amount Bridge reconciliation is:
 
 ```text
 Comparison amount + Σ driver amount variance = Current amount
 driver amount variance = Current amount - Comparison amount
 ```
+
+Customer Contribution ratio semantics use the same canonical amount hierarchy and denominator:
+
+```text
+CC% = Customer Contribution / CONSO Net Sales
+CC% = Gross Margin% + Specific A&P% + Specific SG&A%
+ΔCC% = ΔGross Margin% + ΔSpecific A&P% + ΔSpecific SG&A%
+```
+
+The Data Service returns parallel `customerContributionBridge.amount` and `.ratio` calculation views. Summary uses eight non-overlapping drivers; filtered scope uses the three reported subtotals. Granularity is explicit metadata. Required driver `null`, `undefined`, or non-finite values are unavailable/blocking; a finite zero remains valid.
 
 Canonical A&P Expense is:
 

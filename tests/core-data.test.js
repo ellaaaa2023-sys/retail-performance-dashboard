@@ -291,7 +291,7 @@ check(23, 'Canonical A&P Expense uses the signed Specific A&P subtotal', () => {
     assert.equal(store.metrics.apExpenseMagnitude, Math.abs(store.pnl.specificAP));
     assertClose(
       store.metrics.apExpensePct,
-      store.pnl.specificAPPct != null ? store.pnl.specificAPPct : store.pnl.specificAP / store.pnl.netSales,
+      store.pnl.specificAP / store.pnl.netSales,
       `${store.terminal} A&P Expense %`
     );
   });

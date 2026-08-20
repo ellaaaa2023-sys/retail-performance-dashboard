@@ -74,7 +74,7 @@ const FIELDS = {
   obsolete: field('Obsolete / Slow Moving / Return', 'recommended', 'Cost of Sales driver', ['obsolete / slow moving / return', 'obsolete slow moving return']),
   physicalDistribution: field('Physical Distribution', 'recommended', 'Cost of Sales driver', ['physical distribution']),
   costOfSales: field('Cost of Sales', 'recommended', 'Gross Margin driver subtotal', ['cost of sales', 'total cost of sales', 'cogs']),
-  costOfSalesPct: field('Cost of Sales % of Net Sales', 'optional', 'Cost ratio', ['cost of sales % of net sales', 'cogs %']),
+  costOfSalesPct: field('Cost of Sales % of Sales', 'optional', 'Cost ratio', ['cost of sales % of net sales', 'cogs %']),
   grossMargin: field('Gross Margin', 'required', 'Primary margin KPI', ['gross margin', 'gm']),
   grossMarginPct: field('Gross Margin %', 'recommended', 'Aggregated as Gross Margin / Net Sales', ['gross margin %', 'gm %', 'gm margin %', 'gross margin pct']),
   samples: field('Customer Samples', 'recommended', 'DA Cost component', ['customer samples', 'customer samples (val)']),
@@ -160,7 +160,7 @@ function toNumber(value, isPercent = false) {
   if (value === null || value === undefined || value === '') return 0;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return 0;
-    return isPercent && Math.abs(value) > 1.5 ? value / 100 : value;
+    return value;
   }
   let text = String(value).trim();
   const negative = /^\(.*\)$/.test(text);
@@ -169,7 +169,7 @@ function toNumber(value, isPercent = false) {
   let number = Number(text);
   if (!Number.isFinite(number)) return 0;
   if (negative) number = -number;
-  if (hasPct || (isPercent && Math.abs(number) > 1.5)) number /= 100;
+  if (hasPct) number /= 100;
   return number;
 }
 
@@ -710,10 +710,11 @@ function renderPnlSnapshot(metrics, { bodyId, subId, interactive = false } = {})
   $(bodyId).innerHTML = SNAPSHOT_ROWS.map(row => {
     const current = metrics.current[row.key];
     const comparison = metrics.comparison[row.key];
-    const currentRatio = row.ratio ? metrics.current[row.ratio] : null;
-    const comparisonRatio = row.ratio ? metrics.comparison[row.ratio] : null;
-    const variance = row.ratio
-      ? metrics.variance?.[row.ratio]
+    const currentRatio = window.RetailDashboardData.calculateLineRatio(row.key, current, metrics.current);
+    const comparisonRatio = window.RetailDashboardData.calculateLineRatio(row.key, comparison, metrics.comparison);
+    const hasSalesRatio = window.RetailDashboardData.getPnlDenominatorKey(row.key) !== null;
+    const variance = hasSalesRatio
+      ? window.RetailDashboardData.ratioVariance(currentRatio, comparisonRatio)
       : row.variance === 'amount-relative'
         ? window.RetailDashboardData.amountRelativeVariance(current, comparison)
         : null;
@@ -1524,13 +1525,18 @@ function renderDetail() {
   renderApCharts(current, comparison);
 }
 function renderStorePnl(current, ly) {
-  const netSales = current.metrics.netSales;
-  const lyNetSales = ly ? ly.metrics.netSales : NaN;
   $('storePnlBody').innerHTML = STORE_PNL_LINES.map(line => {
     const cv = Number.isFinite(current.pnl[line.field]) ? current.pnl[line.field] : null;
     const lv = ly && Number.isFinite(ly.pnl[line.field]) ? ly.pnl[line.field] : null;
     const hasLy = Number.isFinite(lv);
-    const ratioModel = StoreDetailModel.buildPnlRatioModel(cv, netSales, hasLy ? lv : null, hasLy ? lyNetSales : null, window.RetailDashboardData.ratioVariance);
+    const ratioModel = StoreDetailModel.buildPnlRatioModel(
+      line.field,
+      cv,
+      current.pnl,
+      hasLy ? lv : null,
+      hasLy ? ly.pnl : null,
+      window.RetailDashboardData
+    );
     const curShare = ratioModel.currentRatio;
     const lyShare = ratioModel.comparisonRatio;
     const variance = ratioModel.ratioVariance;

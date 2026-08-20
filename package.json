@@ -8,8 +8,9 @@
     "preview": "vite preview --host 127.0.0.1",
     "generate:demo": "node scripts/generate-demo-data.js",
     "build:internal-edge": "node scripts/build-internal-edge.js",
-    "check": "node --check js/startup-guard.js && node --check js/browser-compat.js && node --check js/i18n.js && node --check js/app.js && node --check js/data/detail-schema.js && node --check js/data/data-cleaning.js && node --check js/data/core-data.js && node --check js/data/data-preparation-ui.js && node --check js/data/source-lifecycle.js && node --check js/data/demo-data.js && node --check js/productivity-quadrant.js && node --check js/store-detail.js && node --check diagnostics/local-probe.js && node --check diagnostics/edge-offline-check.js && node --check diagnostics/minimal-dashboard-check.js && node --check scripts/generate-demo-data.js && node --check scripts/build-internal-edge.js && node --check tests/core-data.test.js && node --check tests/data-cleaning.test.js && node --check tests/data-preparation-ui.test.js && node --check tests/productivity-quadrant.test.js && node --check tests/store-detail.test.js && node --check tests/demo-data.test.js && node --check tests/source-lifecycle.test.js && node --check tests/file-compatibility.test.js && node --check tests/startup-guard.test.js && node --check tests/i18n.test.js && node --check tests/internal-edge-package.test.js",
+    "check": "node --check js/startup-guard.js && node --check js/browser-compat.js && node --check js/i18n.js && node --check js/app.js && node --check js/data/detail-schema.js && node --check js/data/data-cleaning.js && node --check js/data/core-data.js && node --check js/data/data-preparation-ui.js && node --check js/data/source-lifecycle.js && node --check js/data/demo-data.js && node --check js/productivity-quadrant.js && node --check js/store-detail.js && node --check diagnostics/local-probe.js && node --check diagnostics/edge-offline-check.js && node --check diagnostics/minimal-dashboard-check.js && node --check scripts/generate-demo-data.js && node --check scripts/build-internal-edge.js && node --check tests/core-data.test.js && node --check tests/finance-contract.test.js && node --check tests/data-cleaning.test.js && node --check tests/data-preparation-ui.test.js && node --check tests/productivity-quadrant.test.js && node --check tests/store-detail.test.js && node --check tests/demo-data.test.js && node --check tests/source-lifecycle.test.js && node --check tests/file-compatibility.test.js && node --check tests/startup-guard.test.js && node --check tests/i18n.test.js && node --check tests/internal-edge-package.test.js",
     "test:data": "node tests/core-data.test.js",
+    "test:finance": "node tests/finance-contract.test.js",
     "test:cleaning": "node tests/data-cleaning.test.js",
     "test:preparation": "node tests/data-preparation-ui.test.js",
     "test:quadrant": "node tests/productivity-quadrant.test.js",
@@ -20,7 +21,7 @@
     "test:startup": "node tests/startup-guard.test.js",
     "test:i18n": "node tests/i18n.test.js",
     "test:internal-edge": "node tests/internal-edge-package.test.js",
-    "test": "node tests/core-data.test.js && node tests/data-cleaning.test.js && node tests/data-preparation-ui.test.js && node tests/productivity-quadrant.test.js && node tests/store-detail.test.js && node tests/demo-data.test.js && node tests/source-lifecycle.test.js && node tests/file-compatibility.test.js && node tests/startup-guard.test.js && node tests/i18n.test.js"
+    "test": "node tests/core-data.test.js && node tests/finance-contract.test.js && node tests/data-cleaning.test.js && node tests/data-preparation-ui.test.js && node tests/productivity-quadrant.test.js && node tests/store-detail.test.js && node tests/demo-data.test.js && node tests/source-lifecycle.test.js && node tests/file-compatibility.test.js && node tests/startup-guard.test.js && node tests/i18n.test.js"
   },
   "devDependencies": {
     "vite": "^7.1.0"

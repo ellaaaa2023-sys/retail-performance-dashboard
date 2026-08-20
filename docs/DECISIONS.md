@@ -269,6 +269,30 @@ riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
 
 **Remaining dependency:** Browser automation policy blocks direct `file://` navigation. Classic-script load order and no-network checks pass; Windows company-browser double-click verification remains a manual acceptance step.
 
+## D-046 — Semantic Percentage Boundaries
+
+**Decision:** Summary workbook percent cells are percentage-point values and always divide by 100. Core-calculated ratios are decimal values and never pass through that parser.
+
+**Rejected:** Any magnitude threshold or value-based guessing, because valid values such as `0.2`, `-0.2`, `1.0`, and `-1.5` are all percentage points in the Summary source.
+
+## D-047 — One P&L Denominator Registry
+
+**Decision:** Core owns the only `P&L line → grossSales | netSales` registry. Pages 01, 02, and 04 consume Core ratios or call the shared line-ratio function.
+
+**Consequence:** UI headings say `% OF SALES`; Gross Sales through Total Minorations use Gross Sales, while CONSO Net Sales and all following lines use CONSO Net Sales. The separate CA Net top-card conversion remains `CONSO Net Sales / Gross Sales`.
+
+## D-048 — Level and Movement Reconciliation
+
+**Decision:** Summary and Bridge contracts validate Current level, Comparison level, and movement separately. Reported subtotals remain authoritative; derived sums and residuals are metadata.
+
+**Tolerance:** Amount `1 KRMB`; ratio `0.0001` decimal (`0.01` percentage points). Values outside tolerance block the applicable Bridge. Detail whole-KRMB rounding is never repaired by overwriting a subtotal or adding a residual driver.
+
+## D-049 — Canonical Customer Contribution Bridges
+
+**Decision:** Amount Bridge, future CC% Bridge, and P&L ratios all derive from canonical amounts and the same denominator registry. Summary exposes eight non-overlapping drivers; filtered scope exposes Gross Margin, Specific A&P, and Specific SG&A with explicit granularity metadata.
+
+**Safety:** A required missing/non-finite driver is unavailable, not zero. A finite zero remains a valid business value. The Core Data Service returns parallel amount and ratio calculations with independent reconciliation gates.
+
 ## Confirmed Filter Dimensions
 
 The only store-level filters are Region, City, Status, and Store Productivity Tier. `Nature`, Channel, and Store Type are not valid analysis dimensions and are excluded from the normalized model and Dashboard filters.

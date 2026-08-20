@@ -301,16 +301,16 @@ Driver Analysis columns are independent fields:
 ```text
 Driver
 | Current Amount
-| Current % of Net Sales
+| Current % OF SALES
 | Comparison Amount
-| Comparison % of Net Sales
+| Comparison % OF SALES
 | Variance %
 | Drill-down
 ```
 
-`Variance %` is Current ratio − Comparison ratio. There is no absolute Variance column and no Contribution column. Top Drivers remain sorted by amount movement.
+`Variance %` is Current ratio − Comparison ratio. Each ratio resolves its denominator from the shared Finance registry; Page 02 does not infer a denominator. There is no absolute Variance column and no Contribution column. Top Drivers remain sorted by amount movement.
 
-Bridge definitions come from normalized non-overlapping P&L rows and must run reconciliation before receiving `reconciled` status.
+Bridge definitions come from normalized non-overlapping P&L rows and must pass Current level, Comparison level, and movement reconciliation before receiving `reconciled` status. Amount and ratio views use the same canonical amounts and expose separate centralized gates.
 
 ### 8.3 Page 03 — Store Portfolio
 
@@ -359,15 +359,15 @@ Store P&L presentation order:
 ```text
 P&L Line
 Current
-Current % of Net Sales
+Current % OF SALES
 Comparison
-Comparison % of Net Sales
+Comparison % OF SALES
 Variance %
 ```
 
-Ratio rows must not repeat meaningless `% of Net Sales` cells.
+The visible heading is always `% OF SALES`, while each row uses the shared line-level denominator registry. Gross Sales through Total Minorations use Gross Sales; CONSO Net Sales onward uses CONSO Net Sales. Both Gross Sales and CONSO Net Sales therefore display `100%`.
 
-Store P&L Variance % uses Current % of Net Sales − Comparison % of Net Sales. New Store comparison and variance cells display `—`.
+Store P&L Variance % uses Current ratio − Comparison ratio on the registered denominator. New Store comparison and variance cells display `—`.
 
 CA Net and Customer Contribution use inline `Amount · Ratio`; Gross Margin % remains ratio-only.
 

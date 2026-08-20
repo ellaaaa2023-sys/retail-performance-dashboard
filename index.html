@@ -105,7 +105,7 @@
         </div>
         <div class="table-wrap snapshot-wrap">
           <table class="data-table snapshot-table">
-            <thead><tr><th data-i18n="variance.pnlLine">P&amp;L Line</th><th data-period-role="current">Current</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-i18n="common.variancePct">Variance %</th></tr></thead>
+            <thead><tr><th data-i18n="variance.pnlLine">P&amp;L Line</th><th data-period-role="current">Current</th><th data-i18n="common.salesPct">% OF SALES</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.salesPct">% OF SALES</th><th data-i18n="common.variancePct">Variance %</th></tr></thead>
             <tbody id="varianceSnapshotBody"><tr><td colspan="6">Upload a workbook to view the P&amp;L snapshot</td></tr></tbody>
           </table>
         </div>
@@ -118,8 +118,8 @@
         </section>
         <section class="driver-grid">
           <article class="card driver-table-card">
-            <div class="card-head"><div><div class="card-title" id="driverTitle">Customer Contribution Driver Analysis</div><div class="card-sub" data-i18n="variance.driverDescription">Amounts and % of Net Sales · click a row to preserve Store Ranking context</div></div></div>
-            <div class="table-wrap driver-table-wrap"><table class="data-table driver-table"><thead><tr><th data-i18n="variance.driver">Driver</th><th data-period-role="current">Current</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-i18n="common.variancePct">Variance %</th><th aria-label="Drill-down" data-i18n-aria-label="variance.drilldown">›</th></tr></thead><tbody id="driverTableBody"></tbody></table></div>
+            <div class="card-head"><div><div class="card-title" id="driverTitle">Customer Contribution Driver Analysis</div><div class="card-sub" data-i18n="variance.driverDescription">Amounts and % OF SALES · click a row to preserve Store Ranking context</div></div></div>
+            <div class="table-wrap driver-table-wrap"><table class="data-table driver-table"><thead><tr><th data-i18n="variance.driver">Driver</th><th data-period-role="current">Current</th><th data-i18n="common.salesPct">% OF SALES</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.salesPct">% OF SALES</th><th data-i18n="common.variancePct">Variance %</th><th aria-label="Drill-down" data-i18n-aria-label="variance.drilldown">›</th></tr></thead><tbody id="driverTableBody"></tbody></table></div>
           </article>
           <div class="driver-rank-stack">
             <article class="card compact-card"><div class="card-head"><div><div class="card-title" data-i18n="variance.topPositiveDrivers">Top Positive Drivers</div><div class="card-sub" data-i18n="variance.topPositiveSub">Largest positive amount movements</div></div></div><div class="rank-list" id="positiveDrivers"></div></article>
@@ -164,8 +164,8 @@
       <section class="kpi-grid store-kpis" id="storeKpis"></section>
       <section class="detail-layout">
         <article class="card pnl-card">
-          <div class="card-head"><div><div class="card-title" data-i18n="detail.storePnl">Store P&amp;L</div><div class="card-sub" data-i18n="detail.storePnlSub">Signed P&amp;L values in KRMB; ratios shown as % of Net Sales</div></div><div class="reconcile" id="storeReconcile">—</div></div>
-          <div class="table-wrap pnl-wrap"><table class="data-table pnl-table"><thead><tr><th data-i18n="variance.pnlLine">P&amp;L Line</th><th data-period-role="current">Current</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.netSalesPct">% of Net Sales</th><th data-i18n="common.variancePct">Variance %</th></tr></thead><tbody id="storePnlBody"></tbody></table></div>
+          <div class="card-head"><div><div class="card-title" data-i18n="detail.storePnl">Store P&amp;L</div><div class="card-sub" data-i18n="detail.storePnlSub">Signed P&amp;L values in KRMB; ratios follow each line's % OF SALES denominator</div></div><div class="reconcile" id="storeReconcile">—</div></div>
+          <div class="table-wrap pnl-wrap"><table class="data-table pnl-table"><thead><tr><th data-i18n="variance.pnlLine">P&amp;L Line</th><th data-period-role="current">Current</th><th data-i18n="common.salesPct">% OF SALES</th><th data-period-role="comparison">Comparison</th><th data-i18n="common.salesPct">% OF SALES</th><th data-i18n="common.variancePct">Variance %</th></tr></thead><tbody id="storePnlBody"></tbody></table></div>
         </article>
         <article class="card insight-card store-insight-card"><div class="card-head"><div><div class="card-title" data-i18n="detail.signals">Store Signals</div><div class="card-sub" data-i18n="detail.signalsSub">Rule-based review prompts</div></div><span class="rule-badge" data-i18n="overview.ruleBased">RULE-BASED</span></div><div class="insight-list" id="storeInsights"><div class="empty-state">No store selected</div></div></article>
       </section>

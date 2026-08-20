@@ -22,9 +22,58 @@
 
   const VERSION = '1.0.0';
   const DEFAULT_SCOPE = 'actualAdjusted';
-  const RECONCILIATION_TOLERANCE = 1e-6;
+  const AMOUNT_RECONCILIATION_TOLERANCE_KRMB = 1;
+  const RATIO_RECONCILIATION_TOLERANCE = 0.0001;
   const DETAIL_PERIOD_SUFFIX_PATTERN = /(?:^|\s)Y(\d{2,4})\s+(S1|Full Year)$/i;
   const SUMMARY_SHEET_PATTERN = /^P&L review Y(\d{2,4})$/i;
+
+  const GROSS_SALES_DENOMINATOR_FIELDS = Object.freeze([
+    'grossSales', 'discount', 'rebates', 'bomPa', 'paRetroFunding',
+    'promotionalAllowance', 'totalReturns', 'vipRedemption', 'oca', 'coupon',
+    'totalDefensiveInvestment', 'structuralConditionsOn', 'structuralConditionsOff',
+    'totalActiveSupport', 'shopperInvestment', 'promoAllowOnInvoice',
+    'promoAllowAppliedSeparately', 'promoAllowLoyalty', 'totalMinorations'
+  ]);
+  const NET_SALES_DENOMINATOR_FIELDS = Object.freeze([
+    'netSales', 'stdCos', 'royalTaMs', 'physicalDistribution',
+    'specialOperationsCost', 'obsoleteSlowMovingReturns', 'costOfSales',
+    'grossMargin', 'tradeRelation', 'customerSamples', 'promotionalGifts',
+    'posAdvertisingAmortization', 'posAdvertisingExpense', 'merchandising',
+    'animations', 'tester', 'daCost', 'specificDevelopment',
+    'daCostAndSpecificDevelopment', 'otherPosAdvertising', 'otherAP',
+    'specificAP', 'specificSga', 'customerContribution', 'nonSpecificCosts',
+    'operatingProfit'
+  ]);
+  const PNL_DENOMINATOR_REGISTRY = Object.freeze(Object.fromEntries([
+    ...GROSS_SALES_DENOMINATOR_FIELDS.map(field => [field, 'grossSales']),
+    ...NET_SALES_DENOMINATOR_FIELDS.map(field => [field, 'netSales'])
+  ]));
+
+  const RECONCILIATION_DEFINITIONS = Object.freeze({
+    netSales: Object.freeze(['grossSales', 'totalMinorations']),
+    grossMargin: Object.freeze([
+      'netSales', 'stdCos', 'royalTaMs', 'physicalDistribution',
+      'specialOperationsCost', 'obsoleteSlowMovingReturns'
+    ]),
+    specificAP: Object.freeze([
+      'customerSamples', 'promotionalGifts', 'animations',
+      'posAdvertisingAmortization', 'otherPosAdvertising', 'specificDevelopment'
+    ]),
+    customerContribution: Object.freeze(['grossMargin', 'specificAP', 'specificSga']),
+    operatingProfit: Object.freeze(['customerContribution', 'nonSpecificCosts'])
+  });
+
+  const DETAIL_RECONCILIATION_DEFINITIONS = Object.freeze({
+    netSales: RECONCILIATION_DEFINITIONS.netSales,
+    grossMargin: RECONCILIATION_DEFINITIONS.grossMargin,
+    specificAP: Object.freeze([
+      'tradeRelation', 'customerSamples', 'promotionalGifts',
+      'posAdvertisingAmortization', 'posAdvertisingExpense', 'merchandising',
+      'animations', 'tester', 'daCostAndSpecificDevelopment', 'otherAP'
+    ]),
+    customerContribution: RECONCILIATION_DEFINITIONS.customerContribution,
+    operatingProfit: RECONCILIATION_DEFINITIONS.operatingProfit
+  });
 
   const SUMMARY_LINE_ALIASES = {
     posNo: ['POS no.'],
@@ -71,16 +120,22 @@
     'totalMinorationsPct', 'grossMarginPct', 'customerContributionPct'
   ]);
 
-  const SUMMARY_REQUIRED_LINES = [
-    'posNo', 'aup', 'grossSales', 'totalMinorations', 'netSales',
-    'grossMargin', 'customerContribution'
-  ];
+  const SUMMARY_REQUIRED_LINES = Object.freeze([
+    'posNo', 'aup', 'grossSales', 'structuralConditionsOn',
+    'structuralConditionsOff', 'totalActiveSupport', 'promoAllowOnInvoice',
+    'promoAllowAppliedSeparately', 'promoAllowLoyalty', 'totalReturns',
+    'totalMinorations', 'netSales', 'stdCos', 'royalTaMs',
+    'physicalDistribution', 'specialOperationsCost', 'obsoleteSlowMovingReturns',
+    'grossMargin', 'customerSamples', 'promotionalGifts', 'animations',
+    'posAdvertisingAmortization', 'otherPosAdvertising', 'specificDevelopment',
+    'specificAP', 'specificSga', 'customerContribution', 'nonSpecificCosts',
+    'operatingProfit'
+  ]);
 
   const SUMMARY_BRIDGES = {
     totalMinorations: {
       label: 'Total Minorations',
       metric: 'totalMinorations',
-      ratioDenominator: 'grossSales',
       drivers: [
         ['structuralConditionsOn', 'Structural Conditions On'],
         ['structuralConditionsOff', 'Structural Conditions Off'],
@@ -94,7 +149,6 @@
     grossMargin: {
       label: 'Gross Margin',
       metric: 'grossMargin',
-      ratioDenominator: 'netSales',
       drivers: [
         ['netSales', 'CONSO Net Sales'],
         ['stdCos', 'Standard COS'],
@@ -107,7 +161,7 @@
     customerContribution: {
       label: 'Customer Contribution',
       metric: 'customerContribution',
-      ratioDenominator: 'netSales',
+      driverGranularity: 'summary-non-overlapping-detail',
       drivers: [
         ['grossMargin', 'Gross Margin'],
         ['customerSamples', 'Customer Samples'],
@@ -125,7 +179,6 @@
     totalMinorations: {
       label: 'Total Minorations',
       metric: 'totalMinorations',
-      ratioDenominator: 'grossSales',
       drivers: [
         ['discount', 'Structural Conditions On'],
         ['rebates', 'Structural Conditions Off'],
@@ -139,7 +192,6 @@
     grossMargin: {
       label: 'Gross Margin',
       metric: 'grossMargin',
-      ratioDenominator: 'netSales',
       drivers: [
         ['netSales', 'CONSO Net Sales'],
         ['stdCos', 'Standard COS'],
@@ -152,7 +204,7 @@
     customerContribution: {
       label: 'Customer Contribution',
       metric: 'customerContribution',
-      ratioDenominator: 'netSales',
+      driverGranularity: 'filtered-subtotal',
       drivers: [
         ['grossMargin', 'Gross Margin'],
         ['specificAP', 'Specific A&P'],
@@ -212,10 +264,19 @@
     return sign * number / (percent ? 100 : 1);
   }
 
-  function toRatio(value) {
-    const number = toNumber(value);
-    if (number == null) return null;
-    return Math.abs(number) > 1.5 ? number / 100 : number;
+  function parseWorkbookPercentagePoint(value) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value / 100 : null;
+    let text = normalizeSpace(value);
+    if (!text || text === '-' || text === '—' || /^n\/?a$/i.test(text)) return null;
+    let sign = 1;
+    if (/^\(.*\)$/.test(text)) {
+      sign = -1;
+      text = text.slice(1, -1);
+    }
+    text = text.replace(/[,%¥$]/g, '');
+    const number = Number(text);
+    return Number.isFinite(number) ? sign * number / 100 : null;
   }
 
   function amountVariance(current, comparison) {
@@ -236,10 +297,93 @@
       : null;
   }
 
-  function safeRatio(numerator, denominator) {
+  function calculateRatio(numerator, denominator) {
     return Number.isFinite(numerator) && Number.isFinite(denominator) && Math.abs(denominator) > 1e-12
       ? numerator / denominator
       : null;
+  }
+
+  function getPnlDenominatorKey(field) {
+    return PNL_DENOMINATOR_REGISTRY[field] || null;
+  }
+
+  function calculateLineRatio(field, amount, values) {
+    const denominatorKey = getPnlDenominatorKey(field);
+    const denominator = denominatorKey && values ? values[denominatorKey] : null;
+    return calculateRatio(amount, denominator);
+  }
+
+  function finiteValues(values, fields) {
+    return fields.every(field => Number.isFinite(values && values[field]));
+  }
+
+  function reconcileLevel(values, target, components, tolerance) {
+    const requiredFields = [target, ...components];
+    if (!finiteValues(values, requiredFields)) {
+      return {
+        ok: false,
+        status: 'unavailable',
+        target,
+        components: components.slice(),
+        reported: Number.isFinite(values && values[target]) ? values[target] : null,
+        derived: null,
+        residual: null,
+        tolerance,
+        missing: requiredFields.filter(field => !Number.isFinite(values && values[field]))
+      };
+    }
+    const reported = values[target];
+    const derived = components.reduce((sum, field) => sum + values[field], 0);
+    const residual = derived - reported;
+    return {
+      ok: Math.abs(residual) <= tolerance,
+      status: Math.abs(residual) <= tolerance ? 'reconciled' : 'outOfTolerance',
+      target,
+      components: components.slice(),
+      reported,
+      derived,
+      residual,
+      tolerance,
+      missing: []
+    };
+  }
+
+  function reconcileMovement(currentLevel, comparisonLevel, tolerance) {
+    if (!currentLevel || !comparisonLevel || currentLevel.status === 'unavailable' || comparisonLevel.status === 'unavailable') {
+      return {
+        ok: false,
+        status: 'unavailable',
+        reported: null,
+        derived: null,
+        residual: null,
+        tolerance
+      };
+    }
+    const reported = currentLevel.reported - comparisonLevel.reported;
+    const derived = currentLevel.derived - comparisonLevel.derived;
+    const residual = derived - reported;
+    return {
+      ok: Math.abs(residual) <= tolerance,
+      status: Math.abs(residual) <= tolerance ? 'reconciled' : 'outOfTolerance',
+      reported,
+      derived,
+      residual,
+      tolerance
+    };
+  }
+
+  function buildReconciliation(valuesByRole, definitions, tolerance) {
+    return Object.freeze(Object.fromEntries(Object.entries(definitions).map(([target, components]) => {
+      const current = reconcileLevel(valuesByRole.current, target, components, tolerance);
+      const comparison = reconcileLevel(valuesByRole.comparison, target, components, tolerance);
+      const movement = reconcileMovement(current, comparison, tolerance);
+      return [target, Object.freeze({
+        current: Object.freeze(current),
+        comparison: Object.freeze(comparison),
+        movement: Object.freeze(movement),
+        ok: current.ok && comparison.ok && movement.ok
+      })];
+    })));
   }
 
   function uniqueSorted(values) {
@@ -480,7 +624,7 @@
     if (!columns) return null;
     return {
       value: toNumber(row[columns.valueColumn]),
-      pct: columns.percentColumn == null ? null : toRatio(row[columns.percentColumn])
+      pct: columns.percentColumn == null ? null : parseWorkbookPercentagePoint(row[columns.percentColumn])
     };
   }
 
@@ -530,6 +674,19 @@
 
     const missing = SUMMARY_REQUIRED_LINES.filter(key => !byKey[key]);
     if (missing.length) throw new Error(`Summary P&L is missing required lines: ${missing.join(', ')}.`);
+    const missingValues = [];
+    ['current', 'comparison'].forEach(role => {
+      SUMMARY_REQUIRED_LINES.forEach(key => {
+        const line = byKey[key];
+        const adjusted = line[role].actualAdjusted;
+        const actual = line[role].actual;
+        const chosen = adjusted && Number.isFinite(adjusted.value) ? adjusted : actual;
+        if (!chosen || !Number.isFinite(chosen.value)) missingValues.push(`${role}.${key}`);
+      });
+    });
+    if (missingValues.length) {
+      throw new Error(`Summary P&L required financial values are missing or non-finite: ${missingValues.join(', ')}.`);
+    }
 
     return {
       sheetName: name,
@@ -586,9 +743,13 @@
       values.posNo = values.terminal ? 1 : 0;
       const apExpense = values.specificAP;
       const apExpenseMagnitude = Number.isFinite(apExpense) ? Math.abs(apExpense) : null;
-      const apExpensePct = Number.isFinite(values.specificAPPct)
-        ? values.specificAPPct
-        : safeRatio(apExpense, values.netSales);
+      const apExpensePct = calculateLineRatio('specificAP', apExpense, values);
+      const levelReconciliation = Object.freeze(Object.fromEntries(
+        Object.entries(DETAIL_RECONCILIATION_DEFINITIONS).map(([target, components]) => [
+          target,
+          Object.freeze(reconcileLevel(values, target, components, AMOUNT_RECONCILIATION_TOLERANCE_KRMB))
+        ])
+      ));
       stores.push({
         sourceRow: row.sourceRowNumber,
         year,
@@ -610,18 +771,19 @@
           cityPosNo: values.cityPosNo,
           grossSales: values.grossSales,
           totalMinorations: values.totalMinorations,
-          totalMinorationsPct: values.totalMinorationsPct,
+          totalMinorationsPct: calculateLineRatio('totalMinorations', values.totalMinorations, values),
           netSales: values.netSales,
-          netSalesPct: values.netSalesPct,
+          netSalesPct: calculateRatio(values.netSales, values.grossSales),
           grossMargin: values.grossMargin,
-          grossMarginPct: values.grossMarginPct,
+          grossMarginPct: calculateLineRatio('grossMargin', values.grossMargin, values),
           apExpense,
           apExpenseMagnitude,
           apExpensePct,
           customerContribution: values.customerContribution,
-          customerContributionPct: values.customerContributionPct
+          customerContributionPct: calculateLineRatio('customerContribution', values.customerContribution, values)
         },
-        pnl: values
+        pnl: values,
+        reconciliation: levelReconciliation
       });
     });
 
@@ -700,20 +862,25 @@
     const netSales = resolveSummaryValue(summary, 'netSales', role);
     const grossMargin = resolveSummaryValue(summary, 'grossMargin', role);
     const contribution = resolveSummaryValue(summary, 'customerContribution', role);
+    const canonicalAmounts = Object.fromEntries(
+      Object.keys(summary.byKey).map(key => [key, resolveSummaryValue(summary, key, role).value])
+    );
     return {
       values: {
         posNo: posNo.value,
         aup: aup.value,
         grossSales: grossSales.value,
         totalMinorations: totalMinorations.value,
-        totalMinorationsPct: totalMinorations.pct,
+        totalMinorationsPct: calculateLineRatio('totalMinorations', totalMinorations.value, canonicalAmounts),
         netSales: netSales.value,
+        netSalesPct: calculateRatio(netSales.value, grossSales.value),
         grossMargin: grossMargin.value,
-        grossMarginPct: grossMargin.pct,
+        grossMarginPct: calculateLineRatio('grossMargin', grossMargin.value, canonicalAmounts),
         customerContribution: contribution.value,
-        customerContributionPct: contribution.pct
+        customerContributionPct: calculateLineRatio('customerContribution', contribution.value, canonicalAmounts)
       },
-      sources: { posNo, aup, grossSales, totalMinorations, netSales, grossMargin, customerContribution: contribution }
+      sources: { posNo, aup, grossSales, totalMinorations, netSales, grossMargin, customerContribution: contribution },
+      canonicalAmounts
     };
   }
 
@@ -746,6 +913,10 @@
     const storeMatches = matchStores(current.stores, comparison.stores);
     const currentSummary = summaryMetrics(summary, 'current');
     const comparisonSummary = summaryMetrics(summary, 'comparison');
+    const summaryReconciliation = buildReconciliation({
+      current: currentSummary.canonicalAmounts,
+      comparison: comparisonSummary.canonicalAmounts
+    }, RECONCILIATION_DEFINITIONS, AMOUNT_RECONCILIATION_TOLERANCE_KRMB);
     const capabilities = {
       current: current.capabilities,
       comparison: comparison.capabilities,
@@ -777,7 +948,8 @@
         periods: {
           current: currentSummary,
           comparison: comparisonSummary
-        }
+        },
+        reconciliation: summaryReconciliation
       },
       detail: { current, comparison },
       storeMatches,
@@ -863,18 +1035,22 @@
     const grossMargin = sumField(stores, 'grossMargin');
     const customerContribution = sumField(stores, 'customerContribution');
     const posNo = sumStoreValue(stores, 'cityPosNo');
-    return {
+    const values = {
       posNo,
       aup,
       grossSales,
       totalMinorations,
-      totalMinorationsPct: grossSales ? totalMinorations / grossSales : null,
       netSales,
       grossMargin,
-      grossMarginPct: netSales ? grossMargin / netSales : null,
       customerContribution,
-      customerContributionPct: netSales ? customerContribution / netSales : null,
       storeCount: stores.length
+    };
+    return {
+      ...values,
+      totalMinorationsPct: calculateLineRatio('totalMinorations', totalMinorations, values),
+      netSalesPct: calculateRatio(netSales, grossSales),
+      grossMarginPct: calculateLineRatio('grossMargin', grossMargin, values),
+      customerContributionPct: calculateLineRatio('customerContribution', customerContribution, values)
     };
   }
 
@@ -888,35 +1064,137 @@
     return result;
   }
 
-  function buildBridgeResult(config, currentValue, comparisonValue, drivers, mode, tolerance, ratios) {
-    const driverTotal = drivers.reduce((sum, driver) => sum + driver.variance, 0);
-    const expectedCurrent = comparisonValue + driverTotal;
-    const residual = expectedCurrent - currentValue;
-    const ok = Math.abs(residual) <= tolerance;
-    const currentRatio = ratios ? ratios.current : null;
-    const comparisonRatio = ratios ? ratios.comparison : null;
+  function reconcileBridgeLevel(reported, drivers, valueKey, tolerance) {
+    const missing = [];
+    if (!Number.isFinite(reported)) missing.push('target');
+    drivers.forEach(driver => {
+      if (!Number.isFinite(driver[valueKey])) missing.push(driver.field);
+    });
+    if (missing.length) {
+      return { ok: false, status: 'unavailable', reported: Number.isFinite(reported) ? reported : null, derived: null, residual: null, tolerance, missing };
+    }
+    const derived = drivers.reduce((sum, driver) => sum + driver[valueKey], 0);
+    const residual = derived - reported;
+    return {
+      ok: Math.abs(residual) <= tolerance,
+      status: Math.abs(residual) <= tolerance ? 'reconciled' : 'outOfTolerance',
+      reported,
+      derived,
+      residual,
+      tolerance,
+      missing: []
+    };
+  }
+
+  function reconcileBridgeMovement(current, comparison, drivers, valueKey, tolerance) {
+    const reported = amountVariance(current, comparison);
+    const missing = [];
+    if (!Number.isFinite(reported)) missing.push('target');
+    drivers.forEach(driver => {
+      if (!Number.isFinite(driver[valueKey])) missing.push(driver.field);
+    });
+    if (missing.length) {
+      return { ok: false, status: 'unavailable', reported, derived: null, residual: null, tolerance, missing };
+    }
+    const derived = drivers.reduce((sum, driver) => sum + driver[valueKey], 0);
+    const residual = derived - reported;
+    return {
+      ok: Math.abs(residual) <= tolerance,
+      status: Math.abs(residual) <= tolerance ? 'reconciled' : 'outOfTolerance',
+      reported,
+      derived,
+      residual,
+      tolerance,
+      missing: []
+    };
+  }
+
+  function bridgeReconciliation(current, comparison, drivers, keys, tolerance) {
+    const currentLevel = reconcileBridgeLevel(current, drivers, keys.current, tolerance);
+    const comparisonLevel = reconcileBridgeLevel(comparison, drivers, keys.comparison, tolerance);
+    const movement = reconcileBridgeMovement(current, comparison, drivers, keys.movement, tolerance);
+    return {
+      ok: currentLevel.ok && comparisonLevel.ok && movement.ok,
+      tolerance,
+      current: currentLevel,
+      comparison: comparisonLevel,
+      movement,
+      expectedCurrent: Number.isFinite(comparison) && Number.isFinite(movement.derived)
+        ? comparison + movement.derived
+        : null,
+      actualCurrent: Number.isFinite(current) ? current : null,
+      residual: movement.residual
+    };
+  }
+
+  function bridgeError(label, reconciliation, view) {
+    if (reconciliation.ok) return null;
+    const unavailable = [reconciliation.current, reconciliation.comparison, reconciliation.movement]
+      .some(item => item.status === 'unavailable');
+    return {
+      code: unavailable ? 'BRIDGE_DATA_UNAVAILABLE' : 'BRIDGE_RECONCILIATION_ERROR',
+      message: unavailable
+        ? `${label} ${view} bridge is unavailable because required financial values are missing.`
+        : `${label} ${view} bridge does not reconcile; movement residual ${reconciliation.residual}.`,
+      residual: reconciliation.residual,
+      reconciliation
+    };
+  }
+
+  function buildBridgeResult(config, currentValue, comparisonValue, drivers, mode, tolerances, ratios) {
+    const currentRatio = ratios.current;
+    const comparisonRatio = ratios.comparison;
+    const amountReconciliation = bridgeReconciliation(
+      currentValue,
+      comparisonValue,
+      drivers,
+      { current: 'current', comparison: 'comparison', movement: 'variance' },
+      tolerances.amount
+    );
+    const ratioReconciliation = bridgeReconciliation(
+      currentRatio,
+      comparisonRatio,
+      drivers,
+      { current: 'currentRatio', comparison: 'comparisonRatio', movement: 'ratioVariance' },
+      tolerances.ratio
+    );
+    const amountError = bridgeError(config.label, amountReconciliation, 'amount');
+    const ratioError = bridgeError(config.label, ratioReconciliation, 'ratio');
     return {
       metric: config.metric,
       label: config.label,
       mode,
+      driverGranularity: config.driverGranularity || 'non-overlapping-detail',
+      denominatorKey: getPnlDenominatorKey(config.metric),
       comparison: comparisonValue,
       current: currentValue,
       comparisonRatio,
       currentRatio,
       ratioVariance: ratioVariance(currentRatio, comparisonRatio),
       drivers,
-      reconciliation: {
-        ok,
-        tolerance,
-        expectedCurrent,
-        actualCurrent: currentValue,
-        residual
+      amount: {
+        comparison: comparisonValue,
+        current: currentValue,
+        drivers,
+        reconciliation: amountReconciliation,
+        error: amountError
       },
-      error: ok ? null : {
-        code: 'BRIDGE_RECONCILIATION_ERROR',
-        message: `${config.label} bridge does not reconcile; residual ${residual}.`,
-        residual
-      }
+      ratio: {
+        comparison: comparisonRatio,
+        current: currentRatio,
+        movement: ratioVariance(currentRatio, comparisonRatio),
+        drivers: drivers.map(driver => ({
+          field: driver.field,
+          label: driver.label,
+          comparison: driver.comparisonRatio,
+          current: driver.currentRatio,
+          movement: driver.ratioVariance
+        })),
+        reconciliation: ratioReconciliation,
+        error: ratioError
+      },
+      reconciliation: amountReconciliation,
+      error: amountError
     };
   }
 
@@ -924,9 +1202,14 @@
     if (!model || !model.metadata || !model.summary || !model.detail) {
       throw new Error('A normalized Retail Performance Dashboard model is required.');
     }
-    const tolerance = options && Number.isFinite(options.reconciliationTolerance)
-      ? options.reconciliationTolerance
-      : RECONCILIATION_TOLERANCE;
+    const tolerances = Object.freeze({
+      amount: options && Number.isFinite(options.amountReconciliationTolerance)
+        ? options.amountReconciliationTolerance
+        : AMOUNT_RECONCILIATION_TOLERANCE_KRMB,
+      ratio: options && Number.isFinite(options.ratioReconciliationTolerance)
+        ? options.ratioReconciliationTolerance
+        : RATIO_RECONCILIATION_TOLERANCE
+    });
 
     function storesFor(role, filters) {
       const stores = model.detail[role].stores;
@@ -985,29 +1268,22 @@
     function getSummaryBridge(metric) {
       const config = SUMMARY_BRIDGES[metric];
       if (!config) throw new Error(`Unsupported bridge metric: ${metric}`);
+      const denominatorKey = getPnlDenominatorKey(config.metric);
       const currentTarget = resolveSummaryValue(model.summary, config.metric, 'current');
       const comparisonTarget = resolveSummaryValue(model.summary, config.metric, 'comparison');
       const currentValue = currentTarget.value;
       const comparisonValue = comparisonTarget.value;
-      const currentDenominator = resolveSummaryValue(model.summary, config.ratioDenominator, 'current').value;
-      const comparisonDenominator = resolveSummaryValue(model.summary, config.ratioDenominator, 'comparison').value;
-      const currentRatio = Number.isFinite(currentTarget.pct)
-        ? currentTarget.pct
-        : safeRatio(currentValue, currentDenominator);
-      const comparisonRatio = Number.isFinite(comparisonTarget.pct)
-        ? comparisonTarget.pct
-        : safeRatio(comparisonValue, comparisonDenominator);
+      const currentDenominator = resolveSummaryValue(model.summary, denominatorKey, 'current').value;
+      const comparisonDenominator = resolveSummaryValue(model.summary, denominatorKey, 'comparison').value;
+      const currentRatio = calculateRatio(currentValue, currentDenominator);
+      const comparisonRatio = calculateRatio(comparisonValue, comparisonDenominator);
       const drivers = config.drivers.map(([field, label]) => {
         const currentSource = resolveSummaryValue(model.summary, field, 'current');
         const comparisonSource = resolveSummaryValue(model.summary, field, 'comparison');
-        const current = currentSource.value || 0;
-        const comparison = comparisonSource.value || 0;
-        const driverCurrentRatio = Number.isFinite(currentSource.pct)
-          ? currentSource.pct
-          : safeRatio(current, currentDenominator);
-        const driverComparisonRatio = Number.isFinite(comparisonSource.pct)
-          ? comparisonSource.pct
-          : safeRatio(comparison, comparisonDenominator);
+        const current = currentSource.value;
+        const comparison = comparisonSource.value;
+        const driverCurrentRatio = calculateRatio(current, currentDenominator);
+        const driverComparisonRatio = calculateRatio(comparison, comparisonDenominator);
         return {
           field,
           label,
@@ -1025,7 +1301,7 @@
         comparisonValue,
         drivers,
         'total',
-        tolerance,
+        tolerances,
         { current: currentRatio, comparison: comparisonRatio }
       );
     }
@@ -1033,19 +1309,20 @@
     function getFilteredBridge(metric, filters) {
       const config = FILTERED_BRIDGES[metric];
       if (!config) throw new Error(`Unsupported bridge metric: ${metric}`);
+      const denominatorKey = getPnlDenominatorKey(config.metric);
       const currentStores = storesFor('current', filters);
       const comparisonStores = storesFor('comparison', filters);
       const currentValue = sumField(currentStores, config.metric);
       const comparisonValue = sumField(comparisonStores, config.metric);
-      const currentDenominator = sumField(currentStores, config.ratioDenominator);
-      const comparisonDenominator = sumField(comparisonStores, config.ratioDenominator);
-      const currentRatio = safeRatio(currentValue, currentDenominator);
-      const comparisonRatio = safeRatio(comparisonValue, comparisonDenominator);
+      const currentDenominator = sumField(currentStores, denominatorKey);
+      const comparisonDenominator = sumField(comparisonStores, denominatorKey);
+      const currentRatio = calculateRatio(currentValue, currentDenominator);
+      const comparisonRatio = calculateRatio(comparisonValue, comparisonDenominator);
       const drivers = config.drivers.map(([field, label]) => {
         const current = sumField(currentStores, field);
         const comparison = sumField(comparisonStores, field);
-        const driverCurrentRatio = safeRatio(current, currentDenominator);
-        const driverComparisonRatio = safeRatio(comparison, comparisonDenominator);
+        const driverCurrentRatio = calculateRatio(current, currentDenominator);
+        const driverComparisonRatio = calculateRatio(comparison, comparisonDenominator);
         return {
           field,
           label,
@@ -1063,7 +1340,7 @@
         comparisonValue,
         drivers,
         'filtered',
-        tolerance,
+        tolerances,
         { current: currentRatio, comparison: comparisonRatio }
       );
       result.rowCounts = { current: currentStores.length, comparison: comparisonStores.length };
@@ -1094,11 +1371,18 @@
     createDataService,
     matchStores,
     normalizeFilters,
+    parseWorkbookPercentagePoint,
+    calculateRatio,
+    calculateLineRatio,
+    getPnlDenominatorKey,
     amountRelativeVariance,
     ratioVariance,
     constants: Object.freeze({
       defaultScope: DEFAULT_SCOPE,
-      reconciliationTolerance: RECONCILIATION_TOLERANCE,
+      amountReconciliationToleranceKrmb: AMOUNT_RECONCILIATION_TOLERANCE_KRMB,
+      ratioReconciliationTolerance: RATIO_RECONCILIATION_TOLERANCE,
+      pnlDenominatorRegistry: PNL_DENOMINATOR_REGISTRY,
+      reconciliationDefinitions: RECONCILIATION_DEFINITIONS,
       supportedReviewPeriods: ['S1', 'Full Year'],
       portfolioFilters: ['Review Period', 'Region', 'City', 'Status', 'Store Productivity Tier']
     })

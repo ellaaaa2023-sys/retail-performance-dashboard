@@ -53,7 +53,14 @@ check(7, 'Gross Margin variance uses ratio difference', () => {
   close(models.find(item => item.key === 'grossMargin').variance, -.015, 'GM ratio variance');
 });
 check(8, 'Store P&L negative percentage variance is a ratio difference', () => {
-  const model = StoreDetail.buildPnlRatioModel(-279, 1000, -276, 1000, DataLayer.ratioVariance);
+  const model = StoreDetail.buildPnlRatioModel(
+    'totalMinorations',
+    -279,
+    { grossSales: 1000 },
+    -276,
+    { grossSales: 1000 },
+    DataLayer
+  );
   close(model.ratioVariance, -.003, 'negative P&L ratio variance');
 });
 check(9, 'New Store comparison and variances remain unavailable', () => {

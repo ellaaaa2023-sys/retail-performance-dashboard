@@ -148,12 +148,14 @@
     };
   }
 
-  function buildPnlRatioModel(currentAmount, currentNetSales, comparisonAmount, comparisonNetSales, ratioVariance) {
-    const currentRatio = Number.isFinite(currentAmount) && Number.isFinite(currentNetSales) && Math.abs(currentNetSales) > 1e-12
-      ? currentAmount / currentNetSales
+  function buildPnlRatioModel(field, currentAmount, currentPnl, comparisonAmount, comparisonPnl, finance) {
+    const calculateLineRatio = finance && finance.calculateLineRatio;
+    const ratioVariance = finance && finance.ratioVariance;
+    const currentRatio = typeof calculateLineRatio === 'function'
+      ? calculateLineRatio(field, currentAmount, currentPnl)
       : null;
-    const comparisonRatio = Number.isFinite(comparisonAmount) && Number.isFinite(comparisonNetSales) && Math.abs(comparisonNetSales) > 1e-12
-      ? comparisonAmount / comparisonNetSales
+    const comparisonRatio = typeof calculateLineRatio === 'function'
+      ? calculateLineRatio(field, comparisonAmount, comparisonPnl)
       : null;
     return {
       currentRatio,
