@@ -17,6 +17,7 @@ const scripts = Array.from(html.matchAll(/<script\s+([^>]*?)src="([^"]+)"([^>]*)
 const expected = [
   './js/startup-guard.js',
   './js/browser-compat.js',
+  './js/i18n.js',
   './libs/xlsx.full.min.js',
   './libs/echarts.min.js',
   './js/data/detail-schema.js',

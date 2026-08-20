@@ -138,7 +138,7 @@ check(12, 'Missing Tier yields a Tier filter warning', () => {
   const capabilities = allCapabilities();
   capabilities.resolved.tierFilter = capability('unavailable', ['productivityTier'], ['productivityTier']);
   const warning = PreparationUI.buildWorkbookPreparation(standardModel([], capabilities)).capabilityWarnings[0];
-  assert.equal(warning.detail, 'Missing field: 门店单产等级');
+  assert.equal(warning.detail, 'Missing field: Store Productivity Tier');
 });
 
 check(13, 'Partial A&P explains missing components are not zero', () => {

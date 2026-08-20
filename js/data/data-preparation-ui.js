@@ -1,11 +1,13 @@
 (function (root, factory) {
   'use strict';
 
-  const api = factory();
+  const api = factory(root.RetailDashboardI18n || (typeof require === 'function' ? require('../i18n.js') : null));
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RetailDataPreparationUI = api;
-}(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (i18n) {
   'use strict';
+
+  const t = (key, params) => i18n && i18n.t ? i18n.t(key, params) : key;
 
   const FIELD_LABELS = Object.freeze({
     terminal: 'Terminal',
@@ -13,9 +15,9 @@
     city: 'City',
     region: 'Region',
     status: 'Status',
-    productivityTier: '门店单产等级',
-    cityPosNo: '城市POS数',
-    storeProductivity: '门店总单产',
+    productivityTier: 'Store Productivity Tier',
+    cityPosNo: 'City POS Count',
+    storeProductivity: 'Store Productivity',
     grossSales: 'Gross Sales',
     totalMinorations: 'Total Minorations',
     netSales: 'CA NET',
@@ -56,7 +58,8 @@
   ]);
 
   function fieldLabel(key) {
-    return FIELD_LABELS[key] || String(key || 'Required field');
+    const translated = t(`field.${key}`);
+    return translated.indexOf('.') === -1 ? translated : (FIELD_LABELS[key] || String(key || 'Required field'));
   }
 
   function unique(values) {
@@ -68,14 +71,14 @@
     const current = unique(missing.current || []).map(fieldLabel);
     const comparison = unique(missing.comparison || []).map(fieldLabel);
     const all = unique(current.concat(comparison));
-    if (!all.length) return 'Required source fields are not available.';
+    if (!all.length) return t('prep.requiredUnavailable');
     if (current.join('|') === comparison.join('|')) {
-      return `${all.length === 1 ? 'Missing field' : 'Missing fields'}: ${all.join(', ')}`;
+      return `${t(all.length === 1 ? 'prep.missingField' : 'prep.missingFields')}: ${all.join(', ')}`;
     }
     const parts = [];
-    if (current.length) parts.push(`Current: ${current.join(', ')}`);
-    if (comparison.length) parts.push(`Comparison: ${comparison.join(', ')}`);
-    return `Missing ${parts.join(' · ')}`;
+    if (current.length) parts.push(t('prep.missingByPeriod', { period: t('common.current'), fields: current.join(', ') }));
+    if (comparison.length) parts.push(t('prep.missingByPeriod', { period: t('common.comparison'), fields: comparison.join(', ') }));
+    return parts.join(' · ');
   }
 
   function buildCapabilityWarnings(capabilities) {
@@ -85,12 +88,13 @@
       const copy = CAPABILITY_COPY[key];
       if (!capability || !copy || capability.status === 'available') return [];
       const partial = capability.status === 'partial';
+      const label = t(`cap.${key}`);
       return [{
         key,
         status: capability.status,
-        title: partial ? `${copy.label} is partial` : copy.unavailable,
+        title: partial ? t('cap.partial', { name: label }) : t('cap.unavailable', { name: label }),
         detail: partial && key === 'apComponentAnalysis'
-          ? 'Some component fields are missing. Missing components are not treated as zero.'
+          ? t('error.apComponentMissing')
           : missingDetail(capability)
       }];
     });
@@ -100,11 +104,11 @@
     const counts = sheet.counts || {};
     const fields = sheet.fields || {};
     const stats = [];
-    if (Number.isFinite(counts.cleanedRows)) stats.push(`${counts.cleanedRows} rows processed`);
-    if (counts.blankRowsIgnored) stats.push(`${counts.blankRowsIgnored} blank ${counts.blankRowsIgnored === 1 ? 'row' : 'rows'} ignored`);
-    if (counts.blankColumnsIgnored) stats.push(`${counts.blankColumnsIgnored} blank ${counts.blankColumnsIgnored === 1 ? 'column' : 'columns'} ignored`);
+    if (Number.isFinite(counts.cleanedRows)) stats.push(t('prep.rowsProcessed', { count: counts.cleanedRows }));
+    if (counts.blankRowsIgnored) stats.push(t(counts.blankRowsIgnored === 1 ? 'prep.blankRow' : 'prep.blankRows', { count: counts.blankRowsIgnored }));
+    if (counts.blankColumnsIgnored) stats.push(t(counts.blankColumnsIgnored === 1 ? 'prep.blankColumn' : 'prep.blankColumns', { count: counts.blankColumnsIgnored }));
     const additional = Array.isArray(fields.unknownColumns) ? fields.unknownColumns.length : 0;
-    if (additional) stats.push(`${additional} additional ${additional === 1 ? 'field' : 'fields'} preserved`);
+    if (additional) stats.push(t(additional === 1 ? 'prep.fieldPreserved' : 'prep.fieldsPreserved', { count: additional }));
     return stats;
   }
 
@@ -126,41 +130,41 @@
     };
     if (sheet.classification === 'summary') {
       result.tone = 'success';
-      result.detail = 'Summary P&L · Dashboard Source · Cleaning not required';
+      result.detail = t('prep.summarySheet');
       result.stats = [];
       return result;
     }
     if (role === 'current' || role === 'comparison') {
       const stores = sheetStoreCount(model, role);
       result.tone = 'success';
-      result.detail = `${role === 'current' ? 'Current' : 'Comparison'} Detail${Number.isFinite(stores) ? ` · ${stores} stores` : ''} · Cleaned`;
+      result.detail = t('prep.detailCleaned', { period: t(role === 'current' ? 'common.current' : 'common.comparison'), stores: Number.isFinite(stores) ? stores : '—' });
       return result;
     }
     if (role === 'historical') {
       result.tone = 'success';
-      result.detail = 'Compatible Detail · Cleaned · Not used in current analysis';
+      result.detail = t('prep.historicalCleaned');
       return result;
     }
     if (role === 'unassigned') {
       result.tone = 'warning';
-      result.detail = 'Compatible Detail · Cleaned';
-      result.note = 'Not used in analysis · Year / Review Period could not be identified';
+      result.detail = t('prep.unassignedCleaned');
+      result.note = t('prep.unassignedNote');
       return result;
     }
     if (sheet.cleaningStatus === 'nearCompatible' || role === 'nearCompatible') {
       result.tone = 'warning';
-      result.detail = 'Detail sheet detected, but cannot be processed.';
+      result.detail = t('prep.nearCompatible');
       result.missing = ((sheet.fields && sheet.fields.missingRequired) || []).map(fieldLabel);
       result.stats = [];
       return result;
     }
     if (role === 'blocked') {
       result.tone = 'error';
-      result.detail = 'Detail sheet detected, but its data could not be prepared.';
+      result.detail = t('prep.blockedSheet');
       result.missing = ((sheet.dashboardReadiness && sheet.dashboardReadiness.missing) || []).map(fieldLabel);
       return result;
     }
-    result.detail = 'Not a store-level Detail sheet';
+    result.detail = t('prep.notDetail');
     result.stats = [];
     return result;
   }
@@ -184,24 +188,24 @@
     const hasWarnings = nearCompatible.length > 0 || additional.some(sheet => sheet.role === 'unassigned');
     return {
       mode: hasLimitations || hasWarnings ? 'warning' : 'ready',
-      title: hasLimitations ? 'Data Ready with Limitations' : hasWarnings ? 'Data Ready with Warnings' : 'Data Ready',
-      summary: `${compatibleCount} store-level data ${compatibleCount === 1 ? 'sheet' : 'sheets'} prepared · ${usedCount} used in current analysis`,
+      title: t(hasLimitations ? 'prep.readyLimitations' : hasWarnings ? 'prep.readyWarnings' : 'prep.dataReady'),
+      summary: t('prep.sheetSummary', { compatible: compatibleCount, used: usedCount }),
       period: metadata.currentPeriodKey && metadata.comparisonPeriodKey
-        ? `${metadata.currentPeriodKey} vs ${metadata.comparisonPeriodKey}`
+        ? `${metadata.currentPeriodKey} ${t('common.vs')} ${metadata.comparisonPeriodKey}`
         : '',
       steps: [
-        'Workbook scanned',
-        summary ? 'Summary P&L detected' : null,
-        `${compatibleCount} store-level data ${compatibleCount === 1 ? 'sheet' : 'sheets'} prepared`,
-        current && comparison ? 'Current and Comparison assigned' : null,
-        'Data ready for analysis'
+        t('prep.workbookScanned'),
+        summary ? t('prep.summaryDetected') : null,
+        t('prep.compatiblePrepared', { count: compatibleCount }),
+        current && comparison ? t('prep.periodsAssigned') : null,
+        t('prep.readyAnalysis')
       ].filter(Boolean),
       primarySheets: [summary, current, comparison].filter(Boolean),
       additionalSheets: additional,
       sheetWarnings: nearCompatible,
       otherSheets: other,
       capabilityWarnings,
-      privacy: 'Data is processed locally in your browser. No workbook upload to a server is required for this processing flow.',
+      privacy: t('prep.localProcessing'),
       expanded: false
     };
   }
@@ -225,36 +229,36 @@
     if (blockedCurrentCandidate) {
       const missing = blockedCurrentCandidate.fields.missingRequired.map(fieldLabel);
       return {
-        reason: `Current Detail is missing ${missing.length === 1 ? 'a required field' : 'required fields'}: ${missing.join(', ')}.`,
-        detail: `${blockedCurrentCandidate.sheetName} cannot be used as Current Detail until the required ${missing.length === 1 ? 'field is' : 'fields are'} available.`,
+        reason: t(missing.length === 1 ? 'prep.errorCurrentMissingOne' : 'prep.errorCurrentMissing', { fields: missing.join(', ') }),
+        detail: t(missing.length === 1 ? 'prep.errorCurrentMissingDetailOne' : 'prep.errorCurrentMissingDetail', { sheet: blockedCurrentCandidate.sheetName }),
         invalidateAssignments: true
       };
     }
     if (/Prior-year same-period detail sheet not found/i.test(message)) {
-      return { reason: 'Comparison Detail could not be assigned.', detail: 'Expected a prior-year Detail sheet for the same Review Period.' };
+      return { reason: t('prep.errorComparisonAssign'), detail: t('prep.errorComparisonAssignDetail') };
     }
     if (/Current Store Detail sheet is ambiguous/i.test(message)) {
-      return { reason: 'Current Detail could not be assigned.', detail: 'More than one Detail sheet matches the latest year and Review Period.' };
+      return { reason: t('prep.errorCurrentAssign'), detail: t('prep.errorCurrentAmbiguousDetail') };
     }
     if (/No cleaned Store Detail sheet has reliable year/i.test(message)) {
-      return { reason: 'Current Detail could not be assigned.', detail: 'Year / Review Period could not be identified for the cleaned Detail sheets.' };
+      return { reason: t('prep.errorCurrentAssign'), detail: t('prep.errorCurrentPeriodDetail') };
     }
     if (/exactly one Review Period/i.test(message)) {
-      return { reason: 'The workbook contains more than one Review Period.', detail: 'Use one review period and its prior-year comparison in a single analysis workbook.' };
+      return { reason: t('prep.errorMultiplePeriods'), detail: t('prep.errorMultiplePeriodsDetail') };
     }
     if (/Expected exactly one Summary P&L sheet/i.test(message)) {
-      return { reason: 'Summary P&L could not be identified.', detail: 'Expected one P&L review sheet for the current review year.' };
+      return { reason: t('prep.errorSummaryAssign'), detail: t('prep.errorSummaryAssignDetail') };
     }
     if (/Summary P&L year does not match/i.test(message)) {
-      return { reason: 'Summary P&L and Current Detail years do not match.', detail: 'Check the year labels on the Summary and Current Detail sheets.' };
+      return { reason: t('prep.errorYearMismatch'), detail: t('prep.errorYearMismatchDetail') };
     }
     if (/Local libraries are missing|data layer.*missing/i.test(message)) {
-      return { reason: 'The local dashboard libraries could not be loaded.', detail: 'Keep index.html, libs, js and assets together, then reopen the dashboard.' };
+      return { reason: t('prep.errorLibraries'), detail: t('prep.errorLibrariesDetail') };
     }
     if (/Unsupported file type/i.test(message)) {
-      return { reason: 'This file type is not supported.', detail: 'Use an .xlsx, .xls, .xlsm or .csv workbook.' };
+      return { reason: t('prep.errorFileType'), detail: t('error.invalidFile') };
     }
-    return { reason: 'Workbook structure could not be prepared for analysis.', detail: 'Review the workbook sheets and required Detail fields, then try again.' };
+    return { reason: t('prep.errorGenericReason'), detail: t('prep.errorGenericDetail') };
   }
 
   function buildBlockingPreparation(error) {
@@ -268,16 +272,16 @@
     ));
     return {
       mode: 'blocked',
-      title: 'Data cannot be loaded for analysis',
+      title: t('prep.dataBlocked'),
       summary: mapped.reason,
       period: '',
-      steps: sheets.length ? ['Workbook scanned'] : [],
+      steps: sheets.length ? [t('prep.workbookScanned')] : [],
       primarySheets: sheets.filter(sheet => ['summary', 'current', 'comparison'].includes(sheet.role)),
       additionalSheets: sheets.filter(sheet => ['historical', 'unassigned'].includes(sheet.role)),
       sheetWarnings: sheets.filter(sheet => sheet.role === 'nearCompatible' || sheet.tone === 'error'),
       otherSheets: sheets.filter(sheet => sheet.role === 'ignored'),
       capabilityWarnings: [{ key: 'workbook', status: 'unavailable', title: mapped.reason, detail: mapped.detail }],
-      privacy: 'Data is processed locally in your browser. No workbook upload to a server is required for this processing flow.',
+      privacy: t('prep.localProcessing'),
       expanded: true
     };
   }
@@ -285,8 +289,8 @@
   function buildLoadingPreparation(fileName) {
     return {
       mode: 'loading',
-      title: 'Preparing workbook…',
-      summary: fileName || 'Reading workbook and scanning sheets',
+      title: t('prep.preparing'),
+      summary: fileName || t('prep.reading'),
       period: '',
       steps: [], primarySheets: [], additionalSheets: [], sheetWarnings: [], otherSheets: [], capabilityWarnings: [],
       privacy: '', expanded: false
@@ -300,21 +304,21 @@
     const comparisonStores = Number.isFinite(demo.comparisonStores) ? demo.comparisonStores : sheetStoreCount(model, 'comparison');
     return {
       mode: 'demo',
-      title: 'Data Ready',
-      summary: `${demo.datasetLabel || 'Synthetic Demo Dataset'} · 2 store-level data sheets ready · 2 used in current analysis`,
+      title: t('prep.dataReady'),
+      summary: t('prep.demoSummary', { dataset: t('prep.syntheticDataset') }),
       period: metadata.currentPeriodKey && metadata.comparisonPeriodKey
-        ? `${metadata.currentPeriodKey} vs ${metadata.comparisonPeriodKey}`
+        ? `${metadata.currentPeriodKey} ${t('common.vs')} ${metadata.comparisonPeriodKey}`
         : '',
       steps: [],
       primarySheets: [
-        { name: 'Summary P&L', role: 'summary', tone: 'success', detail: `${demo.summaryLabel || 'Synthetic Summary'} · Dashboard Source`, note: '', stats: [], missing: [] },
-        { name: demo.currentLabel || 'Current Detail', role: 'current', tone: 'success', detail: `${currentStores} stores · Ready`, note: '', stats: [], missing: [] },
-        { name: demo.comparisonLabel || 'Comparison Detail', role: 'comparison', tone: 'success', detail: `${comparisonStores} stores · Ready`, note: '', stats: [], missing: [] }
+        { name: t('prep.summaryPnl'), role: 'summary', tone: 'success', detail: `${t('prep.syntheticSummary')} · ${t('prep.dashboardSource')}`, note: '', stats: [], missing: [] },
+        { name: t('prep.currentDetail'), role: 'current', tone: 'success', detail: t('prep.storesReady', { count: currentStores }), note: '', stats: [], missing: [] },
+        { name: t('prep.comparisonDetail'), role: 'comparison', tone: 'success', detail: t('prep.storesReady', { count: comparisonStores }), note: '', stats: [], missing: [] }
       ],
       additionalSheets: [], sheetWarnings: [], otherSheets: [], capabilityWarnings: [],
-      privacy: 'Synthetic demo data is bundled with this dashboard. Uploaded workbooks are processed locally in your browser.',
-      detailsLabel: 'View details',
-      primaryGroupLabel: 'Dashboard sources',
+      privacy: t('prep.demoPrivacy'),
+      detailsLabel: t('action.viewDetails'),
+      primaryGroupLabel: t('prep.dashboardSources'),
       expanded: false
     };
   }

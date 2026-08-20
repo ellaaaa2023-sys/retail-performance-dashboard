@@ -1,5 +1,7 @@
 # Retail Performance Dashboard
 
+[**English**](README.md) | [**简体中文**](README.zh-CN.md)
+
 An interactive retail finance portfolio demo that turns portfolio-level P&L movement into store-level actions.
 
 [**Open the Live Demo →**](https://counter-performance-dashboard.vercel.app/)
@@ -48,6 +50,7 @@ The demo presents `2026 S1 vs 2025 S1` across 160 Current stores and 150 Compari
 - **Store Detail** — Existing and New Store profiles with KPIs, detailed P&L, A&P composition, and component movement.
 - **Interactive filters** — Region, City, Status, and Store Productivity Tier.
 - **Source switching** — Replace the demo with an uploaded workbook, reset selections without changing the source, or clear the upload to return to Demo.
+- **Bilingual interface** — Switch between English and Chinese without changing the active page, filters, data source, portfolio view, or selected store.
 
 ## Data Preparation
 

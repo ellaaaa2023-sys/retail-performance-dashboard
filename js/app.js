@@ -13,8 +13,18 @@ const ProductivityQuadrant = window.RetailProductivityQuadrant;
 const StoreDetailModel = window.RetailStoreDetail;
 const DataPreparationUI = window.RetailDataPreparationUI;
 const SourceLifecycle = window.RetailSourceLifecycle;
+const I18n = window.RetailDashboardI18n;
 const RuntimeConfig = window.RetailDashboardRuntime || Object.freeze({ mode: 'public-demo' });
 const IS_INTERNAL_EDGE = RuntimeConfig.mode === 'internal-edge';
+const t = (key, params) => I18n ? I18n.t(key, params) : key;
+const localized = (key, fallback, params) => {
+  const value = t(key, params);
+  return value === key ? fallback : value;
+};
+const metricLabel = (key, fallback) => localized(`metric.${key}`, fallback || key);
+const quadrantLabel = quadrant => localized(`quadrant.${quadrant}`, quadrant);
+const pnlLabel = (field, fallback) => localized(`pnl.${field}`, fallback || field);
+const componentLabel = (key, fallback) => localized(`component.${key}`, fallback || key);
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -134,7 +144,8 @@ const state = {
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
   portfolioView: 'productivity', snapshot: 'current',
   portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null
+  model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null,
+  noticeSpec: null
 };
 
 const norm = v => String(v ?? '').trim().toLowerCase()
@@ -186,14 +197,25 @@ function inlineAmountRatioHtml(amount, ratio) {
 }
 
 function setNotice(type, title, message) {
+  state.noticeSpec = null;
   $('notice').className = `notice ${type}`;
   $('notice').innerHTML = `<div><strong>${esc(title)}</strong><span>${esc(message)}</span></div>`;
+}
+
+function setI18nNotice(type, titleKey, messageKey, params) {
+  setNotice(type, t(titleKey, params), t(messageKey, params));
+  state.noticeSpec = { type, titleKey, messageKey, params: params || {} };
+}
+
+function rerenderNotice() {
+  const spec = state.noticeSpec;
+  if (spec) setI18nNotice(spec.type, spec.titleKey, spec.messageKey, spec.params);
 }
 
 function preparationSheetHtml(sheet) {
   const mark = sheet.tone === 'warning' ? '△' : sheet.tone === 'error' ? '!' : sheet.tone === 'neutral' ? '○' : '✓';
   const missing = sheet.missing && sheet.missing.length
-    ? `<span>${esc(sheet.missing.length === 1 ? 'Missing required field' : 'Missing required fields')}: ${esc(sheet.missing.join(', '))}</span>`
+    ? `<span>${esc(t(sheet.missing.length === 1 ? 'prep.missingRequiredField' : 'prep.missingRequiredFields'))}: ${esc(sheet.missing.join(', '))}</span>`
     : '';
   const note = sheet.note ? `<span>${esc(sheet.note)}</span>` : '';
   const stats = sheet.stats && sheet.stats.length
@@ -219,8 +241,8 @@ function renderDataPreparation(view) {
   panel.className = `preparation-panel ${esc(view.mode)}`;
   const hasDetails = view.steps.length || view.primarySheets.length || view.additionalSheets.length || view.sheetWarnings.length || view.otherSheets.length || view.capabilityWarnings.length || view.privacy;
   const steps = view.steps.length ? `<div class="preparation-steps">${view.steps.map(step => `<span class="preparation-step">✓ ${esc(step)}</span>`).join('')}</div>` : '';
-  const capabilityWarnings = preparationGroupHtml('Availability', view.capabilityWarnings, warning => `<div class="preparation-warning"><div class="preparation-mark">⚠</div><div><strong>${esc(warning.title)}</strong><span>${esc(warning.detail)}</span></div></div>`);
-  const details = hasDetails ? `<details${view.expanded ? ' open' : ''}><summary>${esc(view.detailsLabel || 'Workbook Scan Details')}</summary><div class="preparation-details">${steps}${preparationGroupHtml(view.primaryGroupLabel || 'Dashboard sources', view.primarySheets, preparationSheetHtml)}${preparationGroupHtml('Additional compatible sheets', view.additionalSheets, preparationSheetHtml)}${preparationGroupHtml('Sheets requiring attention', view.sheetWarnings, preparationSheetHtml)}${capabilityWarnings}${preparationGroupHtml('Other sheets', view.otherSheets, preparationSheetHtml)}${view.privacy ? `<div class="preparation-privacy">${esc(view.privacy)}</div>` : ''}</div></details>` : '';
+  const capabilityWarnings = preparationGroupHtml(t('prep.availability'), view.capabilityWarnings, warning => `<div class="preparation-warning"><div class="preparation-mark">⚠</div><div><strong>${esc(warning.title)}</strong><span>${esc(warning.detail)}</span></div></div>`);
+  const details = hasDetails ? `<details${view.expanded ? ' open' : ''}><summary>${esc(view.detailsLabel || t('prep.workbookDetails'))}</summary><div class="preparation-details">${steps}${preparationGroupHtml(view.primaryGroupLabel || t('prep.dashboardSources'), view.primarySheets, preparationSheetHtml)}${preparationGroupHtml(t('prep.additionalSheets'), view.additionalSheets, preparationSheetHtml)}${preparationGroupHtml(t('prep.attentionSheets'), view.sheetWarnings, preparationSheetHtml)}${capabilityWarnings}${preparationGroupHtml(t('prep.otherSheets'), view.otherSheets, preparationSheetHtml)}${view.privacy ? `<div class="preparation-privacy">${esc(view.privacy)}</div>` : ''}</div></details>` : '';
   panel.innerHTML = `<div class="preparation-summary"><div class="preparation-icon">${icon}</div><div class="preparation-copy"><strong>${esc(view.title)}</strong><span>${esc(view.summary)}</span></div>${view.period ? `<div class="preparation-period">${esc(view.period)}</div>` : ''}</div>${details}`;
 }
 
@@ -329,11 +351,11 @@ function cellHasUncachedFormula(sheet,row,col) {
 function renderSourceControls() {
   $('sheetSelect').innerHTML = state.book.SheetNames.map(name => `<option value="${esc(name)}"${name === state.sheetName ? ' selected' : ''}>${esc(name)}</option>`).join('');
   $('headerRow').value = state.headerRow + 1;
-  $('schemaMeta').textContent = `${state.headers.length} columns detected · ${state.fileName}`;
+  $('schemaMeta').textContent = t('mapping.columnsDetected', { count: state.headers.length, file: state.fileName });
 }
 function renderMapping() {
   $('mappingBody').innerHTML = Object.entries(FIELDS).map(([key,item]) => {
-    const options = ['<option value="-1">— Not mapped —</option>', ...state.headers.map((header,index) => `<option value="${index}"${state.mapping[key] === index ? ' selected' : ''}>${esc(header)}</option>`)].join('');
+    const options = [`<option value="-1">${esc(t('mapping.notMapped'))}</option>`, ...state.headers.map((header,index) => `<option value="${index}"${state.mapping[key] === index ? ' selected' : ''}>${esc(header)}</option>`)].join('');
     return `<tr><td><strong>${esc(item.label)}</strong></td><td><span class="${item.level}">${item.level}</span></td><td><select data-field="${key}">${options}</select></td><td>${esc(item.purpose)}</td></tr>`;
   }).join('');
 }
@@ -344,9 +366,9 @@ function mappingFromUI() {
 }
 function showMappingAlert(type,text) { $('mappingAlert').className = `mapping-alert ${type}`; $('mappingAlert').textContent = text; }
 function openSettings() {
-  if (state.model) { setNotice('info','Automatic field mapping','This workbook is mapped automatically by the data layer. Manual field mapping is no longer required.'); return; }
+  if (state.model) { setNotice('info',t('mapping.automatic'),t('mapping.automaticDetail')); return; }
   if (!$('mappingDialog').open) $('mappingDialog').showModal();
-  if (!state.book) showMappingAlert('error','Upload a workbook before configuring fields.');
+  if (!state.book) showMappingAlert('error',t('mapping.uploadBeforeConfig'));
 }
 
 function deriveRecord(record) {
@@ -394,10 +416,10 @@ function pnlTieErrors(record) {
 }
 
 function buildRecords() {
-  if (state.model) { showMappingAlert('success','This workbook uses automatic semantic field mapping. Manual field mapping is not required.'); return; }
+  if (state.model) { showMappingAlert('success',t('mapping.autoSemantic')); return; }
   const missing = validateMapping();
   if (missing.length) {
-    showMappingAlert('error',`Missing required field: ${missing.map(key => FIELDS[key].label).join(', ')}.`);
+    showMappingAlert('error',t('mapping.missingRequired', { fields: missing.map(key => FIELDS[key].label).join(', ') }));
     return;
   }
   const sheet = state.book.Sheets[state.sheetName];
@@ -421,7 +443,7 @@ function buildRecords() {
     deriveRecord(record);
     records.push(record);
   }
-  if (!records.length) { setNotice('error','No usable P&L records found','Check worksheet, header row and field mapping.'); return; }
+  if (!records.length) { setNotice('error',t('mapping.noUsableRecords'),t('mapping.noUsableRecordsDetail')); return; }
   const duplicates = new Map();
   records.forEach(record => {
     const key = `${norm(record.terminal)}|${norm(record.periodKey)}`;
@@ -429,8 +451,8 @@ function buildRecords() {
   });
   const duplicateKeys = [...duplicates.entries()].filter(([,count]) => count > 1);
   if (duplicateKeys.length) {
-    setNotice('error','Duplicate Store × Period records detected',`${duplicateKeys.length} composite key(s) are duplicated. Resolve them before analysis.`);
-    showMappingAlert('error','Duplicate Store ID × Period records prevent reliable comparisons.');
+    setNotice('error',t('mapping.duplicateRecords'),t('mapping.duplicateRecordsDetail', { count: duplicateKeys.length }));
+    showMappingAlert('error',t('mapping.duplicateRecordsAlert'));
     return;
   }
   const periodMap = new Map();
@@ -456,13 +478,13 @@ function buildRecords() {
   ensureSelectedStore();
   renderAll();
   const suffix = state.warnings.length ? ` · ${state.warnings.join(' · ')}` : '';
-  setNotice(state.warnings.length ? 'warning' : 'success',`Loaded ${records.length} P&L records locally`,`${state.dataStats.stores} stores · ${periods.length} review periods · Sheet: ${state.sheetName}${suffix}`);
+  setNotice(state.warnings.length ? 'warning' : 'success',t('mapping.loadedRecords', { count: records.length }),t('mapping.loadedRecordsDetail', { stores: state.dataStats.stores, periods: periods.length, sheet: state.sheetName, suffix }));
   $('mappingDialog').close();
 }
 
 function loadSource(fileName) {
   const best = bestSource();
-  if (!best || best.score < 8) throw new Error('No suitable P&L header row found. Open Data Settings and select the worksheet and header row.');
+  if (!best || best.score < 8) throw new Error(t('mapping.noSuitableHeader'));
   state.fileName = fileName; state.sheetName = best.name; state.matrix = best.matrix; state.headerRow = best.row;
   state.headers = headersAt(best.matrix,best.row); state.signature = schemaSignature(state.headers);
   const saved = readMappingStore()[state.signature];
@@ -471,8 +493,9 @@ function loadSource(fileName) {
   const missing = validateMapping();
   if (missing.length) {
     openSettings();
-    showMappingAlert('error',`Missing required field: ${missing.map(key => FIELDS[key].label).join(', ')}. Please map in Settings.`);
-    setNotice('error','Workbook needs field mapping',`Missing: ${missing.map(key => FIELDS[key].label).join(', ')}`);
+    const fields = missing.map(key => FIELDS[key].label).join(', ');
+    showMappingAlert('error',t('mapping.missingRequiredSettings', { fields }));
+    setNotice('error',t('mapping.workbookNeedsMapping'),t('mapping.missingFields', { fields }));
     return;
   }
   buildRecords();
@@ -521,25 +544,25 @@ function updatePeriodSummary() {
   if (state.model) {
     const md = state.model.metadata;
     $('reviewPeriodValue').textContent = md.reviewPeriod;
-    $('periodSummary').innerHTML = `<span>Current</span><strong>${esc(md.currentPeriodKey)}</strong><i>vs</i><span>Comparison</span><strong>${esc(md.comparisonPeriodKey)}</strong>`;
+    $('periodSummary').innerHTML = `<span>${esc(t('common.current'))}</span><strong>${esc(md.currentPeriodKey)}</strong><i>${esc(t('common.vs'))}</i><span>${esc(t('common.comparison'))}</span><strong>${esc(md.comparisonPeriodKey)}</strong>`;
   } else {
     $('reviewPeriodValue').textContent = '—';
-    $('periodSummary').innerHTML = `<span>Current</span><strong>—</strong><i>vs</i><span>Comparison</span><strong>—</strong>`;
+    $('periodSummary').innerHTML = `<span>${esc(t('common.current'))}</span><strong>—</strong><i>${esc(t('common.vs'))}</i><span>${esc(t('common.comparison'))}</span><strong>—</strong>`;
   }
   applyPeriodLabels();
 }
 function populateGlobalFilters() {
   if (!state.service) return;
   const options = state.service.getFilterOptions({});
-  setOptions('regionFilter', options.region, 'All Regions');
-  setOptions('cityFilter', options.city, 'All Cities');
-  setOptions('statusFilter', options.status, 'All Status');
-  setOptions('tierFilter', options.productivityTier, 'All Tiers');
+  setOptions('regionFilter', options.region, t('filter.allRegions'));
+  setOptions('cityFilter', options.city, t('filter.allCities'));
+  setOptions('statusFilter', options.status, t('filter.allStatus'));
+  setOptions('tierFilter', options.productivityTier, t('filter.allTiers'));
 }
 function refreshCityOptions() {
   if (!state.service) return;
   const options = state.service.getFilterOptions(activeFilters());
-  setOptions('cityFilter', options.city, 'All Cities');
+  setOptions('cityFilter', options.city, t('filter.allCities'));
 }
 function enableDashboard(on) {
   $('contextBar').classList.toggle('is-disabled',!on);
@@ -550,8 +573,9 @@ function enableDashboard(on) {
 function updateSourceUi() {
   const uploaded = state.sourceType === 'upload';
   $('clearBtn').disabled = !uploaded;
-  $('sourceLabel').textContent = uploaded ? 'Uploaded Workbook' : (IS_INTERNAL_EDGE ? 'Internal Offline' : 'Demo Data');
-  $('sourceDetail').textContent = uploaded ? state.fileName : (IS_INTERNAL_EDGE ? 'Upload Workbook' : 'Synthetic dataset');
+  $('clearBtn').textContent = t(IS_INTERNAL_EDGE ? 'action.clearData' : 'action.clearUpload');
+  $('sourceLabel').textContent = uploaded ? t('source.uploaded') : (IS_INTERNAL_EDGE ? t('source.internal') : t('source.demo'));
+  $('sourceDetail').textContent = uploaded ? state.fileName : (IS_INTERNAL_EDGE ? t('source.uploadWorkbook') : t('source.synthetic'));
 }
 
 const OVERVIEW_KPIS_PRIMARY = [
@@ -599,20 +623,21 @@ function overviewKpiCard(def, metrics) {
     ? `<span class="kpi-compare-inline">${inlineAmountRatioHtml(comparison, ratioComparison)}</span>`
     : comparisonText;
   const currentValue = def.ratioKey ? inlineAmountRatioHtml(current, ratioCurrent) : currentText;
-  return `<${tag} class="kpi-card ${tone}${def.ratioKey ? ' kpi-card-combined' : ''}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(def.label)}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current${def.ratioKey ? ' kpi-current-inline' : ''}">${currentValue}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>Variance</span><strong class="${deltaText == null ? 'flat' : Number.isFinite(displayVariance) && displayVariance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
+  return `<${tag} class="kpi-card ${tone}${def.ratioKey ? ' kpi-card-combined' : ''}"${attrs}><div class="kpi-label-row"><span class="kpi-label">${esc(metricLabel(def.key, def.label))}</span>${tag === 'button' ? '<span class="kpi-arrow">›</span>' : ''}</div><div class="kpi-current${def.ratioKey ? ' kpi-current-inline' : ''}">${currentValue}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>${esc(t('common.variance'))}</span><strong class="${deltaText == null ? 'flat' : Number.isFinite(displayVariance) && displayVariance >= 0 ? 'good' : 'bad'}">${deltaText == null ? 'N/A' : deltaText}</strong></div></${tag}>`;
 }
 function updateScopeStatus(metrics) {
   const el = $('scopeStatus');
   if (!el) return;
   const filtered = metrics && metrics.mode === 'filtered';
   el.className = 'scope-status' + (filtered ? ' filtered' : '');
-  el.innerHTML = `<span class="scope-dot"></span><span>${esc(metrics ? metrics.label : 'Total Portfolio')}</span>`;
+  const label = metrics && metrics.mode === 'filtered' ? t('common.filteredPortfolio') : t('common.totalPortfolio');
+  el.innerHTML = `<span class="scope-dot"></span><span>${esc(label)}</span>`;
 }
 function renderOverviewEmpty() {
-  updateScopeStatus({ mode: 'total', label: 'Total Portfolio' });
+  updateScopeStatus({ mode: 'total', label: t('common.totalPortfolio') });
   $('primaryKpis').innerHTML = '';
   $('secondaryKpis').innerHTML = '';
-  $('overviewInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
+  $('overviewInsights').innerHTML = `<div class="empty-state">${esc(t('overview.noAnalysis'))}</div>`;
 }
 function renderOverview() {
   if (!state.service) { renderOverviewEmpty(); return; }
@@ -648,7 +673,7 @@ function chartNavigation({x=true,y=true,xAxisIndex=0,yAxisIndex=0}={}) {
   if(x)dataZoom.push({...inside,xAxisIndex});
   if(y)dataZoom.push({...inside,yAxisIndex});
   return {
-    toolbox:{show:true,right:8,top:0,itemSize:14,itemGap:9,feature:{dataZoom:{title:{zoom:'Zoom',back:'Undo zoom'},xAxisIndex:x?'all':false,yAxisIndex:y?'all':false},restore:{title:'Reset view'}},iconStyle:{borderColor:THEME.muted},emphasis:{iconStyle:{borderColor:THEME.blue}}},
+    toolbox:{show:true,right:8,top:0,itemSize:14,itemGap:9,feature:{dataZoom:{title:{zoom:t('chart.zoom'),back:t('chart.undoZoom')},xAxisIndex:x?'all':false,yAxisIndex:y?'all':false},restore:{title:t('chart.resetView')}},iconStyle:{borderColor:THEME.muted},emphasis:{iconStyle:{borderColor:THEME.blue}}},
     dataZoom
   };
 }
@@ -680,8 +705,8 @@ function snapshotCell(value, type) {
 }
 function renderPnlSnapshot(metrics, { bodyId, subId, interactive = false } = {}) {
   const md = state.model.metadata;
-  const scope = metrics.mode === 'filtered' ? 'Filtered Detail P&L' : 'Summary P&L · Actual Adj.';
-  $(subId).textContent = `${scope} · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
+  const scope = metrics.mode === 'filtered' ? t('variance.filteredSnapshot') : t('variance.summarySnapshot');
+  $(subId).textContent = `${scope} · ${md.currentPeriodKey} ${t('common.vs')} ${md.comparisonPeriodKey}`;
   $(bodyId).innerHTML = SNAPSHOT_ROWS.map(row => {
     const current = metrics.current[row.key];
     const comparison = metrics.comparison[row.key];
@@ -696,14 +721,14 @@ function renderPnlSnapshot(metrics, { bodyId, subId, interactive = false } = {})
     const selected = !interactive && state.selectedPnlLine === row.key;
     const classes = [row.major ? 'major' : '', interactive ? 'is-drillable' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ');
     const attrs = interactive
-      ? ` data-pnl-line="${row.key}" tabindex="0" role="button" aria-label="Open ${esc(row.label)} in P&L Variance"`
+      ? ` data-pnl-line="${row.key}" tabindex="0" role="button" aria-label="${esc(metricLabel(row.key, row.label))}"`
       : ` data-snapshot-line="${row.key}"`;
-    return `<tr class="${classes}"${attrs}><td>${esc(row.label)}</td><td>${snapshotCell(current, row.type)}</td><td>${snapshotCell(currentRatio, 'percent')}</td><td>${snapshotCell(comparison, row.type)}</td><td>${snapshotCell(comparisonRatio, 'percent')}</td><td class="${varianceCls}">${Number.isFinite(variance) ? formatRatioVariance(variance) : '—'}</td></tr>`;
+    return `<tr class="${classes}"${attrs}><td>${esc(metricLabel(row.key, row.label))}</td><td>${snapshotCell(current, row.type)}</td><td>${snapshotCell(currentRatio, 'percent')}</td><td>${snapshotCell(comparison, row.type)}</td><td>${snapshotCell(comparisonRatio, 'percent')}</td><td class="${varianceCls}">${Number.isFinite(variance) ? formatRatioVariance(variance) : '—'}</td></tr>`;
   }).join('');
 }
 
 function insightHtml(items) {
-  if (!items.length) return '<div class="empty-state">No material signals for the selected scope</div>';
+  if (!items.length) return `<div class="empty-state">${esc(t('overview.noSignals'))}</div>`;
   return items.map(item => {
     const tag = item.action ? 'button' : 'div';
     const attrs = item.action ? ` type="button" data-action="${item.action}"${item.metric?` data-metric="${item.metric}"`:''}${item.driver?` data-driver="${item.driver}"`:''}` : '';
@@ -734,24 +759,24 @@ function signalMovement(def, c, p, coreVariance) {
     ? (Math.abs(cmp) > 1e-9 ? variance / Math.abs(cmp) : null)
     : variance;
   if (!Number.isFinite(magnitude)) return null;
-  return { ...def, variance, magnitude, favorable: magnitude >= 0 };
+  return { ...def, label: metricLabel(def.key, def.label), variance, magnitude, favorable: magnitude >= 0 };
 }
 function describeMovement(m) {
   if (m.kind === 'money') {
     const pct = `${m.magnitude >= 0 ? '+' : ''}${(m.magnitude * 100).toFixed(1)}%`;
     return m.favorable
-      ? { title: `${m.label} increased`, detail: `${m.label} rose ${pct} versus the comparison period.` }
-      : { title: `${m.label} declined`, detail: `${m.label} fell ${pct} versus the comparison period.` };
+      ? { title: t('signal.increased', { metric: m.label }), detail: t('signal.roseDetail', { metric: m.label, value: pct }) }
+      : { title: t('signal.declined', { metric: m.label }), detail: t('signal.fellDetail', { metric: m.label, value: pct }) };
   }
   const ratioDelta = formatRatioVariance(m.magnitude);
   if (m.key === 'totalMinorationsPct') {
     return m.favorable
-      ? { title: 'Total Minorations narrowed', detail: `Total Minorations % changed ${ratioDelta}, easing commercial deductions against Gross Sales.` }
-      : { title: 'Total Minorations deteriorated', detail: `Total Minorations % changed ${ratioDelta}, deepening commercial deductions against Gross Sales.` };
+      ? { title: t('signal.minorationsNarrowed'), detail: t('signal.minorationsBetterDetail', { value: ratioDelta }) }
+      : { title: t('signal.minorationsDeteriorated'), detail: t('signal.minorationsWorseDetail', { value: ratioDelta }) };
   }
   return m.favorable
-    ? { title: `${m.label} improved`, detail: `${m.label} changed ${ratioDelta} versus the comparison period.` }
-    : { title: `${m.label} declined`, detail: `${m.label} changed ${ratioDelta} versus the comparison period.` };
+    ? { title: t('signal.improved', { metric: m.label }), detail: t('signal.changedDetail', { metric: m.label, value: ratioDelta }) }
+    : { title: t('signal.declined', { metric: m.label }), detail: t('signal.changedDetail', { metric: m.label, value: ratioDelta }) };
 }
 function materialSignals(movements) {
   const byKey = {};
@@ -775,11 +800,11 @@ function materialSignals(movements) {
 function movementToSignal(m) {
   let title, detail;
   if (m.composite === 'salesWithoutMargin') {
-    title = 'Sales growth did not improve margin';
-    detail = `Net Sales rose ${(m.magnitude * 100).toFixed(1)}% while the Gross Margin rate did not keep pace.`;
+    title = t('signal.salesWithoutMargin');
+    detail = t('signal.salesWithoutMarginDetail', { value: `${(m.magnitude * 100).toFixed(1)}%` });
   } else if (m.material) {
     detail = describeMovement(m).detail;
-    title = MATERIAL_TITLES[m.key] || describeMovement(m).title;
+    title = describeMovement(m).title;
   } else {
     const d = describeMovement(m);
     title = d.title; detail = d.detail;
@@ -807,10 +832,10 @@ function selectKeyMovements(movements) {
 }
 function stabilitySignals(movements) {
   const largest = movements.slice().sort((a, b) => Math.abs(b.magnitude) - Math.abs(a.magnitude))[0];
-  const items = [{ tone: 'positive', title: 'Portfolio performance remained broadly stable', detail: 'No major movement across core P&L indicators versus the comparison period.' }];
+  const items = [{ tone: 'positive', title: t('signal.stable'), detail: t('signal.stableDetail') }];
   if (largest) {
     const d = describeMovement(largest);
-    const item = { tone: largest.favorable ? 'positive' : 'warning', title: `${largest.label} showed the largest movement`, detail: d.detail };
+    const item = { tone: largest.favorable ? 'positive' : 'warning', title: t('signal.largestMovement', { metric: largest.label }), detail: d.detail };
     if (largest.drill) { item.action = 'variance'; item.metric = largest.drill; }
     items.push(item);
   }
@@ -820,12 +845,12 @@ function renderOverviewInsights(metrics) {
   if (!metrics) return;
   const c = metrics.current, p = metrics.comparison;
   if (!Number.isFinite(p.netSales)) {
-    $('overviewInsights').innerHTML = insightHtml([{ title: 'Comparison period unavailable', detail: 'Prior-year same-period data is required for variance signals.' }]);
+    $('overviewInsights').innerHTML = insightHtml([{ title: t('signal.comparisonUnavailable'), detail: t('signal.comparisonRequired') }]);
     return;
   }
   const movements = SIGNAL_METRICS.map(def => signalMovement(def, c, p, metrics.variance?.[def.key])).filter(Boolean);
   if (!movements.length) {
-    $('overviewInsights').innerHTML = insightHtml([{ title: 'No comparable stores in scope', detail: 'The current filters return no comparison-period stores, so no movement signals can be derived.' }]);
+    $('overviewInsights').innerHTML = insightHtml([{ title: t('signal.noComparable'), detail: t('signal.noComparableDetail') }]);
     return;
   }
   const material = materialSignals(movements);
@@ -841,7 +866,7 @@ function renderOverviewInsights(metrics) {
 }
 
 function varianceScopeLabel(bridge) {
-  return bridge.mode === 'filtered' ? 'Filtered Portfolio' : 'Total Portfolio';
+  return bridge.mode === 'filtered' ? t('common.filteredPortfolio') : t('common.totalPortfolio');
 }
 
 function formatBridgeMoney(value, signed = false) {
@@ -881,7 +906,7 @@ function wrapBridgeLabel(value) {
 
 function buildBridgeWaterfall(bridge) {
   const items = [{
-    label: `${periodLabel('comparison')} ${bridge.label}`,
+    label: `${periodLabel('comparison')} ${metricLabel(bridge.metric, bridge.label)}`,
     start: 0,
     end: bridge.comparison,
     connector: null,
@@ -893,7 +918,7 @@ function buildBridgeWaterfall(bridge) {
   bridge.drivers.forEach(driver => {
     const next = running + driver.variance;
     items.push({
-      label: driver.label,
+      label: pnlLabel(driver.field, driver.label),
       field: driver.field,
       start: running,
       end: next,
@@ -905,7 +930,7 @@ function buildBridgeWaterfall(bridge) {
     path.push(running);
   });
   items.push({
-    label: `${periodLabel('current')} ${bridge.label}`,
+    label: `${periodLabel('current')} ${metricLabel(bridge.metric, bridge.label)}`,
     start: 0,
     end: bridge.current,
     connector: bridge.current,
@@ -925,17 +950,17 @@ function disposeChart(id) {
 
 function renderVariance() {
   if (!state.service) {
-    $('varianceSnapshotBody').innerHTML = '<tr><td colspan="6">Upload a workbook to view the P&L snapshot</td></tr>';
-    $('bridgeTitle').textContent = 'Customer Contribution Bridge';
-    $('bridgeSub').textContent = 'Comparison to Current · Prior Year Same Period';
+    $('varianceSnapshotBody').innerHTML = `<tr><td colspan="6">${esc(t('error.uploadForPnlSnapshot'))}</td></tr>`;
+    $('bridgeTitle').textContent = t('variance.bridge');
+    $('bridgeSub').textContent = t('variance.bridgeSub');
     $('bridgeReconcile').textContent = '—';
     $('bridgeReconcile').className = 'reconcile';
     $('varianceScopeStatus').className = 'scope-status';
-    $('varianceScopeStatus').innerHTML = '<span class="scope-dot"></span><span>Total Portfolio</span>';
+    $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${esc(t('common.totalPortfolio'))}</span>`;
     $('driverTableBody').innerHTML = '';
     $('positiveDrivers').innerHTML = '';
     $('negativeDrivers').innerHTML = '';
-    $('varianceInsights').innerHTML = '<div class="empty-state">No analysis available</div>';
+    $('varianceInsights').innerHTML = `<div class="empty-state">${esc(t('overview.noAnalysis'))}</div>`;
     return;
   }
   const filters = activeFilters();
@@ -944,19 +969,19 @@ function renderVariance() {
   const filtered = Object.values(filters).some(value => value !== null && value !== undefined && value !== '');
   if (filtered && capabilityStatus('filteredCustomerContributionBridge') !== 'available') {
     const warning = capabilityWarning('filteredCustomerContributionBridge');
-    $('bridgeTitle').textContent = 'Customer Contribution Bridge';
-    $('bridgeSub').textContent = 'Filtered detail-level comparison is unavailable';
+    $('bridgeTitle').textContent = t('variance.bridge');
+    $('bridgeSub').textContent = t('error.filteredUnavailable');
     $('varianceScopeStatus').className = 'scope-status filtered';
-    $('varianceScopeStatus').innerHTML = '<span class="scope-dot"></span><span>Filtered Portfolio</span>';
-    $('bridgeReconcile').textContent = 'Unavailable';
+    $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${esc(t('common.filteredPortfolio'))}</span>`;
+    $('bridgeReconcile').textContent = t('common.unavailable');
     $('bridgeReconcile').className = 'reconcile neutral';
-    featureUnavailable('bridgeChart', warning ? warning.title : 'Customer Contribution Bridge unavailable', warning ? warning.detail : 'Required detail fields are missing.');
-    $('driverTableBody').innerHTML = '<tr><td colspan="6">Filtered driver analysis is unavailable for this workbook</td></tr>';
+    featureUnavailable('bridgeChart', warning ? warning.title : `${t('variance.bridge')} ${t('common.unavailable')}`, warning ? warning.detail : t('error.requiredFieldsMissing'));
+    $('driverTableBody').innerHTML = `<tr><td colspan="6">${esc(t('error.driverUnavailable'))}</td></tr>`;
     $('positiveDrivers').innerHTML = '';
     $('negativeDrivers').innerHTML = '';
     $('positiveStores').innerHTML = '';
     $('negativeStores').innerHTML = '';
-    $('varianceInsights').innerHTML = `<div class="empty-state">${esc(warning ? warning.title : 'Filtered Bridge unavailable')}</div>`;
+    $('varianceInsights').innerHTML = `<div class="empty-state">${esc(warning ? warning.title : t('error.filteredBridgeUnavailable'))}</div>`;
     return;
   }
   const bridge = state.service.getBridgeData('customerContribution', filters);
@@ -968,20 +993,20 @@ function renderVariance() {
 function renderBridge(bridge) {
   const md = state.service.getMetadata();
   const scopeLabel = varianceScopeLabel(bridge);
-  $('bridgeTitle').textContent = `${bridge.label} Bridge`;
-  $('bridgeSub').textContent = `${md.comparisonPeriodKey} to ${md.currentPeriodKey} · Prior Year Same Period`;
+  $('bridgeTitle').textContent = t('variance.bridge');
+  $('bridgeSub').textContent = `${md.comparisonPeriodKey} ${t('common.vs')} ${md.currentPeriodKey}`;
   $('varianceScopeStatus').className = `scope-status${bridge.mode === 'filtered' ? ' filtered' : ''}`;
   $('varianceScopeStatus').innerHTML = `<span class="scope-dot"></span><span>${scopeLabel}</span>`;
 
   if (bridge.error && bridge.error.code === 'BRIDGE_RECONCILIATION_ERROR') {
-    $('bridgeReconcile').textContent = 'Reconciliation error';
+    $('bridgeReconcile').textContent = t('variance.reconciliationError');
     $('bridgeReconcile').className = 'reconcile bad';
     disposeChart('bridgeChart');
-    $('bridgeChart').innerHTML = '<div class="bridge-error"><strong>Selected filtered portfolio does not fully reconcile at detail level.</strong><span>Adjust the filters or check the underlying detail data before using this Bridge.</span></div>';
+    $('bridgeChart').innerHTML = `<div class="bridge-error"><strong>${esc(t('error.bridgeUnsafe'))}</strong><span>${esc(t('error.bridgeUnsafeDetail'))}</span></div>`;
     return;
   }
 
-  $('bridgeReconcile').textContent = 'Reconciled';
+  $('bridgeReconcile').textContent = t('variance.reconciled');
   $('bridgeReconcile').className = 'reconcile';
   const { items, path } = buildBridgeWaterfall(bridge);
   const low = Math.min(...path), high = Math.max(...path);
@@ -993,11 +1018,11 @@ function renderBridge(bridge) {
   c.setOption({
     textStyle: baseText(),
     grid: { left: 72, right: 22, top: 38, bottom: 112 },
-    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; const base = `<b>${esc(item.label)}</b><br>${item.type === 'anchor' ? 'Balance' : 'P&L impact'}: ${formatBridgeMoney(item.raw, item.type !== 'anchor')}`; return item.type !== 'anchor' && item.field ? `${base}<br>Click to view store impact` : base; } },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => { const item = items[params.dataIndex]; const base = `<b>${esc(item.label)}</b><br>${item.type === 'anchor' ? t('variance.balance') : t('variance.pnlImpact')}: ${formatBridgeMoney(item.raw, item.type !== 'anchor')}`; return item.type !== 'anchor' && item.field ? `${base}<br>${t('variance.clickStoreImpact')}` : base; } },
     xAxis: { type: 'category', data: items.map(item => item.label), axisTick: { show: false }, axisLine: { lineStyle: { color: THEME.axis } }, axisLabel: { interval: 0, rotate: 24, margin: 15, color: THEME.muted, fontSize: 8, lineHeight: 11, formatter: wrapBridgeLabel } },
     yAxis: { type: 'value', min: yMin, max: yMax, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatBridgeAxis }, splitLine: { lineStyle: { color: THEME.grid } } },
     series: [{
-      name: 'Variance Bridge',
+      name: t('chart.varianceBridge'),
       type: 'custom',
       encode: { x: 0, y: [1, 2] },
       data: items.map((item, index) => [index, item.start, item.end, item.raw, typeCode[item.type], item.connector]),
@@ -1063,11 +1088,11 @@ function renderBridge(bridge) {
 }
 
 function renderDriverAnalysis(bridge) {
-  $('driverTitle').textContent = `${bridge.label} Driver Analysis`;
+  $('driverTitle').textContent = t('variance.driverAnalysis');
   $('driverTableBody').innerHTML = bridge.drivers.map(driver => {
     const tone = driver.ratioVariance > 0 ? 'cell-positive' : driver.ratioVariance < 0 ? 'cell-negative' : '';
-    return `<tr data-driver="${esc(driver.field)}"><td><span class="driver-name"><i></i>${esc(driver.label)}</span></td><td>${formatKrmb(driver.current)}</td><td>${formatPct(driver.currentRatio)}</td><td>${formatKrmb(driver.comparison)}</td><td>${formatPct(driver.comparisonRatio)}</td><td class="${tone}">${formatRatioVariance(driver.ratioVariance)}</td><td class="row-action">›</td></tr>`;
-  }).join('') || '<tr><td colspan="7">No mapped drivers</td></tr>';
+    return `<tr data-driver="${esc(driver.field)}"><td><span class="driver-name"><i></i>${esc(pnlLabel(driver.field, driver.label))}</span></td><td>${formatKrmb(driver.current)}</td><td>${formatPct(driver.currentRatio)}</td><td>${formatKrmb(driver.comparison)}</td><td>${formatPct(driver.comparisonRatio)}</td><td class="${tone}">${formatRatioVariance(driver.ratioVariance)}</td><td class="row-action">›</td></tr>`;
+  }).join('') || `<tr><td colspan="7">${esc(t('error.noMappedDrivers'))}</td></tr>`;
   const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance).slice(0,4);
   const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance).slice(0,4);
   $('positiveDrivers').innerHTML = rankDriverHtml(positive, 'positive');
@@ -1075,8 +1100,8 @@ function renderDriverAnalysis(bridge) {
 }
 
 function rankDriverHtml(rows,tone) {
-  if (!rows.length) return '<div class="empty-state">No material drivers</div>';
-  return rows.map((row,index)=>`<button class="rank-row" type="button" data-driver="${esc(row.field)}"><span>${String(index+1).padStart(2,'0')}</span><strong>${esc(row.label)}</strong><em class="${tone==='positive'?'cell-positive':'cell-negative'}">${formatSignedMoney(row.variance)}</em></button>`).join('');
+  if (!rows.length) return `<div class="empty-state">${esc(t('error.noMaterialDrivers'))}</div>`;
+  return rows.map((row,index)=>`<button class="rank-row" type="button" data-driver="${esc(row.field)}"><span>${String(index+1).padStart(2,'0')}</span><strong>${esc(pnlLabel(row.field, row.label))}</strong><em class="${tone==='positive'?'cell-positive':'cell-negative'}">${formatSignedMoney(row.variance)}</em></button>`).join('');
 }
 
 function renderVarianceInsights(bridge) {
@@ -1084,14 +1109,14 @@ function renderVarianceInsights(bridge) {
   const amountVariance = bridge.current - bridge.comparison;
   const positive = bridge.drivers.filter(driver => driver.variance > 0).sort((a,b)=>b.variance-a.variance)[0];
   const negative = bridge.drivers.filter(driver => driver.variance < 0).sort((a,b)=>a.variance-b.variance)[0];
-  $('varianceInsightSub').textContent = `${bridge.label} · ${md.currentPeriodKey} vs ${md.comparisonPeriodKey}`;
+  $('varianceInsightSub').textContent = `${metricLabel(bridge.metric, bridge.label)} · ${md.currentPeriodKey} ${t('common.vs')} ${md.comparisonPeriodKey}`;
   const ratioTone = bridge.ratioVariance > 0 ? 'cell-positive' : bridge.ratioVariance < 0 ? 'cell-negative' : '';
   const amountTone = amountVariance > 0 ? 'cell-positive' : amountVariance < 0 ? 'cell-negative' : '';
-  const summary = `<div class="variance-summary"><div class="summary-kpi"><span>Selected KPI</span><strong>${esc(bridge.label)}</strong></div><div><span>${periodLabel('current')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.current, bridge.currentRatio)}</strong></div><div><span>${periodLabel('comparison')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.comparison, bridge.comparisonRatio)}</strong></div><div class="summary-variance"><span>Variance</span><strong class="${ratioTone}">${formatRatioVariance(bridge.ratioVariance)}</strong></div><div><span>Amount movement</span><strong class="${amountTone}">${formatSignedMoney(amountVariance)}</strong></div></div>`;
+  const summary = `<div class="variance-summary"><div class="summary-kpi"><span>${esc(t('variance.selectedKpi'))}</span><strong>${esc(metricLabel(bridge.metric, bridge.label))}</strong></div><div><span>${periodLabel('current')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.current, bridge.currentRatio)}</strong></div><div><span>${periodLabel('comparison')}</span><strong class="kpi-compare-inline">${inlineAmountRatioHtml(bridge.comparison, bridge.comparisonRatio)}</strong></div><div class="summary-variance"><span>${esc(t('common.variance'))}</span><strong class="${ratioTone}">${formatRatioVariance(bridge.ratioVariance)}</strong></div><div><span>${esc(t('variance.amountMovement'))}</span><strong class="${amountTone}">${formatSignedMoney(amountVariance)}</strong></div></div>`;
   const items = [];
-  if (bridge.error) items.push({tone:'warning',title:'Detail-level reconciliation requires attention',detail:'The selected filtered slice is not safe to present as a reconciled Bridge.'});
-  if (positive) items.push({tone:'positive',title:`Largest positive driver: ${positive.label}`,detail:`${formatSignedMoney(positive.variance)} P&L line contribution.`,action:'portfolio',driver:positive.field});
-  if (negative) items.push({tone:'warning',title:`Largest negative driver: ${negative.label}`,detail:`${formatSignedMoney(negative.variance)} P&L line contribution.`,action:'portfolio',driver:negative.field});
+  if (bridge.error) items.push({tone:'warning',title:t('variance.detailAttention'),detail:t('variance.detailAttentionDetail')});
+  if (positive) items.push({tone:'positive',title:t('variance.largestPositive',{driver:pnlLabel(positive.field,positive.label)}),detail:t('variance.lineContribution',{value:formatSignedMoney(positive.variance)}),action:'portfolio',driver:positive.field});
+  if (negative) items.push({tone:'warning',title:t('variance.largestNegative',{driver:pnlLabel(negative.field,negative.label)}),detail:t('variance.lineContribution',{value:formatSignedMoney(negative.variance)}),action:'portfolio',driver:negative.field});
   $('varianceInsights').innerHTML = summary + insightHtml(items);
 }
 
@@ -1119,7 +1144,7 @@ function setPortfolioMetric(reference) {
   state.portfolioMetric = RANKING_METRICS[reference] ? reference : 'customerContribution';
   const select = $('rankingMetric');
   if (select) select.value = state.portfolioMetric;
-  $('rankingNote').textContent = `Ranked by ${RANKING_METRICS[state.portfolioMetric].label} · Current vs Comparison`;
+  $('rankingNote').textContent = `${t('portfolio.ranking')} · ${metricLabel(state.portfolioMetric, RANKING_METRICS[state.portfolioMetric].label)} · ${t('common.current')} ${t('common.vs')} ${t('common.comparison')}`;
 }
 function openDriverPortfolio(driverKey) {
   state.selectedDriver = driverKey || '';
@@ -1137,10 +1162,10 @@ function renderPortfolio() {
   const toggle = $('snapshotToggle');
   if (toggle) toggle.style.display = inRanking ? 'none' : '';
   $('portfolioContext').textContent = inRanking
-    ? 'Store Variance Ranking · Current vs Comparison'
+    ? `${t('portfolio.ranking')} · ${t('common.current')} ${t('common.vs')} ${t('common.comparison')}`
     : state.snapshot === 'movement'
-      ? 'Store Investment Productivity · Comparison to Current movement'
-      : `Store Investment Productivity · ${state.snapshot === 'comparison' ? 'Comparison' : 'Current'} quadrant`;
+      ? `${t('portfolio.quadrantTitle')} · ${t('common.comparison')} → ${t('common.current')}`
+      : `${t('portfolio.quadrantTitle')} · ${state.snapshot === 'comparison' ? t('common.comparison') : t('common.current')}`;
   if (inRanking) renderStoreRanking();
   else renderProductivityQuadrant();
 }
@@ -1150,7 +1175,7 @@ function renderPortfolioEmpty() {
   $('riskStoreBody').innerHTML = '';
   $('positiveStores').innerHTML = '';
   $('negativeStores').innerHTML = '';
-  $('portfolioContext').textContent = 'Current portfolio view';
+  $('portfolioContext').textContent = t('portfolio.currentView');
   const c = chart('productivityChart');
   c.clear();
 }
@@ -1181,27 +1206,27 @@ function quadrantPointStyle(point) {
 }
 function quadrantTooltip(data) {
   const store = data.store;
-  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>Status: ${esc(store.status)}<br>Tier: ${esc(store.productivityTier)}<br>Customer Contribution: ${formatMoney(data.value[0])}<br>Customer Contribution %: ${formatPct(store.metrics.customerContributionPct)}<br>A&P Expense: ${formatMoney(data.value[1])}<br>Store Productivity: ${formatMoney(store.storeProductivity)}<br>Quadrant: ${esc(data.quadrant)}<br>POS no.: ${formatInt(store.cityPosNo)}`;
+  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>${t('common.status')}: ${esc(store.status)}<br>${t('common.tier')}: ${esc(store.productivityTier)}<br>${t('metric.customerContribution')}: ${formatMoney(data.value[0])}<br>${t('metric.customerContributionPct')}: ${formatPct(store.metrics.customerContributionPct)}<br>${t('metric.apExpense')}: ${formatMoney(data.value[1])}<br>${t('metric.storeProductivity')}: ${formatMoney(store.storeProductivity)}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(data.quadrant))}<br>${t('metric.posNo')}: ${formatInt(store.cityPosNo)}`;
 }
 function renderQuadrantSummary(model) {
-  $('quadrantSummaryLabel').textContent = 'Quadrant Summary';
+  $('quadrantSummaryLabel').textContent = t('portfolio.quadrantSummary');
   const allActive = state.selectedQuadrant === 'all' || !QUADRANT_ORDER.includes(state.selectedQuadrant);
   const buttons = [
-    `<button class="quadrant-chip${allActive ? ' active' : ''}" type="button" data-quadrant="all">All <b>${model.points.length}</b></button>`,
-    ...QUADRANT_ORDER.map(quadrant => `<button class="quadrant-chip${state.selectedQuadrant === quadrant ? ' active' : ''}" type="button" data-quadrant="${esc(quadrant)}">${esc(quadrant)} <b>${model.counts[quadrant]}</b></button>`)
+    `<button class="quadrant-chip${allActive ? ' active' : ''}" type="button" data-quadrant="all">${esc(t('common.all'))} <b>${model.points.length}</b></button>`,
+    ...QUADRANT_ORDER.map(quadrant => `<button class="quadrant-chip${state.selectedQuadrant === quadrant ? ' active' : ''}" type="button" data-quadrant="${esc(quadrant)}">${esc(quadrantLabel(quadrant))} <b>${model.counts[quadrant]}</b></button>`)
   ];
   $('quadrantSummary').innerHTML = buttons.join('');
 }
 function renderMovementSummary(summary) {
-  $('quadrantSummaryLabel').textContent = 'Movement Summary';
+  $('quadrantSummaryLabel').textContent = t('portfolio.movementSummary');
   const items = [
-    ['Matched Stores', summary.matched],
-    ['Changed Quadrant', summary.changed],
-    ['Stayed Same', summary.stayed],
-    ['Risk → Star', summary.riskToStar],
-    ['Risk → Non-Risk', summary.riskToNonRisk],
-    ['Non-Risk → Risk', summary.nonRiskToRisk],
-    ['Star → Non-Star', summary.starToNonStar]
+    [t('portfolio.matchedStores'), summary.matched],
+    [t('portfolio.changedQuadrant'), summary.changed],
+    [t('portfolio.stayedSame'), summary.stayed],
+    [`${quadrantLabel('Risk')} → ${quadrantLabel('Star')}`, summary.riskToStar],
+    [`${quadrantLabel('Risk')} → ${t('portfolio.nonRisk')}`, summary.riskToNonRisk],
+    [`${t('portfolio.nonRisk')} → ${quadrantLabel('Risk')}`, summary.nonRiskToRisk],
+    [`${quadrantLabel('Star')} → ${t('portfolio.nonStar')}`, summary.starToNonStar]
   ];
   $('quadrantSummary').innerHTML = items.map(([label, count]) => `<span class="quadrant-chip">${esc(label)} <b>${count}</b></span>`).join('');
 }
@@ -1209,7 +1234,7 @@ function renderTierSummary(stores, role) {
   const el = $('tierSummary');
   if (!el) return;
   const n = stores.length;
-  if (!n) { el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span>No stores in scope</span>`; return; }
+  if (!n) { el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span>${esc(t('portfolio.noStoresScope'))}</span>`; return; }
   const netSales = stores.reduce((a, s) => a + s.metrics.netSales, 0);
   const grossMargin = stores.reduce((a, s) => a + s.metrics.grossMargin, 0);
   const contribution = stores.reduce((a, s) => a + s.metrics.customerContribution, 0);
@@ -1219,12 +1244,12 @@ function renderTierSummary(stores, role) {
   const posCount = posValues.length ? posValues.reduce((a, value) => a + value, 0) : null;
   const gmPct = netSales ? grossMargin / netSales : null;
   const ccPct = netSales ? contribution / netSales : null;
-  el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> Stores</span><span><b>${formatInt(posCount)}</b> POS</span><span>Avg Gross Margin <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>Avg Customer Contribution <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
+  el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> ${esc(t('common.stores'))}</span><span><b>${formatInt(posCount)}</b> POS</span><span>${esc(t('portfolio.avgGrossMargin'))} <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>${esc(t('portfolio.avgCustomerContribution'))} <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>${esc(t('portfolio.avgProductivity'))} <b>${formatMoney(avgProd)}</b></span>`;
 }
 function renderMovementTierSummary(model) {
   const el = $('tierSummary');
   const stores = model.pairs.map(pair => pair.current);
-  if (!stores.length) { el.innerHTML = '<span class="tier-summary-label">Movement</span><span>No matched stores in scope</span>'; return; }
+  if (!stores.length) { el.innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.movement'))}</span><span>${esc(t('portfolio.noMatchedScope'))}</span>`; return; }
   const netSales = stores.reduce((sum, store) => sum + store.metrics.netSales, 0);
   const grossMargin = stores.reduce((sum, store) => sum + store.metrics.grossMargin, 0);
   const contribution = stores.reduce((sum, store) => sum + store.metrics.customerContribution, 0);
@@ -1232,22 +1257,22 @@ function renderMovementTierSummary(model) {
   const avgProd = productivityValues.length ? productivityValues.reduce((sum, value) => sum + value, 0) / productivityValues.length : null;
   const posValues = stores.map(store => store.cityPosNo).filter(Number.isFinite);
   const posCount = posValues.length ? posValues.reduce((sum, value) => sum + value, 0) : null;
-  el.innerHTML = `<span class="tier-summary-label">Movement</span><span><b>${model.summary.matched}</b> Matched Stores</span><span><b>${formatInt(posCount)}</b> POS</span><span>Avg Gross Margin <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>Avg Customer Contribution <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>Avg Store Productivity <b>${formatMoney(avgProd)}</b></span>`;
+  el.innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.movement'))}</span><span><b>${model.summary.matched}</b> ${esc(t('portfolio.matchedStores'))}</span><span><b>${formatInt(posCount)}</b> POS</span><span>${esc(t('portfolio.avgGrossMargin'))} <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>${esc(t('portfolio.avgCustomerContribution'))} <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>${esc(t('portfolio.avgProductivity'))} <b>${formatMoney(avgProd)}</b></span>`;
 }
 function renderRiskStores(stores, role) {
   const capabilityRole = state.snapshot === 'movement' ? 'resolved' : role;
   if (capabilityStatus('fullProductivityRisk', capabilityRole) !== 'available') {
     const warning = capabilityWarning('fullProductivityRisk');
-    $('riskStoreSub').textContent = 'Required productivity fields are incomplete';
-    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(warning ? warning.title : 'Productivity Risk analysis unavailable')}</td></tr>`;
+    $('riskStoreSub').textContent = t('error.productivityFieldsIncomplete');
+    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(warning ? warning.title : t('error.productivityRiskUnavailable'))}</td></tr>`;
     return;
   }
   const ranked = ProductivityQuadrant.buildRiskRanking(stores).slice(0, 8);
-  $('riskStoreSub').textContent = `${periodLabel(role)} · percentile-ranked within the full selected scope${state.snapshot === 'movement' ? ' · Movement uses Current risk view' : ''}`;
+  $('riskStoreSub').textContent = `${periodLabel(role)} · ${t('portfolio.priorityRiskSub')}`;
   $('riskStoreBody').innerHTML = ranked.map((point, index) => {
     const store = point.store;
     return `<tr data-store="${esc(store.terminal)}"><td>${String(index + 1).padStart(2, '0')}</td><td title="${esc(store.store)}">${esc(store.store)}</td><td>${esc(store.region)} / ${esc(store.city)}</td><td>${formatKrmb(point.customerContribution)}</td><td>${formatPct(store.metrics.customerContributionPct)}</td><td>${formatKrmb(point.expenseMagnitude)}</td><td>${formatKrmb(store.storeProductivity)}</td><td><span class="risk-score">${Math.round(point.riskScore * 100)}</span></td><td class="row-action">›</td></tr>`;
-  }).join('') || '<tr><td colspan="9">No Risk stores in the selected scope</td></tr>';
+  }).join('') || `<tr><td colspan="9">${esc(t('portfolio.noRiskStores'))}</td></tr>`;
 }
 function bindStoreClick(c) { c.off('click'); c.on('click', params => { if (params.data?.store) openStoreDetail(params.data.store.terminal); }); }
 function renderProductivityQuadrant() {
@@ -1260,10 +1285,10 @@ function renderProductivityQuadrant() {
   const role = state.snapshot === 'comparison' ? 'comparison' : 'current';
   if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
     const warning = capabilityWarning('investmentQuadrant');
-    featureUnavailable('productivityChart', warning ? warning.title : 'Investment Quadrant unavailable', warning ? warning.detail : 'Customer Contribution or Specific A&P is missing.');
+    featureUnavailable('productivityChart', warning ? warning.title : t('error.investmentQuadrantUnavailable'), warning ? warning.detail : t('error.investmentQuadrantMissing'));
     $('tierSummary').innerHTML = '';
     $('quadrantSummary').innerHTML = '';
-    $('riskStoreBody').innerHTML = '<tr><td colspan="9">Investment Quadrant unavailable</td></tr>';
+    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(t('error.investmentQuadrantUnavailable'))}</td></tr>`;
     return;
   }
   const stores = portfolioStores(role);
@@ -1288,12 +1313,12 @@ function renderProductivityQuadrant() {
     lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
     label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
     data: [
-      { xAxis: model.medianCC, label: { formatter: `Median CC  ${formatMoney(model.medianCC)}`, position: 'insideEndTop' } },
-      { yAxis: model.medianExpense, label: { formatter: `Median A&P  ${formatMoney(model.medianExpense)}`, position: 'insideEndTop' } }
+      { xAxis: model.medianCC, label: { formatter: `${t('portfolio.medianCC')}  ${formatMoney(model.medianCC)}`, position: 'insideEndTop' } },
+      { yAxis: model.medianExpense, label: { formatter: `${t('portfolio.medianAP')}  ${formatMoney(model.medianExpense)}`, position: 'insideEndTop' } }
     ]
   };
   const series = QUADRANT_ORDER.map((quadrant, index) => ({
-    name: quadrant,
+    name: quadrantLabel(quadrant),
     type: 'scatter',
     symbolSize: 9,
     itemStyle: { color: QUADRANT_COLORS[quadrant] },
@@ -1310,16 +1335,16 @@ function renderProductivityQuadrant() {
   c.setOption({
     textStyle: baseText(),
     ...chartNavigation(),
-    legend: { top: 8, left: 78, itemWidth: 8, itemHeight: 8, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: QUADRANT_ORDER },
+    legend: { top: 8, left: 78, itemWidth: 8, itemHeight: 8, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: QUADRANT_ORDER.map(quadrantLabel) },
     grid: { left: 88, right: 42, top: 64, bottom: 66 },
     tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => quadrantTooltip(params.data) },
-    xAxis: { type:'value', scale:true, name:'Customer Contribution', nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
-    yAxis: { type:'value', min:0, name:'A&P Expense Spend', nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    xAxis: { type:'value', scale:true, name:t('metric.customerContribution'), nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    yAxis: { type:'value', min:0, name:t('metric.apExpenseSpend'), nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
     graphic: [
-      { type:'text', silent:true, left:94, top:72, style:{text:'Risk',fill:QUADRANT_COLORS.Risk,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, right:48, top:72, style:{text:'Balanced High',fill:QUADRANT_COLORS['Balanced High'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, left:94, bottom:72, style:{text:'Balanced Low',fill:QUADRANT_COLORS['Balanced Low'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, right:48, bottom:72, style:{text:'Star',fill:QUADRANT_COLORS.Star,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} }
+      { type:'text', silent:true, left:94, top:72, style:{text:quadrantLabel('Risk'),fill:QUADRANT_COLORS.Risk,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, right:48, top:72, style:{text:quadrantLabel('Balanced High'),fill:QUADRANT_COLORS['Balanced High'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, left:94, bottom:72, style:{text:quadrantLabel('Balanced Low'),fill:QUADRANT_COLORS['Balanced Low'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
+      { type:'text', silent:true, right:48, bottom:72, style:{text:quadrantLabel('Star'),fill:QUADRANT_COLORS.Star,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} }
     ],
     series
   }, { notMerge: true });
@@ -1329,7 +1354,7 @@ function renderProductivityQuadrant() {
 function movementTooltip(data) {
   const pair = data.movement;
   if (!pair) return '';
-  return `<b>${esc(pair.current.store)}</b><br>${periodLabel('comparison')}: ${formatMoney(pair.comparisonCC)} CC · ${formatMoney(pair.comparisonExpense)} A&P<br>Quadrant: ${esc(pair.comparisonQuadrant)}<br>${periodLabel('current')}: ${formatMoney(pair.currentCC)} CC · ${formatMoney(pair.currentExpense)} A&P<br>Quadrant: ${esc(pair.currentQuadrant)}<br>Transition: <b>${esc(pair.transition)}</b>`;
+  return `<b>${esc(pair.current.store)}</b><br>${periodLabel('comparison')}: ${formatMoney(pair.comparisonCC)} CC · ${formatMoney(pair.comparisonExpense)} ${esc(t('metric.apExpense'))}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(pair.comparisonQuadrant))}<br>${periodLabel('current')}: ${formatMoney(pair.currentCC)} CC · ${formatMoney(pair.currentExpense)} ${esc(t('metric.apExpense'))}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(pair.currentQuadrant))}<br>${t('portfolio.movement')}: <b>${esc(quadrantLabel(pair.comparisonQuadrant))} → ${esc(quadrantLabel(pair.currentQuadrant))}</b>`;
 }
 function movementLineData(pairs, changed) {
   return pairs.filter(pair => pair.changed === changed).map(pair => ({
@@ -1342,10 +1367,10 @@ function renderProductivityMovement() {
   // then matched to Comparison strictly by terminal so both observations share one scope.
   if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
     const warning = capabilityWarning('investmentQuadrant');
-    featureUnavailable('productivityChart', warning ? warning.title : 'Investment Quadrant unavailable', warning ? warning.detail : 'Both analysis periods require Customer Contribution and Specific A&P.');
+    featureUnavailable('productivityChart', warning ? warning.title : t('error.investmentQuadrantUnavailable'), warning ? warning.detail : t('error.investmentQuadrantBothPeriods'));
     $('tierSummary').innerHTML = '';
     $('quadrantSummary').innerHTML = '';
-    $('riskStoreBody').innerHTML = '<tr><td colspan="9">Movement analysis unavailable</td></tr>';
+    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(t('error.movementUnavailable'))}</td></tr>`;
     return;
   }
   const currentAll = state.service.getStores('current', {});
@@ -1371,8 +1396,8 @@ function renderProductivityMovement() {
     lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
     label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
     data: [
-      { xAxis: model.pooledMedianCC, label: { formatter: `Pooled Median CC  ${formatMoney(model.pooledMedianCC)}`, position: 'insideEndTop' } },
-      { yAxis: model.pooledMedianExpense, label: { formatter: `Pooled Median A&P  ${formatMoney(model.pooledMedianExpense)}`, position: 'insideEndTop' } }
+      { xAxis: model.pooledMedianCC, label: { formatter: `${t('portfolio.pooledMedianCC')}  ${formatMoney(model.pooledMedianCC)}`, position: 'insideEndTop' } },
+      { yAxis: model.pooledMedianExpense, label: { formatter: `${t('portfolio.pooledMedianAP')}  ${formatMoney(model.pooledMedianExpense)}`, position: 'insideEndTop' } }
     ]
   };
   const comparisonPoints = model.pairs.map(pair => ({
@@ -1387,14 +1412,14 @@ function renderProductivityMovement() {
   c.setOption({
     textStyle: baseText(),
     ...chartNavigation(),
-    legend: { top: 8, left: 78, itemWidth: 9, itemHeight: 9, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: [periodLabel('comparison'), periodLabel('current'), 'Changed trajectory', 'Same quadrant'] },
+    legend: { top: 8, left: 78, itemWidth: 9, itemHeight: 9, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: [periodLabel('comparison'), periodLabel('current'), t('portfolio.changedTrajectory'), t('portfolio.sameQuadrant')] },
     grid: { left: 88, right: 42, top: 64, bottom: 66 },
     tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => movementTooltip(params.data) },
-    xAxis: { type:'value', scale:true, name:'Customer Contribution', nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
-    yAxis: { type:'value', min:0, name:'A&P Expense Spend', nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    xAxis: { type:'value', scale:true, name:t('metric.customerContribution'), nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    yAxis: { type:'value', min:0, name:t('metric.apExpenseSpend'), nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
     series: [
-      { name:'Same quadrant', type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:5, silent:false, lineStyle:{color:MOVEMENT_COLORS.same,width:.7,opacity:.1}, data:movementLineData(model.pairs,false) },
-      { name:'Changed trajectory', type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:7, silent:false, lineStyle:{color:MOVEMENT_COLORS.changed,width:1.4,opacity:.58}, data:movementLineData(model.pairs,true) },
+      { name:t('portfolio.sameQuadrant'), type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:5, silent:false, lineStyle:{color:MOVEMENT_COLORS.same,width:.7,opacity:.1}, data:movementLineData(model.pairs,false) },
+      { name:t('portfolio.changedTrajectory'), type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:7, silent:false, lineStyle:{color:MOVEMENT_COLORS.changed,width:1.4,opacity:.58}, data:movementLineData(model.pairs,true) },
       { name:periodLabel('comparison'), type:'scatter', symbolSize:8, itemStyle:{color:'#fff',borderColor:MOVEMENT_COLORS.comparison,borderWidth:1.5}, data:comparisonPoints, emphasis:{scale:1.25}, markLine:pooledLines },
       { name:periodLabel('current'), type:'scatter', symbolSize:9, itemStyle:{color:MOVEMENT_COLORS.current,borderColor:'#fff',borderWidth:1}, data:currentPoints, emphasis:{scale:1.25} }
     ]
@@ -1419,7 +1444,7 @@ function renderStoreRanking() {
   $('negativeStores').innerHTML = rankStoreHtml(negative, 'negative');
 }
 function rankStoreHtml(rows, tone) {
-  if (!rows.length) return '<div class="empty-state">No stores in this direction</div>';
+  if (!rows.length) return `<div class="empty-state">${esc(t('portfolio.noDirection'))}</div>`;
   return rows.map((pair, index) => `<button class="rank-row" type="button" data-store="${esc(pair.terminal)}"><span>${String(index + 1).padStart(2, '0')}</span><strong title="${esc(pair.store)}">${esc(pair.store)}</strong><em class="${tone === 'positive' ? 'cell-positive' : 'cell-negative'}">${formatSignedMoney(pair.variance)}</em></button>`).join('');
 }
 
@@ -1433,7 +1458,7 @@ function findDetailStore() {
 }
 function ensureSelectedStore() {
   const stores = detailCurrentStores();
-  if (!stores.length) { $('detailStoreSelect').innerHTML = '<option>No data</option>'; return; }
+  if (!stores.length) { $('detailStoreSelect').innerHTML = `<option>${esc(t('common.noData'))}</option>`; return; }
   if (!stores.some(s => s.terminal === state.selectedStore)) state.selectedStore = stores[0].terminal;
   $('detailStoreSelect').innerHTML = stores.slice().sort((a, b) => a.store.localeCompare(b.store, 'zh-CN'))
     .map(s => `<option value="${esc(s.terminal)}"${s.terminal === state.selectedStore ? ' selected' : ''}>${esc(s.store)} · ${esc(s.terminal)}</option>`).join('');
@@ -1457,20 +1482,20 @@ function storeKpiCard(model) {
   const varianceValue = Number.isFinite(variance)
     ? model.type === 'amount' ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : formatRatioVariance(variance)
     : '—';
-  return `<article class="kpi-card ${cls}${model.type === 'combined' ? ' kpi-card-combined' : ''}"><div class="kpi-label-row"><span class="kpi-label">${esc(model.label)}</span></div><div class="kpi-current${model.type === 'combined' ? ' kpi-current-inline' : ''}">${currentPrimary}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>Variance</span><strong class="${changeCls}">${varianceValue}</strong></div></article>`;
+  return `<article class="kpi-card ${cls}${model.type === 'combined' ? ' kpi-card-combined' : ''}"><div class="kpi-label-row"><span class="kpi-label">${esc(metricLabel(model.key, model.label))}</span></div><div class="kpi-current${model.type === 'combined' ? ' kpi-current-inline' : ''}">${currentPrimary}</div><div class="kpi-compare"><span>${periodLabel('comparison')}</span><strong>${comparisonValue}</strong><span>${esc(t('common.variance'))}</span><strong class="${changeCls}">${varianceValue}</strong></div></article>`;
 }
 function renderStoreHeader(store, hasComparison) {
   const el = $('storeHeader');
   if (!el) return;
   const items = [
-    ['City', store.city],
-    ['Region', store.region],
-    ['Status', store.status],
-    ['Tier', store.productivityTier],
-    ['Store Productivity', formatMoney(store.storeProductivity)],
-    ['POS no.', formatInt(store.cityPosNo)]
+    [t('common.city'), store.city],
+    [t('common.region'), store.region],
+    [t('common.status'), store.status],
+    [t('common.tier'), store.productivityTier],
+    [t('metric.storeProductivity'), formatMoney(store.storeProductivity)],
+    [t('metric.posNo'), formatInt(store.cityPosNo)]
   ];
-  if (!hasComparison) items.push(['Comparison', 'No prior-year record']);
+  if (!hasComparison) items.push([t('common.comparison'), t('detail.noPriorRecord')]);
   el.innerHTML = items.map(([label, value]) => `<div class="sh-item"><span class="sh-label">${esc(label)}</span><span class="sh-value">${esc(value)}</span></div>`).join('');
   el.hidden = false;
 }
@@ -1478,12 +1503,12 @@ function renderDetail() {
   ensureSelectedStore();
   const { current, comparison } = findDetailStore();
   if (!current) {
-    $('detailTitle').textContent = 'No store selected';
-    $('detailMeta').textContent = 'Select a store from the Store Portfolio to review';
+    $('detailTitle').textContent = t('detail.noStoreSelected');
+    $('detailMeta').textContent = t('detail.selectFromPortfolio');
     $('storeHeader').hidden = true;
     $('storeKpis').innerHTML = '';
     $('storePnlBody').innerHTML = '';
-    $('storeInsights').innerHTML = '<div class="empty-state">No store selected</div>';
+    $('storeInsights').innerHTML = `<div class="empty-state">${esc(t('detail.noStoreSelected'))}</div>`;
     $('storeReconcile').textContent = '—';
     ['apComparisonChart', 'apMovementChart'].forEach(id => { const c = chart(id); if (c) c.clear(); });
     return;
@@ -1510,7 +1535,7 @@ function renderStorePnl(current, ly) {
     const lyShare = ratioModel.comparisonRatio;
     const variance = ratioModel.ratioVariance;
     const vCls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'cell-positive' : 'cell-negative') : '';
-    return `<tr class="${line.className || ''}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(line.label)}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
+    return `<tr class="${line.className || ''}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(pnlLabel(line.field, line.label))}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
   }).join('');
   $('storeReconcile').textContent = state.model ? state.model.metadata.reviewPeriod : '—';
   $('storeReconcile').className = 'reconcile';
@@ -1518,7 +1543,7 @@ function renderStorePnl(current, ly) {
 function renderStoreInsights(current, ly) {
   const c = current.metrics;
   if (!ly) {
-    $('storeInsights').innerHTML = insightHtml([{ title: 'New Store · No Prior-Year Comparison', detail: 'This store has no prior-year same-period record. Current-only values are shown; comparison columns display —.' }]);
+    $('storeInsights').innerHTML = insightHtml([{ title: t('detail.newStore'), detail: t('detail.newStoreDetail') }]);
     return;
   }
   const l = ly.metrics;
@@ -1530,16 +1555,16 @@ function renderStoreInsights(current, ly) {
     ? apModel.movement / Math.abs(apModel.comparisonSpend)
     : NaN;
   const items = [];
-  items.push({ tone: nsVariance >= 0 ? 'positive' : 'warning', title: `Net Sales ${nsVariance >= 0 ? 'increased' : 'decreased'} ${Number.isFinite(nsVariance) ? `${nsVariance >= 0 ? '+' : ''}${formatPct(nsVariance)}` : ''}`, detail: `${formatMoney(c.netSales)} current versus ${formatMoney(l.netSales)} comparison.` });
-  if (Math.abs(gmVariance) >= 0.01) items.push({ tone: gmVariance > 0 ? 'positive' : 'warning', title: `Gross Margin rate changed ${formatRatioVariance(gmVariance)}`, detail: `Current ${formatPct(c.grossMarginPct)} versus ${formatPct(l.grossMarginPct)}.` });
-  if (Math.abs(ccVariance) >= 0.01) items.push({ tone: ccVariance > 0 ? 'positive' : 'warning', title: `Customer Contribution rate changed ${formatRatioVariance(ccVariance)}`, detail: `Current ${formatPct(c.customerContributionPct)} versus ${formatPct(l.customerContributionPct)}.` });
-  if (Number.isFinite(apRelativeMovement) && Math.abs(apRelativeMovement) >= 0.1) items.push({ tone: apModel.movement > 0 ? 'warning' : 'positive', title: `A&P spend ${apModel.movement > 0 ? 'increased' : 'decreased'} ${formatSignedMoney(apModel.movement)}`, detail: `Current ${formatMoney(apModel.currentSpend)} versus ${formatMoney(apModel.comparisonSpend)} canonical Specific A&P spend.` });
-  if (!items.length) items.push({ tone: 'positive', title: 'No material store-level movement', detail: 'Key figures remained broadly stable versus the comparison period.' });
+  items.push({ tone: nsVariance >= 0 ? 'positive' : 'warning', title: t('detail.netSalesMovement', { direction: t(nsVariance >= 0 ? 'detail.increased' : 'detail.decreased'), value: Number.isFinite(nsVariance) ? `${nsVariance >= 0 ? '+' : ''}${formatPct(nsVariance)}` : '' }), detail: t('detail.currentVsComparison', { current: formatMoney(c.netSales), comparison: formatMoney(l.netSales) }) });
+  if (Math.abs(gmVariance) >= 0.01) items.push({ tone: gmVariance > 0 ? 'positive' : 'warning', title: t('detail.rateChanged', { metric: metricLabel('grossMargin'), value: formatRatioVariance(gmVariance) }), detail: t('detail.rateCurrentComparison', { current: formatPct(c.grossMarginPct), comparison: formatPct(l.grossMarginPct) }) });
+  if (Math.abs(ccVariance) >= 0.01) items.push({ tone: ccVariance > 0 ? 'positive' : 'warning', title: t('detail.rateChanged', { metric: metricLabel('customerContribution'), value: formatRatioVariance(ccVariance) }), detail: t('detail.rateCurrentComparison', { current: formatPct(c.customerContributionPct), comparison: formatPct(l.customerContributionPct) }) });
+  if (Number.isFinite(apRelativeMovement) && Math.abs(apRelativeMovement) >= 0.1) items.push({ tone: apModel.movement > 0 ? 'warning' : 'positive', title: t('detail.apMovementSignal', { direction: t(apModel.movement > 0 ? 'detail.increased' : 'detail.decreased'), value: formatSignedMoney(apModel.movement) }), detail: t('detail.apMovementDetail', { current: formatMoney(apModel.currentSpend), comparison: formatMoney(apModel.comparisonSpend) }) });
+  if (!items.length) items.push({ tone: 'positive', title: t('detail.stableSignal'), detail: t('detail.stableSignalDetail') });
   $('storeInsights').innerHTML = insightHtml(items);
 }
 function periodLabel(role) {
   if (state.model) return role === 'comparison' ? state.model.metadata.comparisonPeriodKey : state.model.metadata.currentPeriodKey;
-  return role === 'comparison' ? 'Comparison' : 'Current';
+  return t(role === 'comparison' ? 'common.comparison' : 'common.current');
 }
 function applyPeriodLabels() {
   document.querySelectorAll('[data-period-role]').forEach(el => {
@@ -1549,14 +1574,14 @@ function applyPeriodLabels() {
 function renderApCharts(current, ly) {
   if (capabilityStatus('apComponentAnalysis') !== 'available') {
     const warning = capabilityWarning('apComponentAnalysis');
-    const title = warning ? warning.title : 'A&P Component Analysis unavailable';
-    const detail = warning ? warning.detail : 'Some component fields are missing. Missing components are not treated as zero.';
+    const title = warning ? warning.title : t('error.apComponentUnavailable');
+    const detail = warning ? warning.detail : t('error.apComponentMissing');
     featureUnavailable('apComparisonChart', title, detail);
     featureUnavailable('apMovementChart', title, detail);
     return;
   }
   const componentModel = StoreDetailModel.buildApComponentModel(current, ly);
-  const labels = componentModel.components.map(component => component.label);
+  const labels = componentModel.components.map(component => componentLabel(component.key, component.label));
   const currentValues = componentModel.components.map(component => component.current);
   const comparisonValues = componentModel.components.map(component => component.comparison);
   const currentLabel = periodLabel('current');
@@ -1572,7 +1597,7 @@ function renderApCharts(current, ly) {
     textStyle:baseText(),
     grid:{left:172,right:28,top:38,bottom:48},
     legend:{top:4,right:82,textStyle:{color:THEME.muted,fontSize:9}},
-    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const index=params[0].dataIndex,component=componentModel.components[index];return `<b>${esc(component.label)}</b><br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} of pool<br>${comparisonLabel}: ${componentModel.hasComparison ? `${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} of pool` : '—'}`;}},
+    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const index=params[0].dataIndex,component=componentModel.components[index];return `<b>${esc(componentLabel(component.key, component.label))}</b><br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} ${esc(t('detail.ofPool'))}<br>${comparisonLabel}: ${componentModel.hasComparison ? `${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} ${esc(t('detail.ofPool'))}` : '—'}`;}},
     xAxis:{type:'value',min:0,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},
     yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},
     series:[
@@ -1586,15 +1611,15 @@ function renderApCharts(current, ly) {
   movementElement.dataset.formalTotal = componentModel.formalTotalKey;
   if (!componentModel.hasComparison) {
     movementChart.clear();
-    movementChart.setOption({textStyle:baseText(),graphic:[{type:'text',left:'center',top:'middle',style:{text:'No prior-year comparison',fill:THEME.muted,font:'500 10px Segoe UI, sans-serif'}}],series:[]},{notMerge:true});
+    movementChart.setOption({textStyle:baseText(),graphic:[{type:'text',left:'center',top:'middle',style:{text:t('error.noPriorComparison'),fill:THEME.muted,font:'500 10px Segoe UI, sans-serif'}}],series:[]},{notMerge:true});
     return;
   }
   const bridgeModel = StoreDetailModel.buildApComponentBridge(componentModel);
   const movementSteps = bridgeModel.steps.filter(step => Math.abs(step.movement) > 1e-9);
   const bridgeItems = [
-    { label: `${comparisonLabel} Component Pool`, type: 'anchor', raw: bridgeModel.comparisonPool, start: 0, end: bridgeModel.comparisonPool },
-    ...movementSteps.map(step => ({ ...step, type: step.movement > 0 ? 'increase' : 'decrease', raw: step.movement })),
-    { label: `${currentLabel} Component Pool`, type: 'anchor', raw: bridgeModel.currentPool, start: 0, end: bridgeModel.currentPool }
+    { label: `${comparisonLabel} ${t('detail.componentPool')}`, type: 'anchor', raw: bridgeModel.comparisonPool, start: 0, end: bridgeModel.comparisonPool },
+    ...movementSteps.map(step => ({ ...step, label: componentLabel(step.key, step.label), type: step.movement > 0 ? 'increase' : 'decrease', raw: step.movement })),
+    { label: `${currentLabel} ${t('detail.componentPool')}`, type: 'anchor', raw: bridgeModel.currentPool, start: 0, end: bridgeModel.currentPool }
   ];
   const bridgePath = [0, bridgeModel.comparisonPool, ...movementSteps.map(step => step.end), bridgeModel.currentPool];
   const bridgeHigh = Math.max(...bridgePath);
@@ -1610,12 +1635,12 @@ function renderApCharts(current, ly) {
   movementChart.setOption({
     textStyle:baseText(),
     grid:{left:58,right:22,top:28,bottom:116},
-    tooltip:{...tooltipStyle(),trigger:'item',formatter:params=>{const item=bridgeItems[params.dataIndex];if(item.type==='anchor')return `<b>${esc(item.label)}</b><br>Component pool: ${formatMoney(item.raw)}`;const component=componentModel.components.find(entry=>entry.key===item.key);return `<b>${esc(item.label)}</b><br>${comparisonLabel}: ${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} of pool<br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} of pool<br>Spend movement: ${formatSignedMoney(item.raw)}`;}},
+    tooltip:{...tooltipStyle(),trigger:'item',formatter:params=>{const item=bridgeItems[params.dataIndex];if(item.type==='anchor')return `<b>${esc(item.label)}</b><br>${esc(t('detail.componentPool'))}: ${formatMoney(item.raw)}`;const component=componentModel.components.find(entry=>entry.key===item.key);return `<b>${esc(item.label)}</b><br>${comparisonLabel}: ${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} ${esc(t('detail.ofPool'))}<br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} ${esc(t('detail.ofPool'))}<br>${esc(t('detail.spendMovement'))}: ${formatSignedMoney(item.raw)}`;}},
     xAxis:{type:'category',data:bridgeItems.map(item=>item.label),axisLine:{lineStyle:{color:THEME.axis}},axisTick:{show:false},axisLabel:{interval:0,rotate:28,margin:15,color:THEME.muted,fontSize:7.5,lineHeight:10,formatter:wrapBridgeLabel}},
     yAxis:{type:'value',min:Math.min(0,bridgeLow-bridgePad),max:bridgeHigh+bridgePad,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatBridgeAxis},splitLine:{lineStyle:{color:THEME.grid}}},
     series:[
-      {name:'Bridge base',type:'bar',stack:'componentBridge',silent:true,barMaxWidth:32,itemStyle:{color:'rgba(0,0,0,0)'},emphasis:{disabled:true},data:bridgeItems.map(item=>item.type==='anchor'?0:Math.min(item.start,item.end))},
-      {name:'Component spend movement',type:'bar',stack:'componentBridge',barMaxWidth:32,barMinHeight:3,data:bridgeItems.map(item=>({value:item.type==='anchor'?item.raw:Math.abs(item.raw),raw:item.raw,itemStyle:{color:item.type==='anchor'?THEME.navy:item.type==='increase'?THEME.orange:THEME.green,borderRadius:[2,2,0,0]}})),label:{show:true,position:'top',distance:5,color:THEME.ink,fontSize:7.5,fontWeight:600,formatter:params=>formatBridgeMoney(params.data.raw,params.dataIndex>0&&params.dataIndex<bridgeItems.length-1)}}
+      {name:t('chart.bridgeBase'),type:'bar',stack:'componentBridge',silent:true,barMaxWidth:32,itemStyle:{color:'rgba(0,0,0,0)'},emphasis:{disabled:true},data:bridgeItems.map(item=>item.type==='anchor'?0:Math.min(item.start,item.end))},
+      {name:t('chart.componentMovement'),type:'bar',stack:'componentBridge',barMaxWidth:32,barMinHeight:3,data:bridgeItems.map(item=>({value:item.type==='anchor'?item.raw:Math.abs(item.raw),raw:item.raw,itemStyle:{color:item.type==='anchor'?THEME.navy:item.type==='increase'?THEME.orange:THEME.green,borderRadius:[2,2,0,0]}})),label:{show:true,position:'top',distance:5,color:THEME.ink,fontSize:7.5,fontWeight:600,formatter:params=>formatBridgeMoney(params.data.raw,params.dataIndex>0&&params.dataIndex<bridgeItems.length-1)}}
     ]
   },{notMerge:true});
 }
@@ -1625,7 +1650,7 @@ function renderFooter() {
   const md = state.model.metadata;
   const currentStores = state.model.detail.current.stores.length;
   const comparisonStores = state.model.detail.comparison.stores.length;
-  $('footerMeta').textContent = `${currentStores} current stores · ${comparisonStores} comparison stores · ${md.reviewPeriod} · Source unit KRMB · Data held in browser memory only`;
+  $('footerMeta').textContent = t('footer.meta', { current: currentStores, comparison: comparisonStores, period: md.reviewPeriod });
 }
 function renderAll() {
   updatePeriodSummary(); ensureSelectedStore(); renderFooter(); renderActiveTab();
@@ -1683,17 +1708,17 @@ function activateDataSource(candidate) {
   const md = state.model.metadata;
   if (state.sourceType === 'demo') {
     renderDataPreparation(DataPreparationUI.buildDemoPreparation(state.model));
-    setNotice('success', 'Demo data ready', `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · Synthetic Demo Dataset`);
+    setI18nNotice('success', 'notice.demoReady', 'notice.demoReadyDetail', { current: md.currentPeriodKey, comparison: md.comparisonPeriodKey, stores: state.dataStats.stores });
   } else {
     renderDataPreparation(DataPreparationUI.buildWorkbookPreparation(state.model));
     const limitations = state.preparationView && state.preparationView.mode === 'warning';
-    setNotice(limitations ? 'warning' : 'success', limitations ? 'Uploaded data ready with limitations' : 'Uploaded data ready', `${md.currentPeriodKey} vs ${md.comparisonPeriodKey} · ${state.dataStats.stores} current stores · KRMB`);
+    setI18nNotice(limitations ? 'warning' : 'success', limitations ? 'notice.uploadReadyLimitations' : 'notice.uploadReady', 'notice.uploadReadyDetail', { current: md.currentPeriodKey, comparison: md.comparisonPeriodKey, stores: state.dataStats.stores });
   }
   updateSourceUi();
 }
 
 function loadDemoDataset() {
-  if (!window.RetailDemoData) throw new Error('Bundled demo data is missing.');
+  if (!window.RetailDemoData) throw new Error(t('error.demoMissing'));
   const service = window.RetailDashboardData.createDataService(window.RetailDemoData);
   activateDataSource({ sourceType: 'demo', model: window.RetailDemoData, service, fileName: '' });
 }
@@ -1704,7 +1729,7 @@ function resetDashboard() {
   populateGlobalFilters();
   applyCapabilityControls();
   renderAll();
-  setNotice('info', 'Dashboard selections reset', state.sourceType === 'upload' ? 'Uploaded Workbook remains active.' : 'Synthetic Demo Dataset remains active.');
+  setI18nNotice('info', 'notice.reset', state.sourceType === 'upload' ? 'notice.uploadRemains' : 'notice.demoRemains');
 }
 
 function clearUploadedData() {
@@ -1714,15 +1739,15 @@ function clearUploadedData() {
     return;
   }
   loadDemoDataset();
-  setNotice('success', 'Returned to Demo Data', 'The uploaded workbook was cleared from dashboard memory. Synthetic Demo Dataset is active.');
+  setI18nNotice('success', 'notice.returnedDemo', 'notice.returnedDemoDetail');
 }
 function saveMapping() {
   if(!state.book)return;
   state.mapping=mappingFromUI(); const missing=validateMapping();
-  if(missing.length){showMappingAlert('error',`Missing required field: ${missing.map(key=>FIELDS[key].label).join(', ')}`);return;}
+  if(missing.length){showMappingAlert('error',`${t(missing.length === 1 ? 'prep.missingRequiredField' : 'prep.missingRequiredFields')}: ${missing.map(key=>FIELDS[key].label).join(', ')}`);return;}
   const store=readMappingStore();store[state.signature]=currentMappingNames();
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(store));showMappingAlert('success','Mapping saved locally. Workbook values were not stored.');}
-  catch(_){showMappingAlert('error','This browser blocks localStorage for local files. Use Export Mapping instead.');}
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(store));showMappingAlert('success',t('mapping.saved'));}
+  catch(_){showMappingAlert('error',t('mapping.storageBlocked'));}
 }
 function exportMapping() {
   if(!state.book)return;state.mapping=mappingFromUI();
@@ -1730,7 +1755,7 @@ function exportMapping() {
   const anchor=document.createElement('a');anchor.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));anchor.download='retail-dashboard-field-mapping.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
 }
 function importMappingFile(file) {
-  const reader=new FileReader();reader.onload=()=>{try{const object=JSON.parse(reader.result),mapping=object.mapping||object;state.mapping=savedToIndexes(mapping,state.headers);renderMapping();showMappingAlert('success','Mapping imported. Click Apply & Load Data.');}catch(_){showMappingAlert('error','Invalid mapping JSON file.');}};reader.readAsText(file);
+  const reader=new FileReader();reader.onload=()=>{try{const object=JSON.parse(reader.result),mapping=object.mapping||object;state.mapping=savedToIndexes(mapping,state.headers);renderMapping();showMappingAlert('success',t('mapping.imported'));}catch(_){showMappingAlert('error',t('mapping.invalidJson'));}};reader.readAsText(file);
 }
 
 document.querySelectorAll('.rail-link').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.tab)));
@@ -1767,23 +1792,23 @@ function readFileAsArrayBuffer(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Browser could not read the selected file.'));
+    reader.onerror = () => reject(new Error(t('error.fileRead')));
     reader.readAsArrayBuffer(file);
   });
 }
 async function loadWorkbookFile(file){
   if(!isWorkbookFile(file)){
-    setNotice('error','Upload failed · current data retained','Use an .xlsx, .xls, .xlsm or .csv workbook.');
+    setI18nNotice('error','notice.uploadFailed','error.invalidFile');
     return;
   }
   const dropZone=$('uploadDropZone');dropZone.classList.add('is-loading');dropZone.setAttribute('aria-busy','true');
   const retainedPreparation = state.preparationView;
   try{
-    if(!window.XLSX||!window.echarts)throw new Error('Local libraries are missing. Keep the libs folder beside index.html.');
-    if(!window.RetailDashboardData)throw new Error('Workbook data layer (RetailDashboardData) is missing.');
-    if(!DataPreparationUI)throw new Error('Workbook preparation UI is missing.');
+    if(!window.XLSX||!window.echarts)throw new Error(t('error.localLibraries'));
+    if(!window.RetailDashboardData)throw new Error(t('error.dataLayerMissing'));
+    if(!DataPreparationUI)throw new Error(t('error.preparationUiMissing'));
     renderDataPreparation(DataPreparationUI.buildLoadingPreparation(file.name));
-    setNotice('info','Preparing workbook…','Reading workbook and scanning sheets locally.');
+    setI18nNotice('info','notice.prepareWorkbook','notice.prepareWorkbookDetail');
     const book=XLSX.read(await readFileAsArrayBuffer(file),{type:'array',cellDates:true,cellFormula:true});
     const model=window.RetailDashboardData.parseWorkbook(book,{XLSX:window.XLSX,fileName:file.name});
     model.metadata.sourceType = 'upload';
@@ -1792,7 +1817,7 @@ async function loadWorkbookFile(file){
   }
   catch(error){
     const view = DataPreparationUI ? DataPreparationUI.buildBlockingPreparation(error) : null;
-    setNotice('error','Upload failed · current data retained',view ? view.summary : 'Review the workbook structure and try again.');
+    setNotice('error',t('notice.uploadFailed'),view ? view.summary : t('error.reviewWorkbook'));
     renderDataPreparation(retainedPreparation);
   }
   finally{dropZone.classList.remove('is-loading','is-dragging');dropZone.removeAttribute('aria-busy');}
@@ -1807,7 +1832,7 @@ uploadDropZone.addEventListener('dragleave',event=>{if(!event.relatedTarget||!up
 uploadDropZone.addEventListener('drop',async event=>{
   event.preventDefault();uploadDropZone.classList.remove('is-dragging');
   const files=Array.from(event.dataTransfer?.files||[]);
-  if(files.length!==1){setNotice('error','Drop one workbook at a time','Please drag a single Excel or CSV file into the upload area.');return;}
+  if(files.length!==1){setI18nNotice('error','error.singleWorkbook','error.singleWorkbookDetail');return;}
   await loadWorkbookFile(files[0]);
 });
 document.addEventListener('dragover',event=>{if(Array.from(event.dataTransfer?.types||[]).includes('Files'))event.preventDefault();});
@@ -1816,19 +1841,40 @@ $('settingsBtn').addEventListener('click',openSettings);$('clearBtn').addEventLi
 $('saveMappingBtn').addEventListener('click',saveMapping);$('exportMappingBtn').addEventListener('click',exportMapping);
 $('importMappingBtn').addEventListener('click',()=>$('mappingFileInput').click());
 $('mappingFileInput').addEventListener('change',event=>{if(event.target.files[0])importMappingFile(event.target.files[0]);event.target.value='';});
-$('applyMappingBtn').addEventListener('click',()=>{if(!state.book){showMappingAlert('error','Upload a workbook first.');return;}state.mapping=mappingFromUI();buildRecords();});
-$('sheetSelect').addEventListener('change',event=>{if(!state.book)return;state.sheetName=event.target.value;state.matrix=sheetMatrix(state.sheetName);const detected=detectHeader(state.matrix);state.headerRow=detected.row;state.headers=headersAt(state.matrix,state.headerRow);state.signature=schemaSignature(state.headers);state.mapping=autoMap(state.headers);renderSourceControls();renderMapping();showMappingAlert('success',`Detected header row ${state.headerRow+1}. Review mappings before applying.`);});
-$('headerRow').addEventListener('change',event=>{if(!state.book)return;state.headerRow=Math.max(0,Number(event.target.value||1)-1);state.headers=headersAt(state.matrix,state.headerRow);state.signature=schemaSignature(state.headers);state.mapping=autoMap(state.headers);renderMapping();$('schemaMeta').textContent=`${state.headers.length} columns detected · ${state.fileName}`;});
+$('applyMappingBtn').addEventListener('click',()=>{if(!state.book){showMappingAlert('error',t('mapping.uploadFirst'));return;}state.mapping=mappingFromUI();buildRecords();});
+$('sheetSelect').addEventListener('change',event=>{if(!state.book)return;state.sheetName=event.target.value;state.matrix=sheetMatrix(state.sheetName);const detected=detectHeader(state.matrix);state.headerRow=detected.row;state.headers=headersAt(state.matrix,state.headerRow);state.signature=schemaSignature(state.headers);state.mapping=autoMap(state.headers);renderSourceControls();renderMapping();showMappingAlert('success',t('mapping.headerDetected',{row:state.headerRow+1}));});
+$('headerRow').addEventListener('change',event=>{if(!state.book)return;state.headerRow=Math.max(0,Number(event.target.value||1)-1);state.headers=headersAt(state.matrix,state.headerRow);state.signature=schemaSignature(state.headers);state.mapping=autoMap(state.headers);renderMapping();$('schemaMeta').textContent=t('mapping.columnsDetected',{count:state.headers.length,file:state.fileName});});
 
+function rerenderLanguage() {
+  const filterValues = ['regionFilter','cityFilter','statusFilter','tierFilter'].reduce((values, id) => {
+    values[id] = $(id).value;
+    return values;
+  }, {});
+  populateGlobalFilters();
+  Object.keys(filterValues).forEach(id => {
+    if (Array.from($(id).options).some(option => option.value === filterValues[id])) $(id).value = filterValues[id];
+  });
+  refreshCityOptions();
+  if (Array.from($('cityFilter').options).some(option => option.value === filterValues.cityFilter)) $('cityFilter').value = filterValues.cityFilter;
+  updateSourceUi();
+  rerenderNotice();
+  if (state.model && DataPreparationUI) {
+    renderDataPreparation(state.sourceType === 'demo' ? DataPreparationUI.buildDemoPreparation(state.model) : DataPreparationUI.buildWorkbookPreparation(state.model));
+  }
+  if (state.book) { renderSourceControls(); renderMapping(); }
+  renderAll();
+}
+
+window.addEventListener('retail:languagechange', rerenderLanguage);
 window.addEventListener('resize',()=>Object.values(state.charts).forEach(c=>c.resize()));
 window.addEventListener('pagehide',()=>{state.book=null;state.model=null;state.service=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
-if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle||!ProductivityQuadrant||!StoreDetailModel){
+if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle||!ProductivityQuadrant||!StoreDetailModel||!I18n){
   if (window.RetailStartupGuard) window.RetailStartupGuard.fail('Spreadsheet, chart, or local application library unavailable');
-  else setNotice('error','Dashboard initialization failed','Spreadsheet, chart, or local application library unavailable.');
+  else setNotice('error',t('error.initialization'),t('error.libraryUnavailable'));
 } else if (IS_INTERNAL_EDGE) {
   enableDashboard(false);
   renderDataPreparation(null);
-  setNotice('info','Ready for local workbook','Select an approved Excel workbook. Data is processed in this browser session.');
+  setI18nNotice('info','notice.readyLocal','notice.readyLocalDetail');
   if (window.RetailStartupGuard) window.RetailStartupGuard.ready();
 } else {
   try {
@@ -1837,7 +1883,7 @@ if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationU
   }
   catch (error) {
     if (window.RetailStartupGuard) window.RetailStartupGuard.fail('Bundled demo data unavailable');
-    else setNotice('error','Dashboard initialization failed','Bundled demo data unavailable.');
+    else setNotice('error',t('error.initialization'),t('error.demoUnavailable'));
   }
 }
 })();
