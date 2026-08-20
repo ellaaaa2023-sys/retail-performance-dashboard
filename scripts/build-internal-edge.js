@@ -14,6 +14,7 @@ const runtimeFiles = [
   'js/i18n.js',
   'js/app.js',
   'js/productivity-quadrant.js',
+  'js/store-portfolio.js',
   'js/store-detail.js',
   'js/data/detail-schema.js',
   'js/data/data-cleaning.js',

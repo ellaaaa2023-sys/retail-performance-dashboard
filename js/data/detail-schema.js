@@ -45,6 +45,7 @@
     minorationsAnalytics: Object.freeze({ required: Object.freeze(['grossSales', 'totalMinorations']) }),
     investmentQuadrant: Object.freeze({ required: Object.freeze(['customerContribution', 'specificAP']) }),
     productivitySummary: Object.freeze({ required: Object.freeze(['storeProductivity']) }),
+    daHeadcountAnalysis: Object.freeze({ required: Object.freeze(['daHeadcount']) }),
     fullProductivityRisk: Object.freeze({
       required: Object.freeze(['customerContribution', 'specificAP', 'storeProductivity']),
       partial: Object.freeze({ mode: 'all', fields: Object.freeze(['customerContribution', 'specificAP']) })

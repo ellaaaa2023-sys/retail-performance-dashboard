@@ -644,11 +644,14 @@ check(55, 'Current and Comparison exact terminal matching remains unchanged', ()
 
 check(56, 'Classic-script load order works without modules or network access', () => {
   const context = vm.createContext({ console });
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../js/store-portfolio.js'), 'utf8'), context);
   ['detail-schema.js', 'data-cleaning.js', 'core-data.js'].forEach(file => {
     vm.runInContext(fs.readFileSync(path.resolve(__dirname, `../js/data/${file}`), 'utf8'), context);
   });
   const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
   assert.equal(html.indexOf('detail-schema.js') < html.indexOf('data-cleaning.js'), true);
+  assert.equal(html.indexOf('data-cleaning.js') < html.indexOf('store-portfolio.js'), true);
+  assert.equal(html.indexOf('store-portfolio.js') < html.indexOf('core-data.js'), true);
   assert.equal(html.indexOf('data-cleaning.js') < html.indexOf('core-data.js'), true);
   assert.equal(typeof context.RetailDetailSchema, 'object');
   assert.equal(typeof context.RetailDataCleaning.scanWorkbook, 'function');

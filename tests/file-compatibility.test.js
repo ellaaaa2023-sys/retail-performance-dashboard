@@ -22,6 +22,7 @@ const expected = [
   './libs/echarts.min.js',
   './js/data/detail-schema.js',
   './js/data/data-cleaning.js',
+  './js/store-portfolio.js',
   './js/data/core-data.js',
   './js/data/data-preparation-ui.js',
   './js/data/source-lifecycle.js',

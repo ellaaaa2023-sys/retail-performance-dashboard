@@ -17,6 +17,7 @@
     status: 'Status',
     productivityTier: 'Store Productivity Tier',
     cityPosNo: 'City POS Count',
+    daHeadcount: 'DA HC',
     storeProductivity: 'Store Productivity',
     grossSales: 'Gross Sales',
     totalMinorations: 'Total Minorations',
@@ -44,6 +45,7 @@
     minorationsAnalytics: Object.freeze({ label: 'Minorations analytics', unavailable: 'Minorations analytics unavailable' }),
     investmentQuadrant: Object.freeze({ label: 'Investment Quadrant', unavailable: 'Investment Quadrant unavailable' }),
     productivitySummary: Object.freeze({ label: 'Productivity Summary', unavailable: 'Productivity Summary unavailable' }),
+    daHeadcountAnalysis: Object.freeze({ label: 'DA HC analysis', unavailable: 'DA HC analysis unavailable' }),
     fullProductivityRisk: Object.freeze({ label: 'Productivity Risk analysis', unavailable: 'Productivity Risk analysis unavailable' }),
     filteredCustomerContributionBridge: Object.freeze({ label: 'Customer Contribution Bridge', unavailable: 'Customer Contribution Bridge unavailable' }),
     canonicalAP: Object.freeze({ label: 'Canonical A&P analysis', unavailable: 'Canonical A&P analysis unavailable' }),
@@ -54,7 +56,7 @@
   const CAPABILITY_ORDER = Object.freeze([
     'statusFilter', 'posAnalytics', 'tierFilter', 'minorationsAnalytics',
     'filteredCustomerContributionBridge', 'investmentQuadrant',
-    'productivitySummary', 'fullProductivityRisk', 'apComponentAnalysis', 'fullStorePnl'
+    'productivitySummary', 'daHeadcountAnalysis', 'fullProductivityRisk', 'apComponentAnalysis', 'fullStorePnl'
   ]);
 
   function fieldLabel(key) {

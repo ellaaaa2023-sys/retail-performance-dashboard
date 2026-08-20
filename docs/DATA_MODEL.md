@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Data Model
 
-> Status: implemented data contract through Phase 2A Finance Contract Fix.
+> Status: implemented data contract through Phase 2B Data Model Extension.
 > Audit date: 2026-08-20 (Asia/Shanghai).
 
 ## 1. Source of Truth and Security Boundary
@@ -293,10 +293,12 @@ Each Detail row becomes:
   status,
   productivityTier,
   storeProductivity,
+  daHeadcount,
   cityPosNo,
   pnl: { ...mapped P&L amounts and ratios },
   metrics: {
     ...portfolio metrics,
+    daHeadcount,
     apExpense,          // signed Specific A&P
     apExpenseMagnitude // abs(Specific A&P)
   },
@@ -310,6 +312,24 @@ Cleaning retains `TOTAL` in the intermediate rows; only the Core Detail parser e
 
 Resolved Dashboard capabilities combine the Current and Comparison sheet capabilities. A capability is `available` only when both sides are available, `unavailable` when both are unavailable, and otherwise `partial`; missing fields remain separated by period.
 
+DA HC has an additional row-completeness contract in the Data Service. A period is `available` when every in-scope store has a finite value, `partial` when only some do, and `unavailable` when none do. A finite zero is valid. The contract returns store count, valid count, missing count, and valid subtotal; the formal filtered total is `null` unless completeness is `available`. Unfiltered Total Portfolio uses authoritative Summary DA HC when present and otherwise falls back to a complete Detail sum.
+
+### 5.3 Store Current / LY comparison contract
+
+`js/store-portfolio.js` contains neutral store-portfolio calculations. The Data Service builds one comparison record per Current store using exact `Terminal` equality only. Store name, City, and fuzzy matching are prohibited; Comparison-only stores do not enter the Current portfolio collection.
+
+Each record exposes Current and LY DA HC, Productivity, canonical Customer Contribution amount, and canonical CC%. CC% is calculated through the shared Finance Contract as Customer Contribution divided by CONSO Net Sales. Workbook percentage fields are not used.
+
+```text
+productivityEvolPct = (Current Productivity - LY Productivity) / LY Productivity
+```
+
+The value is a decimal ratio. Missing LY, zero LY, missing Current, and new-store cases return `null` with separate calculation reasons; new-store lifecycle status is not conflated with calculation status. Negative LY is also rejected as an invalid comparison base.
+
+Performance eligibility requires finite Current CC%, Current Productivity, and Productivity Evol %. Excluded stores retain a reason and are counted. The reusable threshold helper returns the median Current CC% over eligible stores in the active Current filter scope only; an empty eligible set returns `null`.
+
+The Headcount Efficiency dataset contains Current Terminal, Store, Region, City, DA HC, and Productivity. Per-DA-HC descriptive statistics use Tukey median-of-halves quartiles: for odd samples the overall median is excluded from both halves; one observation has Q1 = median = Q3 and IQR = 0; empty groups return `null` statistics. Adjacent DA HC groups expose IQR overlap range and width as descriptive metadata only, never as a staffing recommendation.
+
 ## 6. Field Mapping Rules
 
 Mapping is semantic and header-based. Fixed column positions are forbidden.
@@ -321,6 +341,7 @@ High-risk Workbook mappings:
 | Terminal | `Terminal` | Stable store identifier |
 | Store Productivity Tier | `门店单产等级` | Values are discovered from data; never hard-code the tier list |
 | Store Productivity | `门店总单产` | Tier/tooltip/store detail source; it no longer controls point size |
+| DA HC | `DA HC` | Sales headcount; finite zero remains valid and missing remains `null` |
 | POS count | Summary `POS no.` / Detail `城市POS数` | Total Portfolio uses Summary; filtered/store views sum active `cityPosNo` |
 | POS advertising component | Detail `POS.` | Expense component; must never auto-map to POS count |
 | CONSO Net Sales | Detail `CA NET ` | Header normalization must trim whitespace |

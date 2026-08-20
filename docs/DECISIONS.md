@@ -293,6 +293,34 @@ riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
 
 **Safety:** A required missing/non-finite driver is unavailable, not zero. A finite zero remains a valid business value. The Core Data Service returns parallel amount and ratio calculations with independent reconciliation gates.
 
+## D-050 — DA HC Completeness and Aggregation
+
+**Decision:** `DA HC` maps to normalized `daHeadcount` in both periods and is exposed through store metrics and the Data Service. Total Portfolio uses authoritative Summary DA HC when present; filtered scope sums Detail only when all in-scope values are finite.
+
+**Safety:** Finite zero is valid. Partial and unavailable states retain valid/missing counts and a valid subtotal, but missing rows are never coerced to zero and a partial filtered scope has no formal total.
+
+## D-051 — Exact-Terminal Store Comparison
+
+**Decision:** The shared Current/LY comparison collection contains one record per Current store and matches Comparison by exact `Terminal` only. Current-only stores are `new-store`; Comparison-only stores remain outside the Current portfolio collection.
+
+**Rejected:** Store-name fallback, fuzzy matching, and City-plus-name inference. Lifecycle status and metric-calculation reason remain separate.
+
+## D-052 — Productivity Evolution and Performance Eligibility
+
+**Decision:** Productivity Evol % is the decimal ratio `(Current - LY) / LY`. Missing Current, missing LY, zero LY, invalid negative LY, and new-store cases return `null` with canonical reasons. Performance eligibility requires finite Current CC%, Current Productivity, and Productivity Evol %.
+
+**Consequence:** The Data Service returns eligible/excluded records, reason counts, and the median Current CC% over the eligible active filter scope. Page 03 will consume this contract later and must not reimplement it.
+
+## D-053 — Canonical Store CC Pair
+
+**Decision:** Current and LY Customer Contribution amount come from each store's canonical P&L. Current and LY CC% call the Phase 2A Finance Contract and use CONSO Net Sales as denominator. Workbook percentage fields and Page-specific formulas are not allowed.
+
+## D-054 — DA HC Distribution Statistics
+
+**Decision:** DA HC groups use Tukey median-of-halves quartiles, excluding the overall median from both halves for odd samples. Single-point groups have zero IQR; empty groups have null statistics. Adjacent groups expose descriptive IQR overlap range and width.
+
+**Safety:** Overlap metadata is screening evidence only. It does not create a Risk Score, staffing recommendation, or automated action.
+
 ## Confirmed Filter Dimensions
 
 The only store-level filters are Region, City, Status, and Store Productivity Tier. `Nature`, Channel, and Store Type are not valid analysis dimensions and are excluded from the normalized model and Dashboard filters.

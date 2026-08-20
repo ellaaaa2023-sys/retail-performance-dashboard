@@ -150,6 +150,8 @@ One Workbook contains exactly one Review Period. The adapter detects either S1 o
 
 Core consumes the cleaned canonical cells directly. It does not repeat header normalization, text cleaning, or numeric-string parsing. Core still owns TOTAL exclusion, store normalization, ratio derivation already supported by the model, P&L calculations, matching, and Data Service construction.
 
+Phase 2B adds `js/store-portfolio.js` between Cleaning and Core in classic-script order. It owns exact-Terminal Current/LY pairing, Productivity evolution, Performance eligibility and median, and DA HC distribution statistics. Core/Data Service supplies the normalized store records and canonical Finance ratios. The helper contains no old Star/Risk vocabulary and no UI code.
+
 Unknown columns remain in scan metadata but are not copied into final store objects.
 
 ### 4.4 Validation
@@ -178,6 +180,17 @@ Warnings:
 Runtime calculation error:
 
 - Any non-zero Filtered Bridge reconciliation residual outside numeric tolerance.
+
+### 4.5 Store comparison and DA HC service boundary
+
+The Data Service is the only consumer-facing calculation boundary for the new store portfolio data:
+
+- `getDAHeadcountSummary(filters)` returns Current/Comparison totals, source, available/partial/unavailable status, and valid/missing counts.
+- `getStoreComparisons(filters)` returns one exact-Terminal Current/LY payload per Current store, including Productivity evolution and canonical CC amount/ratio pairs.
+- `getPerformancePortfolio(filters)` returns eligible/excluded records, exclusion counts by reason, and the eligible filtered median CC%.
+- `getHeadcountEfficiency(filters)` returns the Current scoped dataset plus DA HC group median, Q1, Q3, IQR, and adjacent-group IQR overlap.
+
+Total Portfolio DA HC prefers authoritative Summary values. Filtered DA HC is a complete Detail sum; partial Detail never becomes an apparently complete total. No page may duplicate Terminal matching, CC ratio calculation, eligibility, or quartile logic.
 
 ## 5. Dashboard State
 
@@ -313,6 +326,8 @@ Driver
 Bridge definitions come from normalized non-overlapping P&L rows and must pass Current level, Comparison level, and movement reconciliation before receiving `reconciled` status. Amount and ratio views use the same canonical amounts and expose separate centralized gates.
 
 ### 8.3 Page 03 — Store Portfolio
+
+The active UI below remains unchanged in Phase 2B. The new shared comparison and distribution service is a data foundation only; no new chart, tab, tooltip, or classification is rendered in this phase.
 
 Keep only:
 

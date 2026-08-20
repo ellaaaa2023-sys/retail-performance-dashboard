@@ -19,7 +19,7 @@ function allCapabilities() {
     resolved: {
       statusFilter: capability(), posAnalytics: capability(), tierFilter: capability(),
       minorationsAnalytics: capability(), investmentQuadrant: capability(),
-      productivitySummary: capability(), fullProductivityRisk: capability(),
+      productivitySummary: capability(), daHeadcountAnalysis: capability(), fullProductivityRisk: capability(),
       filteredCustomerContributionBridge: capability(), canonicalAP: capability(),
       apComponentAnalysis: capability(), fullStorePnl: capability()
     }

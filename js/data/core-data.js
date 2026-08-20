@@ -7,10 +7,13 @@
   const dataCleaning = typeof module === 'object' && module.exports
     ? require('./data-cleaning.js')
     : root.RetailDataCleaning;
-  const api = factory(detailSchema, dataCleaning);
+  const storePortfolio = typeof module === 'object' && module.exports
+    ? require('../store-portfolio.js')
+    : root.RetailStorePortfolio;
+  const api = factory(detailSchema, dataCleaning, storePortfolio);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RetailDashboardData = api;
-}(typeof globalThis !== 'undefined' ? globalThis : this, function (DetailSchema, DataCleaning) {
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (DetailSchema, DataCleaning, StorePortfolio) {
   'use strict';
 
   if (!DetailSchema || !Array.isArray(DetailSchema.FIELDS)) {
@@ -18,6 +21,9 @@
   }
   if (!DataCleaning || typeof DataCleaning.scanWorkbook !== 'function') {
     throw new Error('RetailDataCleaning must be loaded before RetailDashboardData.');
+  }
+  if (!StorePortfolio || typeof StorePortfolio.exactTerminalPairs !== 'function') {
+    throw new Error('RetailStorePortfolio must be loaded before RetailDashboardData.');
   }
 
   const VERSION = '1.0.0';
@@ -761,6 +767,7 @@
         status: values.status,
         productivityTier: values.productivityTier,
         storeProductivity: values.storeProductivity,
+        daHeadcount: values.daHeadcount,
         cityPosNo: values.cityPosNo,
         posNo: values.posNo,
         apExpense,
@@ -768,6 +775,7 @@
         metrics: {
           posNo: values.posNo,
           storeProductivity: values.storeProductivity,
+          daHeadcount: values.daHeadcount,
           cityPosNo: values.cityPosNo,
           grossSales: values.grossSales,
           totalMinorations: values.totalMinorations,
@@ -856,6 +864,7 @@
 
   function summaryMetrics(summary, role) {
     const posNo = resolveSummaryValue(summary, 'posNo', role);
+    const daHeadcount = resolveSummaryValue(summary, 'daHeadcount', role);
     const aup = resolveSummaryValue(summary, 'aup', role);
     const grossSales = resolveSummaryValue(summary, 'grossSales', role);
     const totalMinorations = resolveSummaryValue(summary, 'totalMinorations', role);
@@ -868,6 +877,7 @@
     return {
       values: {
         posNo: posNo.value,
+        daHeadcount: daHeadcount.value,
         aup: aup.value,
         grossSales: grossSales.value,
         totalMinorations: totalMinorations.value,
@@ -879,7 +889,7 @@
         customerContribution: contribution.value,
         customerContributionPct: calculateLineRatio('customerContribution', contribution.value, canonicalAmounts)
       },
-      sources: { posNo, aup, grossSales, totalMinorations, netSales, grossMargin, customerContribution: contribution },
+      sources: { posNo, daHeadcount, aup, grossSales, totalMinorations, netSales, grossMargin, customerContribution: contribution },
       canonicalAmounts
     };
   }
@@ -1028,6 +1038,25 @@
     return total;
   }
 
+  function summarizeStoreField(stores, field) {
+    const values = stores.map(store => store[field]);
+    const validValues = values.filter(Number.isFinite);
+    const validStoreCount = validValues.length;
+    const missingCount = values.length - validStoreCount;
+    const status = validStoreCount === 0
+      ? 'unavailable'
+      : missingCount === 0 ? 'available' : 'partial';
+    const validTotal = validValues.reduce((total, value) => total + value, 0);
+    return {
+      status,
+      total: status === 'available' ? validTotal : null,
+      validTotal: validStoreCount ? validTotal : null,
+      storeCount: stores.length,
+      validStoreCount,
+      missingCount
+    };
+  }
+
   function aggregateStores(stores, aup) {
     const grossSales = sumField(stores, 'grossSales');
     const totalMinorations = sumField(stores, 'totalMinorations');
@@ -1035,8 +1064,10 @@
     const grossMargin = sumField(stores, 'grossMargin');
     const customerContribution = sumField(stores, 'customerContribution');
     const posNo = sumStoreValue(stores, 'cityPosNo');
+    const daHeadcount = summarizeStoreField(stores, 'daHeadcount').total;
     const values = {
       posNo,
+      daHeadcount,
       aup,
       grossSales,
       totalMinorations,
@@ -1231,8 +1262,20 @@
     function getPortfolioMetrics(filters) {
       const normalized = normalizeFilters(filters);
       if (!hasPortfolioFilter(normalized)) {
-        const current = model.summary.periods.current.values;
-        const comparison = model.summary.periods.comparison.values;
+        const currentQuality = summarizeStoreField(model.detail.current.stores, 'daHeadcount');
+        const comparisonQuality = summarizeStoreField(model.detail.comparison.stores, 'daHeadcount');
+        const current = {
+          ...model.summary.periods.current.values,
+          daHeadcount: Number.isFinite(model.summary.periods.current.values.daHeadcount)
+            ? model.summary.periods.current.values.daHeadcount
+            : currentQuality.total
+        };
+        const comparison = {
+          ...model.summary.periods.comparison.values,
+          daHeadcount: Number.isFinite(model.summary.periods.comparison.values.daHeadcount)
+            ? model.summary.periods.comparison.values.daHeadcount
+            : comparisonQuality.total
+        };
         return {
           mode: 'total',
           label: 'Total Portfolio',
@@ -1244,7 +1287,8 @@
           sourceDetails: {
             current: model.summary.periods.current.sources,
             comparison: model.summary.periods.comparison.sources
-          }
+          },
+          dataQuality: { daHeadcount: { current: currentQuality, comparison: comparisonQuality } }
         };
       }
 
@@ -1252,6 +1296,8 @@
       const comparisonStores = storesFor('comparison', normalized);
       const current = aggregateStores(currentStores, model.summary.periods.current.values.aup);
       const comparison = aggregateStores(comparisonStores, model.summary.periods.comparison.values.aup);
+      const currentHeadcountQuality = summarizeStoreField(currentStores, 'daHeadcount');
+      const comparisonHeadcountQuality = summarizeStoreField(comparisonStores, 'daHeadcount');
       return {
         mode: 'filtered',
         label: 'Filtered Portfolio',
@@ -1261,7 +1307,113 @@
         comparison,
         variance: metricVariances(current, comparison),
         rowCounts: { current: currentStores.length, comparison: comparisonStores.length },
+        dataQuality: {
+          daHeadcount: { current: currentHeadcountQuality, comparison: comparisonHeadcountQuality }
+        },
         aupSource: 'summary-pnl-actual-adjusted-unfiltered'
+      };
+    }
+
+    function getDAHeadcountSummary(filters) {
+      const portfolio = getPortfolioMetrics(filters);
+      const current = portfolio.dataQuality.daHeadcount.current;
+      const comparison = portfolio.dataQuality.daHeadcount.comparison;
+      let status = 'partial';
+      if (current.status === 'available' && comparison.status === 'available') status = 'available';
+      else if (current.status === 'unavailable' && comparison.status === 'unavailable') status = 'unavailable';
+      return {
+        mode: portfolio.mode,
+        filters: portfolio.filters,
+        status,
+        current: {
+          ...current,
+          total: portfolio.current.daHeadcount,
+          source: portfolio.mode === 'total' && Number.isFinite(model.summary.periods.current.values.daHeadcount)
+            ? 'summary-pnl-actual-adjusted'
+            : 'store-detail-aggregation'
+        },
+        comparison: {
+          ...comparison,
+          total: portfolio.comparison.daHeadcount,
+          source: portfolio.mode === 'total' && Number.isFinite(model.summary.periods.comparison.values.daHeadcount)
+            ? 'summary-pnl-actual-adjusted'
+            : 'store-detail-aggregation'
+        }
+      };
+    }
+
+    function getStoreComparisons(filters) {
+      const normalized = normalizeFilters(filters);
+      const currentStores = storesFor('current', normalized);
+      const comparisonStores = model.detail.comparison.stores;
+      return StorePortfolio.exactTerminalPairs(currentStores, comparisonStores).map(pair => {
+        const currentStore = pair.currentStore;
+        const comparisonStore = pair.comparisonStore;
+        const currentProductivity = currentStore.storeProductivity;
+        const lyProductivity = comparisonStore ? comparisonStore.storeProductivity : null;
+        const productivityEvolution = StorePortfolio.productivityEvolution(
+          currentProductivity,
+          lyProductivity,
+          pair.comparisonStatus
+        );
+        const currentCustomerContributionAmount = currentStore.pnl.customerContribution;
+        const lyCustomerContributionAmount = comparisonStore
+          ? comparisonStore.pnl.customerContribution
+          : null;
+        return {
+          terminal: currentStore.terminal,
+          store: currentStore.store,
+          city: currentStore.city,
+          region: currentStore.region,
+          status: currentStore.status,
+          productivityTier: currentStore.productivityTier,
+          currentStore,
+          comparisonStore,
+          comparisonStatus: pair.comparisonStatus,
+          currentProductivity,
+          lyProductivity,
+          productivityEvolution,
+          productivityEvolPct: productivityEvolution.value,
+          currentDAHeadcount: currentStore.daHeadcount,
+          lyDAHeadcount: comparisonStore ? comparisonStore.daHeadcount : null,
+          currentCustomerContributionAmount,
+          lyCustomerContributionAmount,
+          currentCustomerContributionPct: calculateLineRatio(
+            'customerContribution',
+            currentCustomerContributionAmount,
+            currentStore.pnl
+          ),
+          lyCustomerContributionPct: comparisonStore
+            ? calculateLineRatio(
+              'customerContribution',
+              lyCustomerContributionAmount,
+              comparisonStore.pnl
+            )
+            : null
+        };
+      });
+    }
+
+    function getPerformancePortfolio(filters) {
+      return {
+        filters: normalizeFilters(filters),
+        ...StorePortfolio.buildPerformanceDataset(getStoreComparisons(filters))
+      };
+    }
+
+    function getHeadcountEfficiency(filters) {
+      const records = getStoreComparisons(filters).map(record => ({
+        terminal: record.terminal,
+        store: record.store,
+        region: record.region,
+        city: record.city,
+        currentDAHeadcount: record.currentDAHeadcount,
+        currentProductivity: record.currentProductivity
+      }));
+      return {
+        filters: normalizeFilters(filters),
+        records,
+        distribution: StorePortfolio.buildHeadcountDistribution(records)
       };
     }
 
@@ -1354,6 +1506,10 @@
       getFilterOptions,
       getStores: (role, filters) => storesFor(role === 'comparison' ? 'comparison' : 'current', filters),
       getPortfolioMetrics,
+      getDAHeadcountSummary,
+      getStoreComparisons,
+      getPerformancePortfolio,
+      getHeadcountEfficiency,
       getBridgeData: (metric, filters) => hasPortfolioFilter(filters)
         ? getFilteredBridge(metric, normalizeFilters(filters))
         : getSummaryBridge(metric),
@@ -1374,6 +1530,7 @@
     parseWorkbookPercentagePoint,
     calculateRatio,
     calculateLineRatio,
+    summarizeStoreField,
     getPnlDenominatorKey,
     amountRelativeVariance,
     ratioVariance,

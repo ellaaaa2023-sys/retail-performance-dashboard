@@ -22,6 +22,8 @@ const forbidden = [/demo-data\.js$/, /sample_data/, /node_modules/, /(?:^|\/)doc
 if (html.includes('demo-data.js')) throw new Error('Internal package must not load demo-data.js');
 if (!html.includes('./js/data/internal-mode.js')) throw new Error('Internal mode config is missing');
 if (!html.includes('./js/i18n.js')) throw new Error('Shared i18n runtime is missing');
+if (!html.includes('./js/store-portfolio.js') || !files.includes('js/store-portfolio.js')) throw new Error('Shared store portfolio runtime is missing');
+if (html.indexOf('./js/store-portfolio.js') > html.indexOf('./js/data/core-data.js')) throw new Error('Store portfolio helper must load before Core');
 if (html.indexOf('./js/data/internal-mode.js') > html.indexOf('./js/i18n.js')) throw new Error('Internal language mode must load before i18n');
 if (!html.includes('Ready for local workbook')) throw new Error('Internal index is not Upload-first');
 if (/id="languageSwitch"|class="language-switch"/.test(html)) throw new Error('Internal index must not contain a language switch');

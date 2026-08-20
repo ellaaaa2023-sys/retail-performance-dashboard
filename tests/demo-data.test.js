@@ -110,4 +110,19 @@ check(12, 'Summary POS and AUP retain their normalized calculation rules', () =>
   assert.equal(metrics.sourceDetails.current.posNo.scope, 'actualAdjusted');
 });
 
+check(13, 'Demo exposes the shared DA HC Current and Comparison contract', () => {
+  const headcount = service.getDAHeadcountSummary({});
+  assert.equal(headcount.status, 'available');
+  assert.equal(headcount.current.total, model.summary.periods.current.values.daHeadcount);
+  assert.equal(headcount.comparison.total, model.summary.periods.comparison.values.daHeadcount);
+});
+
+check(14, 'Demo exposes shared store comparison and eligibility payloads', () => {
+  const comparisons = service.getStoreComparisons({});
+  const performance = service.getPerformancePortfolio({});
+  assert.equal(comparisons.length, model.detail.current.stores.length);
+  assert.equal(performance.counts.total, comparisons.length);
+  assert.equal(Number.isFinite(performance.medianCustomerContributionPct), true);
+});
+
 console.log(`\nDemo data tests: ${passed}/${passed} passed`);
