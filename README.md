@@ -1,103 +1,98 @@
 # Retail Performance Dashboard
 
-[**English**](README.md) | [**简体中文**](README.zh-CN.md)
+[**English**](README.md) | [简体中文](README.zh-CN.md)
 
-An interactive retail finance portfolio demo that turns portfolio-level P&L movement into store-level actions.
+An interactive retail performance analysis tool that turns store-level P&L data into a structured workflow—from portfolio performance and variance drivers to individual store diagnosis.
 
-[**Open the Live Demo →**](https://counter-performance-dashboard.vercel.app/)
+## Live Demo
 
-> The live demo uses synthetic data for product demonstration and loads automatically—no upload or setup required.
+[**Open the live demo →**](https://counter-performance-dashboard.vercel.app/)
+
+The demo uses a 100% synthetic, fictional dataset for product demonstration. It opens in English and supports Simplified Chinese from the sidebar language switch.
 
 ## Product Preview
 
-### Executive Overview
+### 01 · Executive Overview
 
-Portfolio-level performance, period comparison, filters, and management signals in one review surface.
+Review the portfolio through Store Count, DA HC, AUP, Gross Sales, Total Minorations, CONSO Net Sales, Gross Margin, and Customer Contribution. Region, City, Status, and Productivity Tier filters update the analysis consistently.
 
-![Executive Overview with portfolio KPIs, filters, and management signals](docs/images/dashboard-overview.jpg)
+![Executive Overview with portfolio KPIs, DA HC, filters, and management signals](docs/images/dashboard-overview.jpg)
 
-### Variance Analysis
+### 02 · Variance Analysis
 
-Trace Customer Contribution movement from the P&L snapshot to a reconciled bridge and its key drivers.
+Move from the P&L Snapshot to one reconciled Customer Contribution Bridge. The `Amount | %` control switches between absolute contribution movement and percentage-point movement, while Driver Analysis and store ranking support drill-down.
 
-![Customer Contribution bridge with reconciled variance and driver analysis](docs/images/variance-analysis.jpg)
+![P&L Snapshot and Customer Contribution percentage bridge](docs/images/variance-analysis.jpg)
 
-### Store Portfolio
+### 03 · Store Portfolio
 
-Screen stores through Performance, Headcount Efficiency, and Variance Contribution lenses.
+Use three complementary lenses without turning the dashboard into a prediction model:
 
-![Store Portfolio preview from the prior interface](docs/images/store-portfolio.jpg)
+- **Performance** — Customer Contribution % on X, Productivity Evol % on Y, and Current Productivity as bubble size. The four business states are Healthy Growth; High Return, Productivity Decline; Growth, Low Return; and Priority Review.
+- **Efficiency** — Productivity on X and DA HC on Y. It screens higher-headcount stores whose Productivity overlaps with adjacent lower-headcount groups. This is a review signal, not a staffing recommendation.
+- **Variance Contribution** — Shows which stores contribute most to the selected portfolio variance.
 
-> Screenshot update needed: the current product uses the new three-lens Store Portfolio interface.
+![Store Portfolio Performance view with the current four-state bubble map](docs/images/store-portfolio.jpg)
 
-### Store Detail
+### 04 · Store Detail
 
-Drill into a single store's key figures, review signals, detailed P&L, and A&P economics.
+Inspect an Existing Store with Current/LY metadata, DA HC, Store P&L, line-specific `% OF SALES`, the signed hierarchy from Specific A&P through Total Specific Costs, Customer Contribution and Operating Profit, plus A&P component analysis and formal Total A&P.
 
-![Existing Store detail with KPIs, review signals, and store P&L](docs/images/store-detail.jpg)
+![Existing Store detail with Current and LY P&L hierarchy and A&P analysis](docs/images/store-detail.jpg)
+
+## Business Problem
+
+Store performance reviews often split portfolio KPIs, P&L variance explanations, staffing context, and store detail across separate files. This dashboard organizes them into one repeatable review path while keeping financial definitions and reconciliation rules explicit.
 
 ## Analysis Flow
 
 ```text
-Executive Overview → P&L Variance → Store Portfolio → Store Detail
+01 Executive Overview
+   → 02 Variance Analysis
+      → 03 Store Portfolio
+         → 04 Store Detail
 ```
 
-The demo presents `2026 S1 vs 2025 S1` across 160 Current stores and 150 Comparison stores. Every page, filter, calculation, chart, and drill-down uses the same normalized model and Dashboard engine.
+Store selection is shared across portfolio analysis and Store Detail: search or click a store on Page 03, then open Page 04 to review the same Terminal. After activating a workbook, users may also open Page 04 directly without visiting the earlier pages.
 
-## Key Features
+## Current Product Features
 
-- **Executive Overview** — Portfolio KPIs, period movement, and rule-based management signals.
-- **P&L Variance** — P&L snapshot, reconciled Customer Contribution bridge, and positive/negative driver ranking.
-- **Store Portfolio** — Zero-based CC% × Productivity Evolution performance map, horizontal Productivity × DA HC screening lanes, and existing store variance ranking.
-- **Store Detail** — Existing and New Store profiles with KPIs, detailed P&L including Current/LY DA HC, and A&P composition.
-- **Interactive filters** — Region, City, Status, and Store Productivity Tier.
-- **Source switching** — Replace the demo with an uploaded workbook, reset selections without changing the source, or clear the upload to return to Demo.
-- **Bilingual interface** — Switch between English and Chinese without changing the active page, filters, data source, portfolio view, or selected store.
+- One normalized model and Finance Contract across cards, P&L tables, bridges, ratios, and store views.
+- Canonical line-level `% OF SALES` denominators and explicit amount/ratio reconciliation gates.
+- Exact-Terminal Current/LY matching, Productivity Evol %, DA HC aggregation, and store-level CC amount/ratio payloads.
+- English and Simplified Chinese Public interface with state-preserving language switching.
+- Demo-first Public experience and Upload-first English-only Internal package on the same Core.
+- Classic local scripts with no framework, module loader, CDN, or backend dependency.
 
-## Data Preparation
+The public dataset contains 160 Current stores, 150 exact-Terminal comparison stores, and 10 New Stores. The Public Demo and sample workbook use the same business semantics.
+
+## Data and Privacy Architecture
 
 ```text
-Excel Upload
-  → Sheet Detection
-  → Data Cleaning
-  → Validation
-  → Current / Comparison
-  → Dashboard
+Synthetic Demo / Uploaded Workbook
+  → Data Preparation
+  → Normalized Data Model
+  → Data Service + Finance Contract
+  → Dashboard Views
 ```
 
-Demo mode reports normalized source readiness without pretending that an Excel workbook was scanned or cleaned at runtime:
+- Data is processed locally in your browser.
+- Excel parsing, cleaning, validation, matching, and calculations run client-side.
+- The application has no backend, database, analytics, or telemetry.
+- Runtime assets are local; the Content Security Policy disables network connections from the dashboard.
+- Public examples use only synthetic, fictional data.
 
-- Synthetic Summary
-- Current Detail · 160 stores · Ready
-- Comparison Detail · 150 stores · Ready
-
-Workbook discovery, cleaning, and normalization run only after a user selects a workbook.
-
-## Architecture
-
-```text
-Existing Mock Workbook
-  └─ build-time normalization → js/data/demo-data.js
-
-Demo artifact / Uploaded Workbook
-  └─ normalized model
-      └─ createDataService()
-          └─ shared state, filters, calculations, charts, drill-down, rendering
-```
-
-`scripts/generate-demo-data.js` converts `sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx` into a deterministic, committed classic-script artifact. Fresh Load does not fetch or parse Excel.
-
-## Tech Stack
+## Technical Implementation
 
 - Vanilla HTML, CSS, and JavaScript
-- Apache ECharts 5.5.1
-- SheetJS Community Edition 0.18.5
-- Node.js test suite
-- Static deployment on Vercel
+- Apache ECharts 5.5.1 and SheetJS Community Edition 0.18.5
+- Deterministic synthetic Demo artifact generated from the sample workbook
+- Shared Public/Internal Core with classic scripts and `file://` compatibility
+- Node.js contract and regression tests covering Finance, parsing, data services, UI behavior, and packaging
 
-Runtime dependencies are committed under `libs/`; the dashboard does not depend on a CDN, external API, analytics, or telemetry.
+AI agents supported coding, debugging, testing, and iteration. Financial definitions, business logic, the analysis framework, and acceptance validation remained human-driven.
 
-## Run locally
+## Run Locally
 
 Open `index.html` directly, or start a static server:
 
@@ -114,46 +109,14 @@ pnpm install
 pnpm dev
 ```
 
-## Upload and Privacy
-
-Select **Upload Your Data** to use an `.xlsx`, `.xls`, `.xlsm`, or `.csv` file:
-
-- Workbook parsing and transformation happen client-side in the local browser session.
-- The page CSP sets `connect-src 'none'`; the application does not send workbook content through fetch, XHR, or WebSocket.
-- A successful upload reuses the same Dashboard engine as Demo mode.
-- A failed upload preserves the currently active source.
-- **Clear Uploaded Data** releases the upload and restores the Synthetic Demo Dataset.
-
 ## Tests
 
 ```bash
 pnpm run check
 pnpm test
-```
-
-The suite covers Core Data, Finance contracts, Cleaning, Data Preparation, Store Portfolio performance/efficiency/contribution contracts, Store Detail, the deterministic Demo artifact, and Demo / Upload source lifecycle.
-
-Regenerate the Demo artifact with:
-
-```bash
 pnpm run generate:demo
+pnpm run build:internal-edge
+pnpm run test:internal-edge
 ```
 
-The generated output must match the committed `js/data/demo-data.js` artifact.
-
-## Main files
-
-```text
-index.html
-assets/styles.css
-js/app.js
-js/data/core-data.js
-js/data/data-preparation-ui.js
-js/data/source-lifecycle.js
-js/data/demo-data.js
-js/store-portfolio.js
-js/store-detail.js
-scripts/generate-demo-data.js
-sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx
-tests/
-```
+The suite verifies Finance contracts, denominator rules, reconciliation, workbook cleaning, Demo/Upload consistency, Page 03 portfolio behavior, Store P&L hierarchy, bilingual UI, classic-script compatibility, and Internal package integrity.
