@@ -27,7 +27,6 @@ const expected = [
   './js/data/data-preparation-ui.js',
   './js/data/source-lifecycle.js',
   './js/data/demo-data.js',
-  './js/productivity-quadrant.js',
   './js/store-detail.js',
   './js/app.js'
 ];

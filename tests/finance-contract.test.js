@@ -35,10 +35,11 @@ const ACTIVE_STORE_PNL_FIELDS = [
   'vipRedemption', 'oca', 'coupon', 'totalMinorations', 'netSales', 'stdCos',
   'royalTaMs', 'physicalDistribution', 'specialOperationsCost',
   'obsoleteSlowMovingReturns', 'grossMargin', 'tradeRelation', 'customerSamples',
-  'promotionalGifts', 'posAdvertisingAmortization', 'posAdvertisingExpense',
-  'merchandising', 'animations', 'tester', 'daCost', 'specificDevelopment',
-  'otherAP', 'specificAP', 'specificSga', 'customerContribution',
-  'nonSpecificCosts', 'operatingProfit'
+  'transactionalMediaSpecificLine', 'livestreamersLine', 'eShopInShopWebsitesLine',
+  'promotionalGifts', 'otherPromotionsLine', 'animationsTowardDistributor',
+  'animationsImmoPosAdv', 'otherPosAdvertising', 'specificDevelopmentSubtotal',
+  'daCost', 'nonDaCost', 'specificAP', 'specificSga', 'totalSpecificCosts',
+  'customerContribution', 'nonSpecificCosts', 'operatingProfit'
 ];
 
 check('Workbook percentage-point values always convert to decimal ratios', () => {
@@ -83,11 +84,12 @@ check('CONSO Net Sales denominator group starts at Net Sales', () => {
   [
     'netSales', 'stdCos', 'royalTaMs', 'physicalDistribution',
     'specialOperationsCost', 'obsoleteSlowMovingReturns', 'grossMargin',
-    'tradeRelation', 'customerSamples', 'promotionalGifts',
-    'posAdvertisingAmortization', 'posAdvertisingExpense', 'merchandising',
-    'animations', 'tester', 'daCost', 'specificDevelopment', 'otherAP',
-    'specificAP', 'specificSga', 'customerContribution', 'nonSpecificCosts',
-    'operatingProfit'
+    'tradeRelation', 'customerSamples', 'transactionalMediaSpecificLine',
+    'livestreamersLine', 'eShopInShopWebsitesLine', 'promotionalGifts',
+    'otherPromotionsLine', 'animationsTowardDistributor', 'animationsImmoPosAdv',
+    'otherPosAdvertising', 'specificDevelopmentSubtotal', 'daCost', 'nonDaCost',
+    'specificAP', 'specificSga', 'totalSpecificCosts', 'customerContribution',
+    'nonSpecificCosts', 'operatingProfit'
   ].forEach(field => assert.equal(DataLayer.getPnlDenominatorKey(field), 'netSales', field));
 });
 
@@ -102,7 +104,7 @@ check('Page 01 canonical KPIs calculate ratios from amounts and the registry', (
 check('Page 02 and Page 04 consumers call the shared line-ratio contract', () => {
   const appSource = fs.readFileSync(path.resolve(__dirname, '../js/app.js'), 'utf8');
   assert.match(appSource, /calculateLineRatio\(row\.key, current, metrics\.current\)/);
-  assert.match(appSource, /buildPnlRatioModel\([\s\S]*line\.field[\s\S]*window\.RetailDashboardData/);
+  assert.match(appSource, /buildStorePnlRows\(current, ly, window\.RetailDashboardData\)/);
   const detailSource = fs.readFileSync(path.resolve(__dirname, '../js/store-detail.js'), 'utf8');
   assert.match(detailSource, /finance\.calculateLineRatio/);
 });

@@ -16,7 +16,17 @@ function store({ grossSales = 1000, netSales = 400, netSalesPct = .4, grossMargi
   };
 }
 function componentStore(values = {}, specificAP = -320) {
-  return { metrics: {}, pnl: { specificAP, ...values } };
+  const componentDefaults = Object.fromEntries(StoreDetail.AP_COMPONENT_DEFINITIONS.map(definition => [definition.key, 0]));
+  return {
+    metrics: {},
+    pnl: { ...componentDefaults, specificAP, ...values },
+    pnlMetadata: {
+      structuralZeroFields: [
+        'transactionalMediaSpecificLine', 'livestreamersLine',
+        'eShopInShopWebsitesLine', 'otherPromotionsLine'
+      ]
+    }
+  };
 }
 function close(actual, expected, message) {
   assert.equal(Math.abs(actual - expected) < 1e-12, true, `${message}: expected ${expected}, received ${actual}`);
@@ -98,7 +108,10 @@ check(11, 'Amount and ratio share one inline display model', () => {
 check(12, 'A&P component set excludes the Specific A&P subtotal', () => {
   const keys = StoreDetail.AP_COMPONENT_DEFINITIONS.map(item => item.key);
   assert.equal(keys.includes('specificAP'), false);
-  assert.equal(keys.includes('daCostAndSpecificDevelopment'), true);
+  assert.equal(keys.includes('specificDevelopmentSubtotal'), true);
+  assert.equal(keys.includes('daCost'), false);
+  assert.equal(keys.includes('nonDaCost'), false);
+  assert.deepEqual(keys, StoreDetail.STORE_PNL_HIERARCHIES.specificAP);
   assert.equal(new Set(keys).size, keys.length);
 });
 
@@ -129,6 +142,19 @@ check(15, 'A&P component bridge moves between component pools without redefining
   assert.equal(bridge.steps.some(step => step.key === 'specificAP'), false);
   assert.equal(bridge.canonicalCurrentSpend, 320);
   assert.equal(bridge.formalTotalKey, 'specificAP');
+});
+
+check(16, 'A&P component model preserves structural placeholders and Specific development breakdown', () => {
+  const current = componentStore({ specificDevelopmentSubtotal: -70, daCost: -50, nonDaCost: -20 }, -70);
+  const model = StoreDetail.buildApComponentModel(current, null);
+  const structural = model.components.find(item => item.key === 'transactionalMediaSpecificLine');
+  const development = model.components.find(item => item.key === 'specificDevelopmentSubtotal');
+  assert.equal(structural.current, 0);
+  assert.equal(structural.currentSourceStatus, 'structural-placeholder');
+  assert.deepEqual(development.currentBreakdown.map(item => [item.key, item.spend]), [['daCost', 50], ['nonDaCost', 20]]);
+  assert.equal(model.reconciliation.current.status, 'partial-source');
+  assert.equal(model.reconciliation.current.ok, true);
+  assert.equal(model.reconciliation.comparison, null);
 });
 
 results.forEach(result => console.log(result));

@@ -43,13 +43,12 @@
     posAnalytics: Object.freeze({ required: Object.freeze(['cityPosNo']) }),
     tierFilter: Object.freeze({ required: Object.freeze(['productivityTier']) }),
     minorationsAnalytics: Object.freeze({ required: Object.freeze(['grossSales', 'totalMinorations']) }),
-    investmentQuadrant: Object.freeze({ required: Object.freeze(['customerContribution', 'specificAP']) }),
+    performancePortfolio: Object.freeze({
+      required: Object.freeze(['customerContribution', 'netSales', 'storeProductivity'])
+    }),
     productivitySummary: Object.freeze({ required: Object.freeze(['storeProductivity']) }),
     daHeadcountAnalysis: Object.freeze({ required: Object.freeze(['daHeadcount']) }),
-    fullProductivityRisk: Object.freeze({
-      required: Object.freeze(['customerContribution', 'specificAP', 'storeProductivity']),
-      partial: Object.freeze({ mode: 'all', fields: Object.freeze(['customerContribution', 'specificAP']) })
-    }),
+    headcountEfficiency: Object.freeze({ required: Object.freeze(['daHeadcount', 'storeProductivity']) }),
     filteredCustomerContributionBridge: Object.freeze({
       required: Object.freeze(['grossMargin', 'specificAP', 'specificSga', 'customerContribution', 'netSales'])
     }),
@@ -95,9 +94,13 @@
     ['obsoleteSlowMovingReturns', ['OBSL'], 'amount'],
     ['grossMargin', ['Gross Margin'], 'amount'],
     ['grossMarginPct', ['Gross Margin% of CA'], 'ratio'],
+    ['transactionalMediaSpecific', ['Transactional media specific'], 'amount'],
     ['tradeRelation', ['Trade Relation'], 'amount'],
     ['customerSamples', ['Sample'], 'amount'],
+    ['livestreamers', ['Livestreamers'], 'amount'],
+    ['eShopInShopWebsites', ['E-shop in shop websites'], 'amount'],
     ['promotionalGifts', ['PLV2'], 'amount'],
+    ['otherPromotions', ['Other promotions'], 'amount'],
     ['posAdvertisingAmortization', ['Amort. + Writeoff'], 'amount'],
     ['posAdvertisingExpense', ['POS.'], 'amount'],
     ['merchandising', ['Mer.'], 'amount'],

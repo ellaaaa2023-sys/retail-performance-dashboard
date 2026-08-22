@@ -343,6 +343,60 @@ riskScore = 0.5 × expensePercentile + 0.5 × (1 − ccPercentile)
 
 **Decision:** Store Detail metadata displays Current DA HC and, for an exact-Terminal match, LY DA HC as secondary context. It does not add a large KPI card or reimplement matching.
 
+## D-059 — Page 03 Three-lens Structure
+
+**Decision:** Store Portfolio renders one active lens at a time: Performance, Efficiency, or Variance Contribution. Performance is the default. Region, City, Status, and Tier remain shared filters; Performance business-state selection is chart-local.
+
+**Supersedes:** D-017, D-018, D-025, and the active UI parts of D-031 through D-034. Those entries remain historical records of the replaced design.
+
+## D-060 — Performance Map Contract
+
+**Decision:** The Performance map consumes `getPerformancePortfolio(filters)` directly. X is canonical Current CC%, Y is decimal Productivity Evol %, and bubble size is Current Productivity using bounded square-root scaling. Both thresholds are fixed at zero. Equality belongs to the non-negative CC and non-decline sides. The eligible filtered median remains reusable descriptive metadata but is not a quadrant boundary.
+
+**States:** Healthy Growth; High Return, Productivity Decline; Growth, Low Return; Priority Review. New Stores and missing comparison metrics are explained exclusions, never zero-valued points or risks.
+
+## D-061 — Headcount Efficiency Screening
+
+**Decision:** Efficiency uses horizontal headcount lanes with X = Current Productivity and Y = discrete DA HC. Deterministic jittered store dots are the only analytical marks; candidate stores receive a stronger outline. Tukey Q1/Q3 remains the underlying rule for higher-HC stores inside the adjacent lower-HC IQR, but median/IQR markers, the raw distribution table, and box plots are not user-facing. Zoom is available only through explicit toolbox controls with undo/restore; no inside-wheel zoom is installed.
+
+**Safety:** “Potential Review Opportunity” is a screening signal, not a staffing recommendation. The UI does not calculate a Risk Score or prescribe headcount action.
+
+## D-062 — Variance Contribution Reuse
+
+**Decision:** The Contribution lens reuses the existing Store Variance Ranking calculation and drill-down. The lens label is “Variance Contribution” to avoid confusion with Customer Contribution.
+
+## D-063 — Obsolete Page 03 Runtime Removal
+
+**Decision:** After the three replacement lenses pass contract tests, remove the Current/Comparison/Movement Page 03 snapshot control, CC × A&P states, Risk Score, Priority Risk Stores, old renderers/state/CSS/i18n, and `js/productivity-quadrant.js` from Public and Internal active runtime.
+
+## D-064 — Navigation Isolation and Page Independence
+
+**Decision:** Navigation origin may select the destination lens or Variance Contribution metric, but it never becomes a hidden store filter. Performance and Efficiency consume only Region, City, Status, Tier, and their documented local state. Page 03 analysis charts do not retain inside-zoom state and resize after their lens becomes visible.
+
+**Decision:** Data-source activation selects a valid Current store before any page is visited. Store Detail is therefore directly accessible after Demo or Upload. Its Store P&L begins with DA HC as an operational row with absolute headcount movement and no sales ratio.
+
+## D-065 — Synthetic Workbook Is the Demo Business Source
+
+**Decision:** The standard Synthetic Workbook owns the deterministic Current/LY Productivity variation. Its Comparison Productivity is keyed by exact Terminal, its period-specific tier is synchronized to the resulting LY value, and Productivity TOTAL rows equal store-row sums. The Demo generator is a pure parser/metadata/serialization step and may not mutate normalized business values.
+
+**Consequence:** Generated Public Demo and Manual Upload of the same Synthetic Workbook must match for all 150 Terminal pairs across Productivity, Productivity Evol %, canonical CC amount/ratio, DA HC, Performance state, and Efficiency candidate metadata.
+
+## D-066 — Page 03 Store Selection Is Not a Filter
+
+**Decision:** Store Search resolves exact Terminal identity and updates only shared `selectedStore`. Performance and Efficiency keep their full globally filtered populations and render a dark diamond overlay that is independent from business-state fill and the orange Potential Review outline. The same Terminal is consumed by Page 04 without another default selection.
+
+## D-067 — Store P&L Signed Hierarchy
+
+**Decision:** Store P&L owns an explicit signed hierarchy from Gross Margin through Operating Profit. AZ `ANM.` and AV `Amort. + Writeoff` are separate Specific A&P components. Other POS advertising is AX + AY + BA + BG; Specific development is BE and splits into BC DA Cost plus derived Non DA Cost; Total Specific Costs is derived from Specific A&P plus Specific SG&A. Sub-details and subtotals are displayed hierarchically but counted exactly once.
+
+**Reconciliation:** Current, Comparison, amount movement, and ratio movement share CONSO Net Sales from Gross Margin onward. Reported source subtotals remain authoritative. A centralized 3 KRMB Store P&L tolerance reflects the maximum observed whole-KRMB component aggregation residual; ratio tolerances are derived from that amount tolerance and each period's canonical denominator.
+
+## D-068 — Shared Store P&L and A&P Composition Hierarchy
+
+**Decision:** Page 04 A&P Composition consumes the exact ten top-level children of Store P&L Specific A&P. Specific development appears once; DA Cost and Non DA Cost are its tooltip breakdown and are not additional bars. Current and Comparison each retain reconciliation metadata against canonical signed Specific A&P, while formal Total A&P remains its absolute spend magnitude.
+
+**Presentation:** Specific A&P and Total Specific SG&A share the component-subtotal class. Total Specific Costs uses the stronger combined-subtotal class; Customer Contribution and Operating Profit remain key result rows. Public language switching lives in the sidebar utility area, while Internal creates no language control or placeholder.
+
 ## Confirmed Filter Dimensions
 
 The only store-level filters are Region, City, Status, and Store Productivity Tier. `Nature`, Channel, and Store Type are not valid analysis dimensions and are excluded from the normalized model and Dashboard filters.

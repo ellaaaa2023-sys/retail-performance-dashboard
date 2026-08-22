@@ -7,10 +7,13 @@ const XLSX = require('../libs/xlsx.full.min.js');
 const DataLayer = require('../js/data/core-data.js');
 const StoreDetail = require('../js/store-detail.js');
 const I18n = require('../js/i18n.js');
+const SourceLifecycle = require('../js/data/source-lifecycle.js');
 
 const root = path.resolve(__dirname, '..');
 const appSource = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const i18nSource = fs.readFileSync(path.join(root, 'js/i18n.js'), 'utf8');
+const stylesSource = fs.readFileSync(path.join(root, 'assets/styles.css'), 'utf8');
 const workbook = XLSX.read(fs.readFileSync(path.join(root, 'sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx')), {
   type: 'buffer', cellDates: true
 });
@@ -58,6 +61,17 @@ check('DA HC Public labels are bilingual and Internal label remains English', ()
   assert.equal(I18n.translations.en['metric.daHeadcountDescription'], 'Sales staff headcount');
 });
 
+check('Public language switch is created only inside the sidebar utility area', () => {
+  const block = i18nSource.match(/function renderLanguageSwitch\(\) \{([\s\S]*?)\n  \}/)[1];
+  assert.match(block, /querySelector\('\.brand-rail'\)/);
+  assert.match(block, /utilityArea\.className = 'rail-utility-area'/);
+  assert.match(block, /utilityArea\.appendChild\(control\)/);
+  assert.doesNotMatch(block, /topbar-tools/);
+  assert.match(stylesSource, /\.rail-utility-area \{ margin-top: auto;/);
+  assert.match(stylesSource, /\.title \{ min-width: 0; flex: 0 1 auto;/);
+  assert.match(stylesSource, /\.topbar-tools \{ width: 100%; flex: 0 1 auto;/);
+});
+
 check('Page 02 Bridge toggle defaults to Amount', () => {
   assert.match(indexSource, /id="bridgeModeToggle"[\s\S]*?class="active" data-value="amount"/);
   assert.match(appSource, /bridgeMode: 'amount'/);
@@ -102,6 +116,47 @@ check('Page 04 metadata renders Current and LY DA HC', () => {
   assert.match(appSource, /comparison\.daHeadcount/);
 });
 
+check('Page 04 Store P&L starts with an operational DA HC row', () => {
+  assert.equal(StoreDetail.STORE_PNL_LINE_DEFINITIONS[0].key, 'daHeadcount');
+  assert.equal(StoreDetail.STORE_PNL_LINE_DEFINITIONS[0].type, 'headcount');
+  assert.match(appSource, /buildStorePnlRows\(current, ly, window\.RetailDashboardData\)/);
+  assert.match(appSource, /line\.type === 'headcount'/);
+});
+
+check('Store P&L semantic classes preserve the confirmed subtotal hierarchy', () => {
+  const definitions = StoreDetail.STORE_PNL_LINE_DEFINITIONS;
+  assert.equal(definitions.find(line => line.key === 'specificAP').className, 'subtotal');
+  assert.equal(definitions.find(line => line.key === 'specificSga').className, 'subtotal');
+  assert.equal(definitions.find(line => line.key === 'totalSpecificCosts').className, 'group');
+  assert.equal(definitions.find(line => line.key === 'daCost').className, 'subdetail');
+  assert.equal(definitions.find(line => line.key === 'nonDaCost').className, 'subdetail');
+});
+
+check('Store P&L DA HC shows Current and LY counts, blank ratios, and absolute movement', () => {
+  const current = model.detail.current.stores.find(store => Number.isFinite(store.daHeadcount));
+  const comparison = model.detail.comparison.stores.find(store => store.terminal === current.terminal);
+  assert.equal(Number.isFinite(comparison.daHeadcount), true);
+  assert.equal(current.daHeadcount - comparison.daHeadcount, current.pnl.daHeadcount - comparison.pnl.daHeadcount);
+  assert.match(appSource, /<td>—<\/td><td>\$\{hasLy \? formatInt\(lv\) : '—'\}<\/td><td>—<\/td>/);
+  assert.match(appSource, /formatSignedNumber\(movement\)/);
+});
+
+check('New Store DA HC keeps Comparison and movement unavailable', () => {
+  const newStore = model.storeMatches.new[0].current;
+  assert.equal(Number.isFinite(newStore.pnl.daHeadcount), true);
+  const row = StoreDetail.buildStorePnlRows(newStore, null, DataLayer).find(item => item.key === 'daHeadcount');
+  assert.equal(row.comparisonAmount, null);
+  assert.equal(row.amountVariance, null);
+});
+
+check('Data source activation initializes Store Detail without visiting another page', () => {
+  const state = {};
+  SourceLifecycle.activate(state, { sourceType: 'demo', model, service });
+  assert.equal(state.selectedStore, model.metadata.defaultStoreTerminal || model.detail.current.stores[0].terminal);
+  assert.equal(service.getStores('current', {}).some(store => store.terminal === state.selectedStore), true);
+  assert.match(appSource, /function renderDetail\(\) \{\s*ensureSelectedStore\(\)/);
+});
+
 check('Page 04 A&P Movement Bridge is absent from active UI and renderer', () => {
   assert.equal(indexSource.includes('apMovementChart'), false);
   assert.equal(appSource.includes("chart('apMovementChart')"), false);
@@ -129,6 +184,14 @@ check('Page 04 component comparison chart remains active and separate from forma
   assert.match(indexSource, /id="apComparisonChart"/);
   assert.match(appSource, /buildApComponentModel\(current, ly\)/);
   assert.match(appSource, /dataset\.canonicalCurrentSpend/);
+  assert.match(appSource, /dataset\.componentMapping = 'store-pnl-specificAP'/);
+  assert.match(appSource, /dataset\.reconciliation = JSON\.stringify\(componentModel\.reconciliation\)/);
+  assert.match(appSource, /pnlLabel\(component\.key,component\.label\)/);
+  assert.match(appSource, /detail\.structuralPlaceholder/);
+  assert.deepEqual(
+    StoreDetail.AP_COMPONENT_DEFINITIONS.map(definition => definition.key),
+    StoreDetail.STORE_PNL_HIERARCHIES.specificAP
+  );
 });
 
 check('Page 04 Total A&P labels are bilingual', () => {
@@ -143,12 +206,6 @@ check('New Store keeps A&P comparison and movement unavailable', () => {
   assert.equal(total.hasComparison, false);
   assert.equal(total.comparisonSpend, null);
   assert.equal(total.movement, null);
-});
-
-check('Page 03 legacy UI remains present for the later redesign phase', () => {
-  ['productivityChart', 'riskStoreBody', 'snapshotToggle', 'portfolioView'].forEach(id => {
-    assert.equal(indexSource.includes(`id="${id}"`), true, id);
-  });
 });
 
 console.log(`\n${passed}/${passed} Phase 3 UI contract checks passed.`);

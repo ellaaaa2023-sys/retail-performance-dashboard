@@ -9,13 +9,11 @@
 
   const INTERACTION_DEFAULTS = Object.freeze({
     filters: {},
-    snapshot: 'current',
-    portfolioView: 'productivity',
-    portfolioMetric: 'customerContribution',
+    portfolioLens: 'performance',
+    performanceSelection: null,
+    contributionMetric: 'customerContribution',
     selectedPnlLine: '',
     selectedDriver: '',
-    selectedQuadrant: 'all',
-    search: ''
   });
 
   function validateCandidate(candidate) {
@@ -32,7 +30,10 @@
     Object.assign(state, INTERACTION_DEFAULTS, {
       filters: {},
       selectedStore: state.model && state.model.metadata
-        ? state.model.metadata.defaultStoreTerminal || ''
+        ? state.model.metadata.defaultStoreTerminal
+          || (state.model.detail && state.model.detail.current && state.model.detail.current.stores[0]
+            ? state.model.detail.current.stores[0].terminal
+            : '')
         : ''
     });
     return state;

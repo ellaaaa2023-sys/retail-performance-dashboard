@@ -7,6 +7,20 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  const PERFORMANCE_STATES = Object.freeze({
+    HEALTHY_GROWTH: 'healthy-growth',
+    HIGH_RETURN_DECLINE: 'high-return-decline',
+    GROWTH_LOW_RETURN: 'growth-low-return',
+    PRIORITY_REVIEW: 'priority-review'
+  });
+
+  const PERFORMANCE_STATE_ORDER = Object.freeze([
+    PERFORMANCE_STATES.HEALTHY_GROWTH,
+    PERFORMANCE_STATES.HIGH_RETURN_DECLINE,
+    PERFORMANCE_STATES.GROWTH_LOW_RETURN,
+    PERFORMANCE_STATES.PRIORITY_REVIEW
+  ]);
+
   function median(values) {
     const sorted = values.filter(Number.isFinite).slice().sort((left, right) => left - right);
     if (!sorted.length) return null;
@@ -79,6 +93,40 @@
     return { eligible: true, reason: null };
   }
 
+  function classifyPerformance(record) {
+    if (!record || !Number.isFinite(record.currentCustomerContributionPct)
+      || !Number.isFinite(record.productivityEvolPct)) return null;
+    const highReturn = record.currentCustomerContributionPct >= 0;
+    const growth = record.productivityEvolPct >= 0;
+    if (highReturn && growth) return PERFORMANCE_STATES.HEALTHY_GROWTH;
+    if (highReturn) return PERFORMANCE_STATES.HIGH_RETURN_DECLINE;
+    if (growth) return PERFORMANCE_STATES.GROWTH_LOW_RETURN;
+    return PERFORMANCE_STATES.PRIORITY_REVIEW;
+  }
+
+  function scaleBubbleSize(value, minimumValue, maximumValue, minimumSize = 10, maximumSize = 38) {
+    if (![value, minimumValue, maximumValue, minimumSize, maximumSize].every(Number.isFinite)) return minimumSize;
+    if (maximumSize <= minimumSize) return minimumSize;
+    if (maximumValue <= minimumValue) return (minimumSize + maximumSize) / 2;
+    const safeMinimum = Math.max(0, minimumValue);
+    const safeMaximum = Math.max(safeMinimum, maximumValue);
+    const clipped = Math.min(safeMaximum, Math.max(safeMinimum, value));
+    const normalized = (Math.sqrt(clipped) - Math.sqrt(safeMinimum))
+      / (Math.sqrt(safeMaximum) - Math.sqrt(safeMinimum));
+    return minimumSize + normalized * (maximumSize - minimumSize);
+  }
+
+  function deterministicJitter(key, maximumOffset = 0.18) {
+    const text = String(key == null ? '' : key);
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    const unit = (hash >>> 0) / 4294967295;
+    return (unit * 2 - 1) * maximumOffset;
+  }
+
   function countReasons(records) {
     return records.reduce((counts, record) => {
       const reason = record.exclusionReason || 'unknown';
@@ -92,10 +140,25 @@
       const eligibility = performanceEligibility(record);
       return { ...record, performanceEligibility: eligibility };
     });
-    const eligible = evaluated.filter(record => record.performanceEligibility.eligible);
+    const eligibleRecords = evaluated.filter(record => record.performanceEligibility.eligible);
     const excluded = evaluated
       .filter(record => !record.performanceEligibility.eligible)
       .map(record => ({ ...record, exclusionReason: record.performanceEligibility.reason }));
+    const medianCustomerContributionPct = median(
+      eligibleRecords.map(record => record.currentCustomerContributionPct)
+    );
+    const eligible = eligibleRecords.map(record => ({
+      ...record,
+      businessState: classifyPerformance(record)
+    }));
+    const stateSummary = PERFORMANCE_STATE_ORDER.map(state => {
+      const count = eligible.filter(record => record.businessState === state).length;
+      return {
+        state,
+        count,
+        share: eligible.length ? count / eligible.length : 0
+      };
+    });
     return {
       eligible,
       excluded,
@@ -105,9 +168,8 @@
         excluded: excluded.length,
         excludedByReason: countReasons(excluded)
       },
-      medianCustomerContributionPct: median(
-        eligible.map(record => record.currentCustomerContributionPct)
-      )
+      medianCustomerContributionPct,
+      stateSummary
     };
   }
 
@@ -154,6 +216,7 @@
 
   function buildHeadcountDistribution(records) {
     const groups = new Map();
+    const recordsByGroup = new Map();
     const excluded = [];
     records.forEach(record => {
       if (!Number.isFinite(record.currentDAHeadcount)) {
@@ -165,7 +228,9 @@
         return;
       }
       if (!groups.has(record.currentDAHeadcount)) groups.set(record.currentDAHeadcount, []);
+      if (!recordsByGroup.has(record.currentDAHeadcount)) recordsByGroup.set(record.currentDAHeadcount, []);
       groups.get(record.currentDAHeadcount).push(record.currentProductivity);
+      recordsByGroup.get(record.currentDAHeadcount).push(record);
     });
     const distributions = Array.from(groups.entries())
       .sort(([left], [right]) => left - right)
@@ -173,9 +238,24 @@
         daHeadcount,
         ...distributionStatistics(productivities)
       }));
+    const adjacentOverlaps = adjacentIqrOverlaps(distributions);
+    const reviewOpportunities = adjacentOverlaps.flatMap(overlap => {
+      if (!overlap.overlaps) return [];
+      const lowerGroup = distributions.find(group => group.daHeadcount === overlap.lowerHeadcount);
+      return (recordsByGroup.get(overlap.higherHeadcount) || [])
+        .filter(record => record.currentProductivity >= lowerGroup.q1 && record.currentProductivity <= lowerGroup.q3)
+        .map(record => ({
+          terminal: record.terminal,
+          higherHeadcount: overlap.higherHeadcount,
+          lowerHeadcount: overlap.lowerHeadcount,
+          lowerIqrStart: lowerGroup.q1,
+          lowerIqrEnd: lowerGroup.q3
+        }));
+    });
     return {
       groups: distributions,
-      adjacentOverlaps: adjacentIqrOverlaps(distributions),
+      adjacentOverlaps,
+      reviewOpportunities,
       excluded,
       counts: {
         total: records.length,
@@ -187,10 +267,15 @@
   }
 
   return Object.freeze({
+    PERFORMANCE_STATES,
+    PERFORMANCE_STATE_ORDER,
     median,
     exactTerminalPairs,
     productivityEvolution,
     performanceEligibility,
+    classifyPerformance,
+    scaleBubbleSize,
+    deterministicJitter,
     buildPerformanceDataset,
     distributionStatistics,
     adjacentIqrOverlaps,

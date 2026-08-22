@@ -518,10 +518,10 @@ check(42, 'Missing productivityTier disables only the Tier capability', () => {
   assert.equal(optionalMissingModel.detail.current.stores[0].productivityTier, null);
 });
 
-check(43, 'Missing storeProductivity keeps Productivity Risk partial', () => {
-  assert.equal(optionalMissingModel.metadata.capabilities.current.investmentQuadrant.status, 'available');
+check(43, 'Missing storeProductivity disables the new Page 03 analysis capabilities', () => {
+  assert.equal(optionalMissingModel.metadata.capabilities.current.performancePortfolio.status, 'unavailable');
   assert.equal(optionalMissingModel.metadata.capabilities.current.productivitySummary.status, 'unavailable');
-  assert.equal(optionalMissingModel.metadata.capabilities.resolved.fullProductivityRisk.status, 'partial');
+  assert.equal(optionalMissingModel.metadata.capabilities.resolved.headcountEfficiency.status, 'unavailable');
   assert.equal(optionalMissingModel.detail.current.stores[0].storeProductivity, null);
 });
 

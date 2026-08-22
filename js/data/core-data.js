@@ -46,9 +46,13 @@
     'grossMargin', 'tradeRelation', 'customerSamples', 'promotionalGifts',
     'posAdvertisingAmortization', 'posAdvertisingExpense', 'merchandising',
     'animations', 'tester', 'daCost', 'specificDevelopment',
-    'daCostAndSpecificDevelopment', 'otherPosAdvertising', 'otherAP',
-    'specificAP', 'specificSga', 'customerContribution', 'nonSpecificCosts',
-    'operatingProfit'
+    'transactionalMediaSpecificLine', 'livestreamersLine',
+    'eShopInShopWebsitesLine', 'otherPromotionsLine',
+    'animationsTowardDistributor', 'animationsImmoPosAdv',
+    'daCostAndSpecificDevelopment', 'specificDevelopmentSubtotal',
+    'nonDaCost', 'otherPosAdvertising', 'otherAP', 'specificAP',
+    'specificSga', 'totalSpecificCosts', 'customerContribution',
+    'nonSpecificCosts', 'operatingProfit'
   ]);
   const PNL_DENOMINATOR_REGISTRY = Object.freeze(Object.fromEntries([
     ...GROSS_SALES_DENOMINATOR_FIELDS.map(field => [field, 'grossSales']),
@@ -72,12 +76,15 @@
   const DETAIL_RECONCILIATION_DEFINITIONS = Object.freeze({
     netSales: RECONCILIATION_DEFINITIONS.netSales,
     grossMargin: RECONCILIATION_DEFINITIONS.grossMargin,
+    specificDevelopmentSubtotal: Object.freeze(['daCost', 'nonDaCost']),
     specificAP: Object.freeze([
-      'tradeRelation', 'customerSamples', 'promotionalGifts',
-      'posAdvertisingAmortization', 'posAdvertisingExpense', 'merchandising',
-      'animations', 'tester', 'daCostAndSpecificDevelopment', 'otherAP'
+      'transactionalMediaSpecificLine', 'customerSamples', 'livestreamersLine',
+      'eShopInShopWebsitesLine', 'promotionalGifts', 'otherPromotionsLine',
+      'animationsTowardDistributor', 'animationsImmoPosAdv',
+      'otherPosAdvertising', 'specificDevelopmentSubtotal'
     ]),
-    customerContribution: RECONCILIATION_DEFINITIONS.customerContribution,
+    totalSpecificCosts: Object.freeze(['specificAP', 'specificSga']),
+    customerContribution: Object.freeze(['grossMargin', 'totalSpecificCosts']),
     operatingProfit: RECONCILIATION_DEFINITIONS.operatingProfit
   });
 
@@ -321,6 +328,50 @@
 
   function finiteValues(values, fields) {
     return fields.every(field => Number.isFinite(values && values[field]));
+  }
+
+  function sumRequired(values, fields) {
+    return finiteValues(values, fields)
+      ? fields.reduce((total, field) => total + values[field], 0)
+      : null;
+  }
+
+  function deriveDetailFinancialValues(values) {
+    const structuralZeroFields = [];
+    const structuralLine = (sourceField, lineField) => {
+      if (Number.isFinite(values[sourceField])) {
+        values[lineField] = values[sourceField];
+        return sourceField;
+      }
+      values[lineField] = 0;
+      structuralZeroFields.push(lineField);
+      return 'structural-zero';
+    };
+
+    const sources = {
+      transactionalMediaSpecificLine: structuralLine('transactionalMediaSpecific', 'transactionalMediaSpecificLine'),
+      livestreamersLine: structuralLine('livestreamers', 'livestreamersLine'),
+      eShopInShopWebsitesLine: structuralLine('eShopInShopWebsites', 'eShopInShopWebsitesLine'),
+      otherPromotionsLine: structuralLine('otherPromotions', 'otherPromotionsLine')
+    };
+    values.animationsTowardDistributor = Number.isFinite(values.animations) ? values.animations : null;
+    values.animationsImmoPosAdv = Number.isFinite(values.posAdvertisingAmortization)
+      ? values.posAdvertisingAmortization
+      : null;
+    values.otherPosAdvertising = sumRequired(values, [
+      'posAdvertisingExpense', 'merchandising', 'tester', 'otherAP'
+    ]);
+    values.specificDevelopmentSubtotal = Number.isFinite(values.daCostAndSpecificDevelopment)
+      ? values.daCostAndSpecificDevelopment
+      : null;
+    values.nonDaCost = finiteValues(values, ['specificDevelopmentSubtotal', 'daCost'])
+      ? values.specificDevelopmentSubtotal - values.daCost
+      : null;
+    values.totalSpecificCosts = sumRequired(values, ['specificAP', 'specificSga']);
+    return Object.freeze({
+      sources: Object.freeze(sources),
+      structuralZeroFields: Object.freeze(structuralZeroFields.slice())
+    });
   }
 
   function reconcileLevel(values, target, components, tolerance) {
@@ -747,6 +798,7 @@
       });
       if (isTotalOrBlankDetailValues(values)) return;
       values.posNo = values.terminal ? 1 : 0;
+      const pnlMetadata = deriveDetailFinancialValues(values);
       const apExpense = values.specificAP;
       const apExpenseMagnitude = Number.isFinite(apExpense) ? Math.abs(apExpense) : null;
       const apExpensePct = calculateLineRatio('specificAP', apExpense, values);
@@ -791,6 +843,7 @@
           customerContributionPct: calculateLineRatio('customerContribution', values.customerContribution, values)
         },
         pnl: values,
+        pnlMetadata,
         reconciliation: levelReconciliation
       });
     });
@@ -1407,8 +1460,14 @@
         store: record.store,
         region: record.region,
         city: record.city,
+        status: record.status,
+        productivityTier: record.productivityTier,
         currentDAHeadcount: record.currentDAHeadcount,
-        currentProductivity: record.currentProductivity
+        lyDAHeadcount: record.lyDAHeadcount,
+        currentProductivity: record.currentProductivity,
+        lyProductivity: record.lyProductivity,
+        productivityEvolPct: record.productivityEvolPct,
+        currentCustomerContributionPct: record.currentCustomerContributionPct
       }));
       return {
         filters: normalizeFilters(filters),
@@ -1540,6 +1599,7 @@
       ratioReconciliationTolerance: RATIO_RECONCILIATION_TOLERANCE,
       pnlDenominatorRegistry: PNL_DENOMINATOR_REGISTRY,
       reconciliationDefinitions: RECONCILIATION_DEFINITIONS,
+      detailReconciliationDefinitions: DETAIL_RECONCILIATION_DEFINITIONS,
       supportedReviewPeriods: ['S1', 'Full Year'],
       portfolioFilters: ['Review Period', 'Region', 'City', 'Status', 'Store Productivity Tier']
     })

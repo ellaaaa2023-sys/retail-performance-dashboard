@@ -21,7 +21,6 @@
   <script defer src="./js/data/data-preparation-ui.js"></script>
   <script defer src="./js/data/source-lifecycle.js"></script>
   <script defer src="./js/data/demo-data.js"></script>
-  <script defer src="./js/productivity-quadrant.js"></script>
   <script defer src="./js/store-detail.js"></script>
   <script defer src="./js/app.js"></script>
 </head>
@@ -131,26 +130,29 @@
     </section>
 
     <section class="tab-panel" id="tab-portfolio" data-panel="portfolio">
-      <div class="page-heading"><div><span class="section-kicker" data-i18n="portfolio.kicker">03 · STORE PORTFOLIO</span><h2 data-i18n="portfolio.heading">Locate where the variance happened</h2></div><p id="portfolioContext">Current portfolio view</p></div>
+      <div class="page-heading"><div><span class="section-kicker" data-i18n="portfolio.kicker">03 · STORE PORTFOLIO</span><h2 data-i18n="portfolio.heading">Compare store performance, efficiency, and variance contribution</h2></div><p id="portfolioContext">Performance · Current portfolio</p></div>
       <section class="portfolio-toolbar">
-        <div class="segmented" id="portfolioView"><button class="active" data-value="productivity" type="button" data-i18n="portfolio.productivity">Productivity</button><button data-value="ranking" type="button" data-i18n="portfolio.ranking">Store Variance Ranking</button></div>
-        <div class="toolbar-right">
-          <div class="segmented small" id="snapshotToggle"><button class="active" data-value="current" type="button" data-i18n="common.current">Current</button><button data-value="comparison" type="button" data-i18n="common.comparison">Comparison</button><button data-value="movement" type="button" data-i18n="portfolio.movement">Movement</button></div>
-          <div class="field search-field"><label for="storeSearch" data-i18n="portfolio.search">Search Store</label><input id="storeSearch" type="search" placeholder="Store name or Store ID" data-i18n-placeholder="portfolio.searchPlaceholder" disabled></div>
-        </div>
+        <div class="segmented portfolio-lens-toggle" id="portfolioLens" role="group" aria-label="Store portfolio lens" data-i18n-aria-label="portfolio.lensAria"><button class="active" data-value="performance" type="button" data-i18n="portfolio.performance">Performance</button><button data-value="efficiency" type="button" data-i18n="portfolio.efficiency">Efficiency</button><button data-value="contribution" type="button" data-i18n="portfolio.varianceContribution">Variance Contribution</button></div>
+        <div class="portfolio-store-search"><label for="portfolioStoreSearch" data-i18n="portfolio.searchStore">Search Store</label><input id="portfolioStoreSearch" type="search" list="portfolioStoreOptions" autocomplete="off" disabled data-i18n-placeholder="portfolio.searchStorePlaceholder" placeholder="Search store name"><datalist id="portfolioStoreOptions"></datalist></div>
       </section>
-      <section class="portfolio-panel active" data-portfolio-panel="productivity">
+      <section class="portfolio-panel active" data-portfolio-panel="performance">
         <article class="card">
-          <div class="card-head"><div><div class="card-title" data-i18n="portfolio.quadrantTitle">Store Investment Productivity Quadrant</div><div class="card-sub" data-i18n="portfolio.quadrantSub">Customer Contribution × A&amp;P Expense spend magnitude · medians follow the selected scope</div></div><div class="tier-summary" id="tierSummary"></div></div>
-          <div class="quadrant-summary-wrap"><span class="quadrant-summary-label" id="quadrantSummaryLabel">Quadrant Summary</span><div class="quadrant-summary" id="quadrantSummary"></div></div>
-          <div id="productivityChart" class="chart chart-wide" aria-label="Store Investment Productivity Quadrant"><div class="chart-empty">Upload a workbook to view analysis</div></div>
-        </article>
-        <article class="card risk-card">
-          <div class="card-head"><div><div class="card-title" data-i18n="portfolio.priorityRisk">Priority Risk Stores</div><div class="card-sub" id="riskStoreSub">Low Customer Contribution · High A&amp;P Expense · ranked within the selected scope</div></div><span class="rule-badge">TOP 8</span></div>
-          <div class="table-wrap risk-table-wrap"><table class="data-table risk-table"><thead><tr><th data-i18n="common.rank">Rank</th><th data-i18n="common.store">Store</th><th data-i18n="portfolio.regionCity">Region / City</th><th data-i18n="portfolio.ccAmount">CC Amount</th><th data-i18n="portfolio.ccPct">CC %</th><th data-i18n="portfolio.apSpend">A&amp;P Spend</th><th data-i18n="metric.storeProductivity">Productivity</th><th data-i18n="portfolio.riskScore">Risk Score</th><th></th></tr></thead><tbody id="riskStoreBody"></tbody></table></div>
+          <div class="card-head"><div><div class="card-title" data-i18n="portfolio.performanceTitle">CC% × Productivity Evolution</div><div class="card-sub" data-i18n="portfolio.performanceSub">Current Customer Contribution % · Productivity Evol % · bubble size represents Current Productivity</div></div><div class="tier-summary" id="performanceMeta"></div></div>
+          <div class="portfolio-summary-wrap"><span class="portfolio-summary-label" data-i18n="portfolio.businessState">Business State</span><div class="portfolio-state-summary" id="performanceSummary"></div></div>
+          <div class="portfolio-exclusions" id="performanceExclusions"></div>
+          <div class="portfolio-selected-notice" id="performanceSelectedNotice" hidden></div>
+          <div id="performanceChart" class="chart chart-wide" aria-label="Store performance map" data-i18n-aria-label="portfolio.performanceChartAria"><div class="chart-empty">Upload a workbook to view analysis</div></div>
         </article>
       </section>
-      <section class="portfolio-panel" data-portfolio-panel="ranking">
+      <section class="portfolio-panel" data-portfolio-panel="efficiency">
+        <article class="card">
+          <div class="card-head"><div><div class="card-title" data-i18n="portfolio.efficiencyTitle">Productivity by DA HC</div><div class="card-sub" data-i18n="portfolio.efficiencySub">Horizontal headcount lanes make similar store productivity directly comparable</div></div><span class="rule-badge" data-i18n="portfolio.screeningView">SCREENING VIEW</span></div>
+          <div class="tier-summary" id="efficiencyMeta"></div>
+          <div id="efficiencyChart" class="chart chart-wide" aria-label="DA headcount productivity distribution" data-i18n-aria-label="portfolio.efficiencyChartAria"><div class="chart-empty">Upload a workbook to view analysis</div></div>
+          <div class="screening-notice" id="efficiencyNotice" data-i18n="portfolio.screeningNotice">This is a screening signal, not a staffing recommendation.</div>
+        </article>
+      </section>
+      <section class="portfolio-panel" data-portfolio-panel="contribution">
         <div class="ranking-header"><div class="field"><label for="rankingMetric" data-i18n="portfolio.rankBy">Rank Stores By</label><select id="rankingMetric" disabled><option value="grossSales" data-i18n="metric.grossSales">Gross Sales</option><option value="netSales" data-i18n="metric.netSales">CONSO Net Sales</option><option value="grossMargin" data-i18n="metric.grossMargin">Gross Margin</option><option value="customerContribution" data-i18n="metric.customerContribution">Customer Contribution</option></select></div><div class="ranking-note" id="rankingNote">Ranked by Current vs Comparison variance</div></div>
         <div class="concentration-grid">
           <article class="card compact-card"><div class="card-head"><div><div class="card-title" data-i18n="portfolio.topPositiveStores">Top Positive Stores</div><div class="card-sub" data-i18n="portfolio.topPositiveStoresSub">Largest favorable Current vs Comparison</div></div></div><div class="rank-list store-ranks" id="positiveStores"></div></article>

@@ -43,10 +43,10 @@
     posAnalytics: Object.freeze({ label: 'Filtered POS analytics', unavailable: 'Filtered POS analytics unavailable' }),
     tierFilter: Object.freeze({ label: 'Store Productivity Tier filter', unavailable: 'Store Productivity Tier filter unavailable' }),
     minorationsAnalytics: Object.freeze({ label: 'Minorations analytics', unavailable: 'Minorations analytics unavailable' }),
-    investmentQuadrant: Object.freeze({ label: 'Investment Quadrant', unavailable: 'Investment Quadrant unavailable' }),
+    performancePortfolio: Object.freeze({ label: 'Performance portfolio', unavailable: 'Performance portfolio unavailable' }),
     productivitySummary: Object.freeze({ label: 'Productivity Summary', unavailable: 'Productivity Summary unavailable' }),
     daHeadcountAnalysis: Object.freeze({ label: 'DA HC analysis', unavailable: 'DA HC analysis unavailable' }),
-    fullProductivityRisk: Object.freeze({ label: 'Productivity Risk analysis', unavailable: 'Productivity Risk analysis unavailable' }),
+    headcountEfficiency: Object.freeze({ label: 'Headcount Efficiency analysis', unavailable: 'Headcount Efficiency analysis unavailable' }),
     filteredCustomerContributionBridge: Object.freeze({ label: 'Customer Contribution Bridge', unavailable: 'Customer Contribution Bridge unavailable' }),
     canonicalAP: Object.freeze({ label: 'Canonical A&P analysis', unavailable: 'Canonical A&P analysis unavailable' }),
     apComponentAnalysis: Object.freeze({ label: 'A&P Component Analysis', unavailable: 'A&P Component Analysis unavailable' }),
@@ -55,8 +55,8 @@
 
   const CAPABILITY_ORDER = Object.freeze([
     'statusFilter', 'posAnalytics', 'tierFilter', 'minorationsAnalytics',
-    'filteredCustomerContributionBridge', 'investmentQuadrant',
-    'productivitySummary', 'daHeadcountAnalysis', 'fullProductivityRisk', 'apComponentAnalysis', 'fullStorePnl'
+    'filteredCustomerContributionBridge', 'performancePortfolio',
+    'productivitySummary', 'daHeadcountAnalysis', 'headcountEfficiency', 'apComponentAnalysis', 'fullStorePnl'
   ]);
 
   function fieldLabel(key) {

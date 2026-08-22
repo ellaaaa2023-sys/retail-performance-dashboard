@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const DataLayer = require('../js/data/core-data.js');
 const PreparationUI = require('../js/data/data-preparation-ui.js');
-const Quadrant = require('../js/productivity-quadrant.js');
 const StoreDetail = require('../js/store-detail.js');
 const Generator = require('../scripts/generate-demo-data.js');
 
@@ -64,19 +63,22 @@ check(6, 'Customer Contribution Bridge reconciles with positive and negative dri
   assert.equal(bridge.drivers.some(driver => driver.variance < 0), true);
 });
 
-check(7, 'Quadrant and Risk views contain differentiated stores', () => {
-  const current = service.getStores('current', {});
-  const quadrant = Quadrant.buildQuadrantModel(current);
-  Object.values(quadrant.counts).forEach(count => assert.ok(count > 0));
-  assert.ok(Quadrant.buildRiskRanking(current).length > 0);
+check(7, 'Performance view has 150 eligible matched stores and 10 explained New Store exclusions', () => {
+  const performance = service.getPerformancePortfolio({});
+  assert.equal(performance.counts.eligible, 150);
+  assert.equal(performance.counts.excluded, 10);
+  assert.equal(performance.counts.excludedByReason['new-store'], 10);
 });
 
-check(8, 'Movement contains improving and deteriorating transitions', () => {
-  const movement = Quadrant.buildMovementModel(service.getStores('current', {}), service.getStores('comparison', {}), {});
-  assert.equal(movement.summary.matched, 150);
-  assert.ok(movement.summary.riskToNonRisk > 0);
-  assert.ok(movement.summary.nonRiskToRisk > 0);
-  assert.ok(movement.summary.changed > 0);
+check(8, 'Performance and Efficiency views contain differentiated screening data', () => {
+  const performance = service.getPerformancePortfolio({});
+  assert.equal(performance.stateSummary.every(item => item.count > 0), true);
+  assert.equal(performance.eligible.some(item => item.productivityEvolPct > 0), true);
+  assert.equal(performance.eligible.some(item => item.productivityEvolPct < 0), true);
+  const efficiency = service.getHeadcountEfficiency({}).distribution;
+  assert.equal(efficiency.groups.length > 1, true);
+  assert.equal(efficiency.adjacentOverlaps.some(item => item.overlaps), true);
+  assert.equal(efficiency.reviewOpportunities.length > 0, true);
 });
 
 check(9, 'Store variance ranking has favorable and adverse stores', () => {
@@ -123,6 +125,26 @@ check(14, 'Demo exposes shared store comparison and eligibility payloads', () =>
   assert.equal(comparisons.length, model.detail.current.stores.length);
   assert.equal(performance.counts.total, comparisons.length);
   assert.equal(Number.isFinite(performance.medianCustomerContributionPct), true);
+});
+
+check(15, 'Synthetic Performance counts are source-derived and quadrant signs remain valid', () => {
+  const performance = service.getPerformancePortfolio({});
+  const counts = Object.fromEntries(performance.stateSummary.map(item => [item.state, item.count]));
+  assert.deepEqual(counts, {
+    'healthy-growth': 79,
+    'high-return-decline': 65,
+    'growth-low-return': 3,
+    'priority-review': 3
+  });
+  performance.eligible.forEach(record => {
+    const x = record.currentCustomerContributionPct;
+    const y = record.productivityEvolPct;
+    if (record.businessState === 'healthy-growth') assert.equal(x >= 0 && y >= 0, true);
+    else if (record.businessState === 'high-return-decline') assert.equal(x >= 0 && y < 0, true);
+    else if (record.businessState === 'growth-low-return') assert.equal(x < 0 && y >= 0, true);
+    else if (record.businessState === 'priority-review') assert.equal(x < 0 && y < 0, true);
+    else assert.fail(`Unexpected business state: ${record.businessState}`);
+  });
 });
 
 console.log(`\nDemo data tests: ${passed}/${passed} passed`);

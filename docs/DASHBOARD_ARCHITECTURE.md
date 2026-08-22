@@ -1,6 +1,6 @@
 # Retail Performance Dashboard — Target Architecture
 
-> Status: implemented architecture through Phase 4 Data Cleaning UX integration; updated 2026-08-19.
+> Status: implemented architecture through Phase 4 Page 03 Store Portfolio redesign; updated 2026-08-20.
 
 ## 1. Purpose
 
@@ -23,7 +23,7 @@ Workbook
   → RetailDashboardData normalized model / Data Service
   → Page 01: 8 KPI cards + Management Signals
   → Page 02: Snapshot-first + Customer Contribution amount Bridge
-  → Page 03: Current / Comparison / pooled-frame Movement + risk prioritization / amount Ranking
+  → Page 03: Performance / Efficiency / Variance Contribution lenses
   → Page 04: 4 KPI cards + Store P&L + non-overlapping A&P component analysis
 ```
 
@@ -34,7 +34,7 @@ Shared business contracts:
 - Canonical signed A&P = `store.pnl.specificAP`; chart spend = its absolute magnitude.
 - Whenever an amount and ratio describe the same business metric, they use one inline `Amount · Ratio` display model.
 - A&P component charts analyze non-overlapping expense lines and do not redefine or overwrite canonical Specific A&P.
-- `js/productivity-quadrant.js` and `js/store-detail.js` isolate pure, testable UI-domain logic while preserving classic relative script loading and `file://` compatibility.
+- `js/store-portfolio.js` and `js/store-detail.js` isolate pure, testable UI-domain logic while preserving classic relative script loading and `file://` compatibility.
 
 Phase 3 adds the parser foundation beneath this UI: shared Detail schema metadata, client-side Cleaning, canonical intermediate sheets, scan/capability metadata, and schema-independent role assignment. Phase 4 renders that metadata in a compact, collapsible Data Preparation status area without introducing a fifth analysis page.
 
@@ -49,7 +49,7 @@ metadata.workbookScan + metadata.capabilities
 
 The formatter exposes business labels, store counts, role assignments, preserved/ignored statistics, near-compatible warnings, and capability limitations. It deliberately excludes canonical keys, source indices, raw formula metadata, complete rows, and stack traces. Summary P&L is shown as a Dashboard source for which Detail Cleaning is not required.
 
-Capability degradation is a rendering gate, not a new calculation system. Missing fields can disable Tier/Status controls or replace Filtered Bridge, Quadrant/Risk, A&P Components, and unavailable Store P&L values with explicit states. Missing components remain unavailable rather than becoming zero. Standard full-feature workbooks retain the existing 01–04 output.
+Capability degradation is a rendering gate, not a new calculation system. Missing fields can disable Tier/Status controls or replace Filtered Bridge, Performance Portfolio, Headcount Efficiency, A&P Components, and unavailable Store P&L values with explicit states. Missing components remain unavailable rather than becoming zero.
 
 ## 2. Pre-migration Architecture and Migration Impact (historical)
 
@@ -77,7 +77,7 @@ Primary implemented code surfaces:
 index.html
 assets/styles.css
 js/data/core-data.js
-js/productivity-quadrant.js
+js/store-portfolio.js
 js/store-detail.js
 js/app.js
 tests/*.test.js
@@ -209,11 +209,10 @@ filters
 activePage
 selectedPnlLine            // Snapshot row context only
 selectedDriver
-portfolioView              // productivity | ranking
-snapshot                   // current | comparison | movement; Productivity only
-selectedQuadrant           // all | Star | Risk | Balanced High | Balanced Low; local chart view only
+portfolioLens              // performance | efficiency | contribution
+performanceSelection       // healthy-growth | high-return-decline | growth-low-return | priority-review | null
+contributionMetric         // existing Store Variance Ranking metric
 selectedStore
-storeSearch
 diagnostics
 charts
 ```
@@ -329,43 +328,23 @@ Page 02 renders those parallel Core results through a lightweight `Amount | %` s
 
 ### 8.3 Page 03 — Store Portfolio
 
-The active UI below remains unchanged in Phase 2B. The new shared comparison and distribution service is a data foundation only; no new chart, tab, tooltip, or classification is rendered in this phase.
-
-Keep only:
-
-- Productivity.
-- Store Variance Ranking.
-
-Productivity is a median-based Store Investment Productivity Quadrant:
+Page 03 uses one compact lens control and renders one primary analysis at a time:
 
 ```text
-X = Customer Contribution amount
-Y = abs(Specific A&P)
-Point = Store, fixed size
+Performance | Efficiency | Variance Contribution
 ```
 
-In Current or Comparison view, the X/Y medians come from the currently visible period/filter dataset and are recomputed after Region, City, Status, Tier, or snapshot changes. Boundary rule is `>= median → High`. Classifications are Star, Risk, Balanced High, and Balanced Low. Their summary counts always sum to the visible scope count. Clicking a summary segment filters only the chart display; clicking it again or clicking All restores all points. This local state does not mutate global filters or Ranking.
+Performance consumes `getPerformancePortfolio(filters)` without page-local matching or financial calculations. Its bubble map is `X = Current CC%`, `Y = Productivity Evol %`, and `size = Current Productivity` with square-root scaling bounded to 10–38 pixels. Both reference thresholds are fixed at zero. Boundary rules are `CC% >= 0` and `Productivity Evol % >= 0`; equality belongs to the non-negative side. The four descriptive states are Healthy Growth, High Return / Productivity Decline, Growth / Low Return, and Priority Review. New Stores and stores with unavailable comparison metrics remain outside the map with reason counts.
 
-Priority Risk Stores is independently rebuilt from the full current filtered scope and therefore remains useful even when the chart is locally highlighting another quadrant. Only Risk stores are eligible. Percentile ranks are calculated across the current filtered quadrant dataset, with average ranks for ties:
+Efficiency consumes `getHeadcountEfficiency(filters)`. It renders horizontal headcount lanes with `X = Current Productivity`, `Y = discrete DA HC`, and deterministic jittered store dots. Tukey Q1/Q3 remains a hidden screening contract: a higher-HC store is highlighted only when its Productivity falls inside the adjacent lower-HC group's IQR. Median/IQR markers, the raw distribution table, and box plots are not rendered. Zoom is an explicit toolbox action with undo and restore; no inside-wheel zoom state is installed. The signal is explicitly not a staffing recommendation.
 
-```text
-riskScore = 0.5 × A&P spend percentile + 0.5 × (1 − CC percentile)
-```
+Variance Contribution reuses the existing Store Variance Ranking calculation, metric selection, favorable/adverse lists, and Store Detail drill-down. Region, City, Status, and Tier filters apply to all three lenses. Performance state selection is chart-local and does not mutate global filters; Reset clears both global filters and that local selection.
 
-The list is stably sorted by score and opens Page 04 through the shared store-detail navigation.
+Page 03 Store Search resolves only an exact Current Terminal identity. It writes the shared `selectedStore` state but never changes Region, City, Status, Tier, eligibility, or chart population. Performance and Efficiency retain their complete filtered populations and add the same independent dark diamond overlay at the selected store position. Performance keeps its business-state fill; Efficiency keeps its orange candidate outline, so selected and candidate semantics can coexist. An ineligible Performance selection remains selected and receives an explicit unavailable notice instead of a synthetic point.
 
-Movement uses exact Terminal matching and excludes Current-only and Comparison-only stores. It filters matched pairs through the current store's Region, City, Status, and Tier; Current Tier is deliberate because global portfolio filters describe the current portfolio. Both periods share one coordinate frame built from pooled matched observations:
+Navigation origin is not a filter. Page 02 may open Page 03 on Variance Contribution and pass a ranking metric, but Performance and Efficiency always rebuild from the four explicit global filters only. Both charts omit persistent inside-zoom state and run a post-visibility resize on lens activation so hidden-panel sizing cannot collapse the first render.
 
-```text
-pooled CC median  = median(Comparison CC + Current CC)
-pooled A&P median = median(Comparison A&P spend + Current A&P spend)
-```
-
-Both endpoints are classified with those same pooled medians. Changed-quadrant trajectories are emphasized; same-quadrant paths remain faint. The Movement summary reports Changed Quadrant and Stayed Same plus stable key transitions such as Risk → Star, Risk → non-Risk, non-Risk → Risk, and Star → non-Star.
-
-Current/Comparison/Movement switching applies only to Productivity. Store Variance Ranking always calculates Current minus Prior Year Same Period; snapshot and local selected-quadrant state must not alter ranking.
-
-Store Variance Ranking retains metric selection, Top Positive Stores, Top Negative Stores, search, and Store Detail navigation.
+The old Current/Comparison/Movement snapshot toggle, CC × A&P states, Risk Score, Priority Risk Stores, and `js/productivity-quadrant.js` are removed from active runtime.
 
 ### 8.4 Page 04 — Store Detail
 
@@ -386,17 +365,25 @@ The visible heading is always `% OF SALES`, while each row uses the shared line-
 
 Store P&L Variance % uses Current ratio − Comparison ratio on the registered denominator. New Store comparison and variance cells display `—`.
 
+From Gross Margin onward, Store P&L uses an explicit non-double-counting hierarchy. `Animations toward the distributor` reads AZ `ANM.` and remains separate from `Animations of immo POS adv`, which reads AV `Amort. + Writeoff`. `Other POS advertising costs` is derived as AX `POS.` + AY `Mer.` + BA `Tester` + BG `Others`. `Specific development` reads BE `DA Cost+specific dev.` and is split into BC `DA Cost` plus derived `Non DA Cost = BE - BC`; those two sub-details do not re-enter the Specific A&P sum. `Total Specific Costs = Specific A&P + Specific SG&A`, then Customer Contribution and Operating Profit follow their signed additive hierarchy. Store-level whole-KRMB reconciliation uses a centralized 3 KRMB amount tolerance and the corresponding denominator-scaled ratio tolerance; reported source subtotals are never rewritten.
+
 CA Net and Customer Contribution use inline `Amount · Ratio`; Gross Margin % remains ratio-only.
 
-The A&P component view uses the Workbook's finest available non-overlapping lines: Trade Relation, Customer Samples, Promotional Gifts, POS Advertising Amortization, POS Advertising Expense, Merchandising, Animations, Tester, DA Cost and Specific Development, and Other A&P. Specific A&P is excluded from the component pool because it is the formal subtotal.
+The A&P component view and Store P&L share one `specificAP` child registry. Its ten top-level rows are Transactional media specific, Customer Samples, Livestreamers, E-shop in shop websites, Total Promotional gift cost, Other promotions, Animations toward the distributor, Animations of immo POS adv, Other POS advertising costs, and Specific development. DA Cost and Non DA Cost appear only inside the Specific development tooltip/breakdown, never as additional top-level bars.
 
 - A&P Component Composition compares Current and Comparison amount plus share of the component pool.
 - The former A&P Component Movement Bridge is no longer rendered on Page 04; its pure helper remains available for later dead-code review.
 - Total A&P is displayed beside the composition using formal `abs(store.pnl.specificAP)` for Current and Comparison. Variance wording states whether spend increased, decreased, or stayed unchanged.
 
-The composition is analytical and never claims reconciliation when rounded components do not exactly tie to the formal subtotal. It never adds a residual. Canonical signed A&P remains `store.pnl.specificAP`, and canonical spend remains `abs(store.pnl.specificAP)`.
+Current and Comparison chart periods each expose reconciliation metadata against canonical signed `store.pnl.specificAP`, including residual, tolerance, and structural-placeholder keys. Structural placeholders may display as zero for layout continuity but remain distinguishable from confirmed source zeroes. The chart never adds a residual or changes source values; canonical spend remains `abs(store.pnl.specificAP)`.
 
-The Store Detail metadata includes Current DA HC and LY DA HC when the exact-Terminal comparison exists. Page 01 exposes DA HC in place of the visible POS no. KPI, but the normalized POS fields and other consumers remain intact.
+Public language switching is mounted in a sidebar-bottom utility area so the desktop title remains on one line. The English-only Internal runtime returns before creating either the switch or its utility container.
+
+The Store Detail metadata includes Current DA HC and LY DA HC when the exact-Terminal comparison exists. Store P&L also starts with an operational DA HC row: Current and Comparison show counts, both ratio columns show an em dash, and Variance is an absolute headcount movement. Page 01 exposes DA HC in place of the visible POS no. KPI, but the normalized POS fields and other consumers remain intact.
+
+Data-source activation selects the configured default Current store or the first Current store before any page render. Pages 01–04 therefore consume an already activated Data Service independently; opening Store Detail after Demo or Upload does not depend on visiting another page first.
+
+The standard Synthetic Workbook is also the sole source for the Public Demo business results. `scripts/generate-demo-data.js` performs only Workbook parsing, Demo metadata normalization, and serialization; it does not alter Current/LY Productivity or any other normalized business value. Manual Upload and generated Demo therefore converge at the same Core/Data Service contract.
 
 ## 9. Drill-down Contract
 

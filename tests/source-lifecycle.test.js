@@ -32,20 +32,20 @@ check(1, 'Demo activation sets sourceType and a valid default store', () => {
 });
 
 check(2, 'Upload activation replaces the source and clears stale interaction state', () => {
-  const state = { selectedDriver: 'grossMargin', selectedQuadrant: 'Risk', search: 'old', snapshot: 'movement' };
+  const state = { selectedDriver: 'grossMargin', portfolioLens: 'efficiency', performanceSelection: 'priority-review', contributionMetric: 'grossMargin' };
   Lifecycle.activate(state, { sourceType: 'upload', model: uploadModel, service: uploadService, book: { id: 1 }, fileName: 'upload.xlsx' });
   assert.equal(state.sourceType, 'upload');
   assert.equal(state.fileName, 'upload.xlsx');
   assert.equal(state.selectedDriver, '');
-  assert.equal(state.selectedQuadrant, 'all');
-  assert.equal(state.search, '');
-  assert.equal(state.snapshot, 'current');
+  assert.equal(state.portfolioLens, 'performance');
+  assert.equal(state.performanceSelection, null);
+  assert.equal(state.contributionMetric, 'customerContribution');
 });
 
 check(3, 'Reset clears filters and selections while preserving the active source', () => {
   const state = {};
   Lifecycle.activate(state, { sourceType: 'upload', model: uploadModel, service: uploadService, book: { id: 1 }, fileName: 'upload.xlsx' });
-  Object.assign(state, { filters: { region: 'East' }, selectedStore: 'OLD', selectedPnlLine: 'grossMargin', selectedDriver: 'x', selectedQuadrant: 'Risk', search: 'needle' });
+  Object.assign(state, { filters: { region: 'East' }, selectedStore: 'OLD', selectedPnlLine: 'grossMargin', selectedDriver: 'x', portfolioLens: 'contribution', performanceSelection: 'healthy-growth' });
   const book = state.book;
   Lifecycle.resetInteractions(state);
   assert.equal(state.sourceType, 'upload');
@@ -53,8 +53,10 @@ check(3, 'Reset clears filters and selections while preserving the active source
   assert.equal(state.service, uploadService);
   assert.equal(state.book, book);
   assert.deepEqual(state.filters, {});
-  assert.equal(state.selectedStore, '');
+  assert.equal(state.selectedStore, 'FIRST');
   assert.equal(state.selectedPnlLine, '');
+  assert.equal(state.portfolioLens, 'performance');
+  assert.equal(state.performanceSelection, null);
 });
 
 check(4, 'Clear-to-Demo is a source activation, never an empty state', () => {

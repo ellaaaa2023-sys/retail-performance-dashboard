@@ -13,7 +13,6 @@ const runtimeFiles = [
   'js/browser-compat.js',
   'js/i18n.js',
   'js/app.js',
-  'js/productivity-quadrant.js',
   'js/store-portfolio.js',
   'js/store-detail.js',
   'js/data/detail-schema.js',

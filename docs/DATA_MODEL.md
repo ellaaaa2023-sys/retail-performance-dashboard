@@ -484,11 +484,40 @@ Page 02 presents the parallel contracts through one `Amount | %` control. Amount
 - Page 01 obtains Current and Comparison DA HC only through `getDAHeadcountSummary(filters)`. Total Portfolio follows the authoritative Summary/Detail rule; filtered scopes use the Data Service aggregate. Missing or partial formal totals display unavailable and are never converted to zero.
 - Page 04 reads Current and Comparison DA HC from the matched store payload. The visible metadata uses Current DA HC and may show LY DA HC as secondary context.
 - Formal Total A&P is the spend magnitude `abs(store.pnl.specificAP)` for each period. Its displayed spend movement is `Current spend - Comparison spend`; canonical signed P&L amounts remain unchanged.
-- The A&P component pool stays a descriptive composition dataset. It is not substituted for formal Total A&P and is not adjusted to close a rounding difference.
+- The A&P component chart reuses the Store P&L `specificAP` child registry as its only top-level mapping: Transactional media specific, Customer Samples, Livestreamers, E-shop in shop websites, Total Promotional gift cost, Other promotions, Animations toward the distributor, Animations of immo POS adv, Other POS advertising costs, and Specific development. DA Cost and Non DA Cost remain a breakdown of Specific development and never re-enter the top-level sum.
+- Current and Comparison component sums are checked independently against the signed formal Specific A&P amount. Reconciliation metadata preserves the source residual and structural-placeholder keys; it never adjusts a component or the formal total. Formal Total A&P remains `abs(store.pnl.specificAP)`.
+- Store P&L derives `otherPosAdvertising = POS. + Mer. + Tester + Others`, `specificDevelopmentSubtotal = DA Cost+specific dev.`, `nonDaCost = specificDevelopmentSubtotal - daCost`, and `totalSpecificCosts = specificAP + specificSga`. These are normalized view fields, not Workbook writes. `Animations toward the distributor` reads `ANM.` independently from `Amort. + Writeoff`.
+- The standard Workbook has no exact Transactional media specific, Livestreamers, E-shop in shop websites, or Other promotions columns. Their exact future aliases are registered, while the present Store P&L contract records them as structural-zero placeholders without changing the raw null source state. `Trade Relation` is not used as a substitute for Transactional media specific.
+- Store P&L reconciliation checks Current amount, Comparison amount, amount movement, Current ratio, Comparison ratio, and ratio movement for Specific development, Specific A&P, Total Specific Costs, Customer Contribution, and Operating Profit. Child sub-details are never counted in addition to their parent subtotal.
 
 ## 10. Known Limitations After Phase F
 
 - No separate Full Year Mock fixture exists yet.
 - Filtered Customer Contribution cannot safely expand beyond Gross Margin / Specific A&P / Specific SG&A with the current Detail hierarchy.
 - Store-detail KRMB rounding can create filtered Bridge residuals; the implementation reports `BRIDGE_RECONCILIATION_ERROR` and does not correct them.
-- The old A&P component list remains useful only as source-line reference; it is not a complete, non-overlapping bridge to the Specific A&P subtotal.
+- Structural placeholder components remain explicitly distinguishable from confirmed source zeroes until exact Workbook fields exist.
+
+## 11. Page 03 Consumption Contracts
+
+### 11.1 Performance portfolio
+
+`getPerformancePortfolio(filters)` returns eligible Current stores, excluded Current stores with canonical reasons, and business-state counts/shares. It still exposes the eligible filtered median Current CC% as reusable descriptive metadata, but the Performance quadrant boundary does not use it. Eligible records already contain Current/LY Productivity, Productivity Evol %, Current/LY CC amount, Current/LY CC%, and Current/LY DA HC. Page code must not repeat exact-Terminal matching, ratio calculation, or eligibility tests.
+
+Page 03 Store Search uses the same Current-store Terminal identity consumed by Store Detail. Search selection is not a fifth filter: it updates only `selectedStore`. Both analytical views render an independent selected-store overlay without replacing the underlying portfolio records.
+
+Business-state boundaries are:
+
+```text
+CC% >= 0                  → high return side
+CC% <  0                  → low return side
+Productivity Evol % >= 0  → growth / non-decline side
+Productivity Evol % <  0  → decline side
+```
+
+### 11.2 Headcount efficiency
+
+`getHeadcountEfficiency(filters)` returns Current-scope store records and `buildHeadcountDistribution(records)` metadata. Groups contain `count`, `median`, `q1`, `q3`, and `iqr`; adjacent groups contain overlap start/end/width. The UI renders horizontal DA HC lanes with `X = Productivity` and `Y = DA HC`; it does not expose the raw quartile table. `reviewOpportunities` identifies higher-HC records whose Productivity lies inside the adjacent lower-HC group's IQR. This is descriptive screening metadata only.
+
+### 11.3 Synthetic Workbook productivity profile
+
+The standard Synthetic Workbook is the single source of its Current/LY Productivity story. Its Comparison Detail contains deterministic, Terminal-keyed LY Productivity values and matching period-specific Productivity tiers; both Current and Comparison Productivity TOTAL rows equal their store-row sums. The Demo generator only parses and serializes that Workbook. It never mutates normalized Productivity, so generated Demo and Manual Upload produce identical store-comparison payloads and Page 03 business states.

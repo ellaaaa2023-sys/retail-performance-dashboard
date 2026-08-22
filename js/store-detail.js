@@ -5,6 +5,8 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  const STORE_PNL_AMOUNT_TOLERANCE_KRMB = 3;
+
   const KPI_DEFINITIONS = Object.freeze([
     Object.freeze({ key: 'grossSales', label: 'Gross Sales', type: 'amount' }),
     Object.freeze({ key: 'netSales', ratioKey: 'netSalesPct', label: 'CA Net', type: 'combined' }),
@@ -13,17 +15,63 @@
   ]);
 
   const AP_COMPONENT_DEFINITIONS = Object.freeze([
-    Object.freeze({ key: 'tradeRelation', label: 'Trade Relation' }),
+    Object.freeze({ key: 'transactionalMediaSpecificLine', label: 'Transactional media specific' }),
     Object.freeze({ key: 'customerSamples', label: 'Customer Samples' }),
-    Object.freeze({ key: 'promotionalGifts', label: 'Promotional Gifts' }),
-    Object.freeze({ key: 'posAdvertisingAmortization', label: 'POS Advertising Amortization' }),
-    Object.freeze({ key: 'posAdvertisingExpense', label: 'POS Advertising' }),
-    Object.freeze({ key: 'merchandising', label: 'Merchandising' }),
-    Object.freeze({ key: 'animations', label: 'Animations' }),
-    Object.freeze({ key: 'tester', label: 'Tester' }),
-    Object.freeze({ key: 'daCostAndSpecificDevelopment', label: 'DA Cost + Specific Development' }),
-    Object.freeze({ key: 'otherAP', label: 'Others' })
+    Object.freeze({ key: 'livestreamersLine', label: 'Livestreamers' }),
+    Object.freeze({ key: 'eShopInShopWebsitesLine', label: 'E-shop in shop websites' }),
+    Object.freeze({ key: 'promotionalGifts', label: 'Total Promotional gift cost' }),
+    Object.freeze({ key: 'otherPromotionsLine', label: 'Other promotions' }),
+    Object.freeze({ key: 'animationsTowardDistributor', label: 'Animations toward the distributor' }),
+    Object.freeze({ key: 'animationsImmoPosAdv', label: 'Animations of immo POS adv' }),
+    Object.freeze({ key: 'otherPosAdvertising', label: 'Other POS advertising costs' }),
+    Object.freeze({ key: 'specificDevelopmentSubtotal', label: 'Specific development', breakdownKeys: Object.freeze(['daCost', 'nonDaCost']) })
   ]);
+
+  const STORE_PNL_LINE_DEFINITIONS = Object.freeze([
+    Object.freeze({ key: 'daHeadcount', label: 'DA HC', className: 'operational', type: 'headcount' }),
+    Object.freeze({ key: 'grossSales', label: 'GROSS SALES', className: 'major' }),
+    Object.freeze({ key: 'discount', label: 'Discount', indent: 1 }),
+    Object.freeze({ key: 'rebates', label: 'Rebates', indent: 1 }),
+    Object.freeze({ key: 'promotionalAllowance', label: 'Promotional Allowance', indent: 1 }),
+    Object.freeze({ key: 'totalReturns', label: 'Actual Returns', indent: 1 }),
+    Object.freeze({ key: 'vipRedemption', label: 'VIP Redemption', indent: 1 }),
+    Object.freeze({ key: 'oca', label: 'OCA', indent: 1 }),
+    Object.freeze({ key: 'coupon', label: 'Coupon', indent: 1 }),
+    Object.freeze({ key: 'totalMinorations', label: 'TOTAL MINORATIONS', className: 'total' }),
+    Object.freeze({ key: 'netSales', label: 'CONSO NET SALES', className: 'major' }),
+    Object.freeze({ key: 'stdCos', label: 'Std COS', indent: 1 }),
+    Object.freeze({ key: 'royalTaMs', label: 'Royal / TA / MS', indent: 1 }),
+    Object.freeze({ key: 'physicalDistribution', label: 'Physical Distribution', indent: 1 }),
+    Object.freeze({ key: 'specialOperationsCost', label: 'Special Operations Cost', indent: 1 }),
+    Object.freeze({ key: 'obsoleteSlowMovingReturns', label: 'Obsolete / Slow Moving / Return', indent: 1 }),
+    Object.freeze({ key: 'grossMargin', label: 'GROSS MARGIN', className: 'major' }),
+    Object.freeze({ key: 'transactionalMediaSpecificLine', label: 'Transactional media specific', indent: 1 }),
+    Object.freeze({ key: 'customerSamples', label: 'Customer Samples', indent: 1 }),
+    Object.freeze({ key: 'livestreamersLine', label: 'Livestreamers', indent: 1 }),
+    Object.freeze({ key: 'eShopInShopWebsitesLine', label: 'E-shop in shop websites', indent: 1 }),
+    Object.freeze({ key: 'promotionalGifts', label: 'Total Promotional gift cost', indent: 1 }),
+    Object.freeze({ key: 'otherPromotionsLine', label: 'Other promotions', indent: 1 }),
+    Object.freeze({ key: 'animationsTowardDistributor', label: 'Animations toward the distributor', indent: 1 }),
+    Object.freeze({ key: 'animationsImmoPosAdv', label: 'Animations of immo POS adv', indent: 1 }),
+    Object.freeze({ key: 'otherPosAdvertising', label: 'Other POS advertising costs', indent: 1 }),
+    Object.freeze({ key: 'specificDevelopmentSubtotal', label: 'Specific development', className: 'subtotal' }),
+    Object.freeze({ key: 'daCost', label: 'DA Cost', className: 'subdetail', indent: 2 }),
+    Object.freeze({ key: 'nonDaCost', label: 'Non DA Cost', className: 'subdetail', indent: 2 }),
+    Object.freeze({ key: 'specificAP', label: 'Specific A&P', className: 'subtotal' }),
+    Object.freeze({ key: 'specificSga', label: 'Total Specific SG&A', className: 'subtotal' }),
+    Object.freeze({ key: 'totalSpecificCosts', label: 'Total Specific Costs', className: 'group' }),
+    Object.freeze({ key: 'customerContribution', label: 'CUSTOMER CONTRIBUTION', className: 'major' }),
+    Object.freeze({ key: 'nonSpecificCosts', labelKey: 'totalNonSpecificCosts', label: 'Total non-specific costs', className: 'group' }),
+    Object.freeze({ key: 'operatingProfit', label: 'OPERATING PROFIT', className: 'major' })
+  ]);
+
+  const STORE_PNL_HIERARCHIES = Object.freeze({
+    specificDevelopmentSubtotal: Object.freeze(['daCost', 'nonDaCost']),
+    specificAP: Object.freeze(AP_COMPONENT_DEFINITIONS.map(definition => definition.key)),
+    totalSpecificCosts: Object.freeze(['specificAP', 'specificSga']),
+    customerContribution: Object.freeze(['grossMargin', 'totalSpecificCosts']),
+    operatingProfit: Object.freeze(['customerContribution', 'nonSpecificCosts'])
+  });
 
   function metric(store, key) {
     const value = store && store.metrics ? store.metrics[key] : null;
@@ -92,34 +140,111 @@
     };
   }
 
-  function apComponentSpend(store, key) {
-    const value = store && store.pnl ? store.pnl[key] : null;
-    return Number.isFinite(value) ? Math.abs(value) : 0;
+  function apComponentPeriod(store, definition) {
+    if (!store) return null;
+    const signed = store.pnl && Number.isFinite(store.pnl[definition.key]) ? store.pnl[definition.key] : null;
+    const structuralFields = store.pnlMetadata && Array.isArray(store.pnlMetadata.structuralZeroFields)
+      ? store.pnlMetadata.structuralZeroFields
+      : [];
+    const sourceStatus = structuralFields.includes(definition.key)
+      ? 'structural-placeholder'
+      : (Number.isFinite(signed) ? 'available' : 'unavailable');
+    const breakdown = definition.breakdownKeys
+      ? definition.breakdownKeys.map(key => ({
+        key,
+        signed: store.pnl && Number.isFinite(store.pnl[key]) ? store.pnl[key] : null,
+        spend: store.pnl && Number.isFinite(store.pnl[key]) ? Math.abs(store.pnl[key]) : null
+      }))
+      : [];
+    return {
+      signed,
+      spend: Number.isFinite(signed) ? Math.abs(signed) : null,
+      sourceStatus,
+      breakdown
+    };
+  }
+
+  function reconcileApComponents(store, periods) {
+    const formalSigned = signedApExpense(store);
+    const allFinite = periods.every(period => period && Number.isFinite(period.signed));
+    const componentSignedTotal = allFinite
+      ? periods.reduce((sum, period) => sum + period.signed, 0)
+      : null;
+    const residual = Number.isFinite(formalSigned) && Number.isFinite(componentSignedTotal)
+      ? formalSigned - componentSignedTotal
+      : null;
+    const structuralPlaceholderKeys = AP_COMPONENT_DEFINITIONS
+      .filter((definition, index) => periods[index] && periods[index].sourceStatus === 'structural-placeholder')
+      .map(definition => definition.key);
+    const withinTolerance = Number.isFinite(residual)
+      ? Math.abs(residual) <= STORE_PNL_AMOUNT_TOLERANCE_KRMB
+      : false;
+    let status = 'unavailable';
+    if (Number.isFinite(residual)) {
+      if (!withinTolerance) status = 'error';
+      else if (structuralPlaceholderKeys.length) status = 'partial-source';
+      else if (Math.abs(residual) > 1e-12) status = 'rounding';
+      else status = 'reconciled';
+    }
+    return {
+      status,
+      ok: withinTolerance,
+      complete: allFinite && !structuralPlaceholderKeys.length,
+      formalSigned,
+      componentSignedTotal,
+      residual,
+      tolerance: STORE_PNL_AMOUNT_TOLERANCE_KRMB,
+      structuralPlaceholderKeys
+    };
   }
 
   function buildApComponentModel(current, comparison) {
-    const components = AP_COMPONENT_DEFINITIONS.map(definition => ({
-      ...definition,
-      current: apComponentSpend(current, definition.key),
-      comparison: comparison ? apComponentSpend(comparison, definition.key) : null
-    }));
-    const currentPool = components.reduce((sum, component) => sum + component.current, 0);
-    const comparisonPool = comparison
-      ? components.reduce((sum, component) => sum + component.comparison, 0)
+    const currentPeriods = AP_COMPONENT_DEFINITIONS.map(definition => apComponentPeriod(current, definition));
+    const comparisonPeriods = comparison
+      ? AP_COMPONENT_DEFINITIONS.map(definition => apComponentPeriod(comparison, definition))
       : null;
+    const currentPool = currentPeriods.every(period => period && Number.isFinite(period.spend))
+      ? currentPeriods.reduce((sum, period) => sum + period.spend, 0)
+      : null;
+    const comparisonPool = comparisonPeriods && comparisonPeriods.every(period => period && Number.isFinite(period.spend))
+      ? comparisonPeriods.reduce((sum, period) => sum + period.spend, 0)
+      : null;
+    const components = AP_COMPONENT_DEFINITIONS.map((definition, index) => {
+      const currentPeriod = currentPeriods[index];
+      const comparisonPeriod = comparisonPeriods ? comparisonPeriods[index] : null;
+      return {
+        ...definition,
+        current: currentPeriod.spend,
+        comparison: comparisonPeriod ? comparisonPeriod.spend : null,
+        currentSigned: currentPeriod.signed,
+        comparisonSigned: comparisonPeriod ? comparisonPeriod.signed : null,
+        currentSourceStatus: currentPeriod.sourceStatus,
+        comparisonSourceStatus: comparisonPeriod ? comparisonPeriod.sourceStatus : 'no-comparison',
+        currentBreakdown: currentPeriod.breakdown,
+        comparisonBreakdown: comparisonPeriod ? comparisonPeriod.breakdown : [],
+        currentShare: Number.isFinite(currentPool) && currentPool > 0 && Number.isFinite(currentPeriod.spend)
+          ? currentPeriod.spend / currentPool
+          : null,
+        comparisonShare: Number.isFinite(comparisonPool) && comparisonPool > 0 && comparisonPeriod && Number.isFinite(comparisonPeriod.spend)
+          ? comparisonPeriod.spend / comparisonPool
+          : null,
+        movement: comparisonPeriod && Number.isFinite(currentPeriod.spend) && Number.isFinite(comparisonPeriod.spend)
+          ? currentPeriod.spend - comparisonPeriod.spend
+          : null
+      };
+    });
     return {
-      components: components.map(component => ({
-        ...component,
-        currentShare: currentPool > 0 ? component.current / currentPool : null,
-        comparisonShare: comparisonPool > 0 ? component.comparison / comparisonPool : null,
-        movement: comparison ? component.current - component.comparison : null
-      })),
+      components,
       currentPool,
       comparisonPool,
       canonicalCurrentSpend: apSpendMagnitude(current),
       canonicalComparisonSpend: comparison ? apSpendMagnitude(comparison) : null,
       hasComparison: Boolean(comparison),
-      formalTotalKey: 'specificAP'
+      formalTotalKey: 'specificAP',
+      reconciliation: {
+        current: reconcileApComponents(current, currentPeriods),
+        comparison: comparisonPeriods ? reconcileApComponents(comparison, comparisonPeriods) : null
+      }
     };
   }
 
@@ -166,17 +291,104 @@
     };
   }
 
+  function buildStorePnlRows(current, comparison, finance) {
+    return STORE_PNL_LINE_DEFINITIONS.map(definition => {
+      const currentAmount = current && current.pnl && Number.isFinite(current.pnl[definition.key])
+        ? current.pnl[definition.key]
+        : null;
+      const comparisonAmount = comparison && comparison.pnl && Number.isFinite(comparison.pnl[definition.key])
+        ? comparison.pnl[definition.key]
+        : null;
+      if (definition.type === 'headcount') {
+        return {
+          ...definition,
+          currentAmount,
+          comparisonAmount,
+          amountVariance: Number.isFinite(currentAmount) && Number.isFinite(comparisonAmount)
+            ? currentAmount - comparisonAmount
+            : null,
+          currentRatio: null,
+          comparisonRatio: null,
+          ratioVariance: null
+        };
+      }
+      const ratios = buildPnlRatioModel(
+        definition.key,
+        currentAmount,
+        current && current.pnl,
+        comparisonAmount,
+        comparison && comparison.pnl,
+        finance
+      );
+      return {
+        ...definition,
+        currentAmount,
+        comparisonAmount,
+        amountVariance: Number.isFinite(currentAmount) && Number.isFinite(comparisonAmount)
+          ? currentAmount - comparisonAmount
+          : null,
+        ...ratios
+      };
+    });
+  }
+
+  function reconciliationResult(parent, children, valueKey, tolerance) {
+    const values = [parent, ...children].map(row => row && row[valueKey]);
+    if (!values.every(Number.isFinite)) {
+      return { ok: false, status: 'unavailable', residual: null, tolerance };
+    }
+    const residual = children.reduce((total, row) => total + row[valueKey], 0) - parent[valueKey];
+    return {
+      ok: Math.abs(residual) <= tolerance,
+      status: Math.abs(residual) <= tolerance ? 'reconciled' : 'outOfTolerance',
+      residual,
+      tolerance
+    };
+  }
+
+  function buildStorePnlReconciliation(rows, amountTolerance, ratioTolerance) {
+    const byKey = new Map(rows.map(row => [row.key, row]));
+    const netSales = byKey.get('netSales');
+    const ratioToleranceFor = (amountKey) => {
+      const denominator = netSales && netSales[amountKey];
+      return Number.isFinite(denominator) && Math.abs(denominator) > 1e-12
+        ? Math.max(ratioTolerance, amountTolerance / Math.abs(denominator))
+        : ratioTolerance;
+    };
+    const currentRatioTolerance = ratioToleranceFor('currentAmount');
+    const comparisonRatioTolerance = ratioToleranceFor('comparisonAmount');
+    const movementRatioTolerance = currentRatioTolerance + comparisonRatioTolerance;
+    return Object.freeze(Object.fromEntries(Object.entries(STORE_PNL_HIERARCHIES).map(([parentKey, childKeys]) => {
+      const parent = byKey.get(parentKey);
+      const children = childKeys.map(key => byKey.get(key));
+      return [parentKey, Object.freeze({
+        parent: parentKey,
+        children: childKeys.slice(),
+        currentAmount: reconciliationResult(parent, children, 'currentAmount', amountTolerance),
+        comparisonAmount: reconciliationResult(parent, children, 'comparisonAmount', amountTolerance),
+        amountVariance: reconciliationResult(parent, children, 'amountVariance', amountTolerance),
+        currentRatio: reconciliationResult(parent, children, 'currentRatio', currentRatioTolerance),
+        comparisonRatio: reconciliationResult(parent, children, 'comparisonRatio', comparisonRatioTolerance),
+        ratioVariance: reconciliationResult(parent, children, 'ratioVariance', movementRatioTolerance)
+      })];
+    })));
+  }
+
   return Object.freeze({
     KPI_DEFINITIONS,
     AP_COMPONENT_DEFINITIONS,
+    STORE_PNL_AMOUNT_TOLERANCE_KRMB,
+    STORE_PNL_LINE_DEFINITIONS,
+    STORE_PNL_HIERARCHIES,
     amountRatioDisplay,
     buildKpiModels,
     signedApExpense,
     apSpendMagnitude,
     buildApExpenseModel,
-    apComponentSpend,
     buildApComponentModel,
     buildApComponentBridge,
-    buildPnlRatioModel
+    buildPnlRatioModel,
+    buildStorePnlRows,
+    buildStorePnlReconciliation
   });
 }));

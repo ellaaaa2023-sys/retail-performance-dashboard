@@ -9,7 +9,7 @@ const THEME = {
   goldDark: '#846a39', green: '#347c68', orange: '#c7773e', red: '#b64f4f',
   ink: '#30312f', muted: '#777a76', grid: '#efede8', axis: '#cbc6bc', neutral: '#979891'
 };
-const ProductivityQuadrant = window.RetailProductivityQuadrant;
+const StorePortfolio = window.RetailStorePortfolio;
 const StoreDetailModel = window.RetailStoreDetail;
 const DataPreparationUI = window.RetailDataPreparationUI;
 const SourceLifecycle = window.RetailSourceLifecycle;
@@ -22,9 +22,7 @@ const localized = (key, fallback, params) => {
   return value === key ? fallback : value;
 };
 const metricLabel = (key, fallback) => localized(`metric.${key}`, fallback || key);
-const quadrantLabel = quadrant => localized(`quadrant.${quadrant}`, quadrant);
 const pnlLabel = (field, fallback) => localized(`pnl.${field}`, fallback || field);
-const componentLabel = (key, fallback) => localized(`component.${key}`, fallback || key);
 
 const field = (label, level, purpose, aliases) => ({ label, level, purpose, aliases });
 const FIELDS = {
@@ -102,50 +100,15 @@ const REQUIRED = Object.keys(FIELDS).filter(k => FIELDS[k].level === 'required')
 const PERCENT_KEYS = new Set(['discountPct','rebatesPct','promotionalAllowancePct','returnsPct','minorationsPct','netSalesPct','costOfSalesPct','grossMarginPct','contributionPct','operatingMargin']);
 const NUMERIC_KEYS = Object.keys(FIELDS).filter(k => !['year','reviewPeriod','periodKey','terminal','store','city','province','region','channel','storeType','status','tier'].includes(k));
 
-const STORE_PNL_LINES = [
-  { field: 'grossSales', label: 'GROSS SALES', className: 'major' },
-  { field: 'discount', label: 'Discount', indent: 1 },
-  { field: 'rebates', label: 'Rebates', indent: 1 },
-  { field: 'promotionalAllowance', label: 'Promotional Allowance', indent: 1 },
-  { field: 'totalReturns', label: 'Actual Returns', indent: 1 },
-  { field: 'vipRedemption', label: 'VIP Redemption', indent: 1 },
-  { field: 'oca', label: 'OCA', indent: 1 },
-  { field: 'coupon', label: 'Coupon', indent: 1 },
-  { field: 'totalMinorations', label: 'TOTAL MINORATIONS', className: 'total' },
-  { field: 'netSales', label: 'CONSO NET SALES', className: 'major' },
-  { field: 'stdCos', label: 'Std COS', indent: 1 },
-  { field: 'royalTaMs', label: 'Royal / TA / MS', indent: 1 },
-  { field: 'physicalDistribution', label: 'Physical Distribution', indent: 1 },
-  { field: 'specialOperationsCost', label: 'Special Operations Cost', indent: 1 },
-  { field: 'obsoleteSlowMovingReturns', label: 'Obsolete / Slow Moving / Return', indent: 1 },
-  { field: 'grossMargin', label: 'GROSS MARGIN', className: 'major' },
-  { field: 'tradeRelation', label: 'Trade Relation', indent: 1 },
-  { field: 'customerSamples', label: 'Customer Samples', indent: 1 },
-  { field: 'promotionalGifts', label: 'Promotional Gifts', indent: 1 },
-  { field: 'posAdvertisingAmortization', label: 'POS Advertising Amortization', indent: 1 },
-  { field: 'posAdvertisingExpense', label: 'POS Advertising', indent: 1 },
-  { field: 'merchandising', label: 'Merchandising', indent: 1 },
-  { field: 'animations', label: 'Animations', indent: 1 },
-  { field: 'tester', label: 'Tester', indent: 1 },
-  { field: 'daCost', label: 'DA Cost', className: 'total' },
-  { field: 'specificDevelopment', label: 'Specific Development', indent: 1 },
-  { field: 'otherAP', label: 'Others', indent: 1 },
-  { field: 'specificAP', label: 'Specific A&P', className: 'group' },
-  { field: 'specificSga', label: 'Specific SG&A', className: 'group' },
-  { field: 'customerContribution', label: 'CUSTOMER CONTRIBUTION', className: 'major' },
-  { field: 'nonSpecificCosts', label: 'Unspecific Costs', className: 'group' },
-  { field: 'operatingProfit', label: 'OPERATING PROFIT', className: 'major' }
-];
-
 const STORE_KPIS = StoreDetailModel.KPI_DEFINITIONS;
 
 const state = {
   book: null, fileName: '', sheetName: '', headerRow: 0, headers: [], matrix: [], mapping: {}, signature: '',
   records: [], periods: [], currentPeriodKey: '', comparisonMode: 'ly', filters: {}, activeTab: 'overview',
-  portfolioView: 'productivity', snapshot: 'current',
+  portfolioLens: 'performance', performanceSelection: null,
   bridgeMode: 'amount',
-  portfolioMetric: 'customerContribution', selectedStore: '', search: '', charts: {}, warnings: [], dataStats: null,
-  model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', selectedQuadrant: 'all', preparationView: null,
+  contributionMetric: 'customerContribution', selectedStore: '', charts: {}, warnings: [], dataStats: null,
+  model: null, service: null, sourceType: 'none', selectedPnlLine: '', selectedDriver: '', preparationView: null,
   noticeSpec: null
 };
 
@@ -252,11 +215,6 @@ function capabilityStatus(key, role = 'resolved') {
   return capabilities && capabilities[role] && capabilities[role][key]
     ? capabilities[role][key].status
     : 'available';
-}
-
-function snapshotCapabilityStatus(key) {
-  if (state.snapshot === 'movement') return capabilityStatus(key, 'resolved');
-  return capabilityStatus(key, state.snapshot === 'comparison' ? 'comparison' : 'current');
 }
 
 function capabilityWarning(key) {
@@ -567,7 +525,7 @@ function refreshCityOptions() {
 }
 function enableDashboard(on) {
   $('contextBar').classList.toggle('is-disabled',!on);
-  ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','storeSearch','rankingMetric','detailStoreSelect'].forEach(id => { if ($(id)) $(id).disabled = !on; });
+  ['regionFilter','cityFilter','statusFilter','tierFilter','resetFiltersBtn','rankingMetric','portfolioStoreSearch','detailStoreSelect'].forEach(id => { if ($(id)) $(id).disabled = !on; });
   updateSourceUi();
 }
 
@@ -690,6 +648,35 @@ function chartNavigation({x=true,y=true,xAxisIndex=0,yAxisIndex=0}={}) {
     toolbox:{show:true,right:8,top:0,itemSize:14,itemGap:9,feature:{dataZoom:{title:{zoom:t('chart.zoom'),back:t('chart.undoZoom')},xAxisIndex:x?'all':false,yAxisIndex:y?'all':false},restore:{title:t('chart.resetView')}},iconStyle:{borderColor:THEME.muted},emphasis:{iconStyle:{borderColor:THEME.blue}}},
     dataZoom
   };
+}
+function manualZoomToolbox({x=true,y=true}={}) {
+  return {
+    toolbox: {
+      show: true,
+      right: 8,
+      top: 0,
+      itemSize: 14,
+      itemGap: 9,
+      feature: {
+        dataZoom: {
+          title: { zoom: t('chart.zoom'), back: t('chart.undoZoom') },
+          xAxisIndex: x ? 'all' : false,
+          yAxisIndex: y ? 'all' : false
+        },
+        restore: { title: t('chart.resetView') }
+      },
+      iconStyle: { borderColor: THEME.muted },
+      emphasis: { iconStyle: { borderColor: THEME.blue } }
+    }
+  };
+}
+function schedulePortfolioChartLayout(id) {
+  requestAnimationFrame(() => {
+    const instance = state.charts[id];
+    if (!instance) return;
+    instance.resize();
+    requestAnimationFrame(() => instance.resize());
+  });
 }
 const SNAPSHOT_ROWS = [
   { key: 'posNo', label: 'POS no.', type: 'count', ratio: null, variance: 'amount-relative', major: false },
@@ -1183,298 +1170,288 @@ function storeVariancePairs() {
   return currentStores.map(current => ({ terminal: current.terminal, store: current.store, current, comparison: comparisonMap.get(current.terminal) || null }));
 }
 function rankingMetricKey() {
-  return RANKING_METRICS[state.portfolioMetric] ? state.portfolioMetric : 'customerContribution';
+  return RANKING_METRICS[state.contributionMetric] ? state.contributionMetric : 'customerContribution';
 }
-function setPortfolioMetric(reference) {
-  state.portfolioMetric = RANKING_METRICS[reference] ? reference : 'customerContribution';
+function setContributionMetric(reference) {
+  state.contributionMetric = RANKING_METRICS[reference] ? reference : 'customerContribution';
   const select = $('rankingMetric');
-  if (select) select.value = state.portfolioMetric;
-  $('rankingNote').textContent = `${t('portfolio.ranking')} · ${metricLabel(state.portfolioMetric, RANKING_METRICS[state.portfolioMetric].label)} · ${t('common.current')} ${t('common.vs')} ${t('common.comparison')}`;
+  if (select) select.value = state.contributionMetric;
+  $('rankingNote').textContent = `${t('portfolio.ranking')} · ${metricLabel(state.contributionMetric, RANKING_METRICS[state.contributionMetric].label)} · ${periodLabel('current')} ${t('common.vs')} ${periodLabel('comparison')}`;
 }
 function openDriverPortfolio(driverKey) {
   state.selectedDriver = driverKey || '';
-  state.portfolioMetric = state.selectedDriver && RANKING_METRICS[state.selectedDriver] ? state.selectedDriver : 'customerContribution';
-  state.portfolioView = 'ranking';
-  setSegment('portfolioView', 'ranking');
+  state.contributionMetric = state.selectedDriver && RANKING_METRICS[state.selectedDriver] ? state.selectedDriver : 'customerContribution';
+  state.performanceSelection = null;
+  state.portfolioLens = 'contribution';
+  setSegment('portfolioLens', 'contribution');
   switchTab('portfolio');
+}
+function storeOptionLabel(store) {
+  return `${store.store} · ${store.terminal}`;
+}
+function renderPortfolioStoreSearch() {
+  const input = $('portfolioStoreSearch');
+  const options = $('portfolioStoreOptions');
+  const stores = portfolioStores('current').slice().sort((a, b) => a.store.localeCompare(b.store, 'zh-CN'));
+  const selected = detailCurrentStores().find(store => store.terminal === state.selectedStore) || null;
+  options.innerHTML = stores.map(store => `<option value="${esc(storeOptionLabel(store))}" data-terminal="${esc(store.terminal)}"></option>`).join('');
+  input.disabled = !stores.length;
+  input.value = selected ? storeOptionLabel(selected) : '';
+  input.dataset.populationCount = String(stores.length);
+}
+function selectPortfolioStore(value) {
+  const stores = portfolioStores('current');
+  const selected = stores.find(store => storeOptionLabel(store) === value || store.terminal === value) || null;
+  if (!selected) {
+    renderPortfolioStoreSearch();
+    return false;
+  }
+  state.selectedStore = selected.terminal;
+  renderPortfolio();
+  return true;
 }
 function renderPortfolio() {
   if (!state.service) { renderPortfolioEmpty(); return; }
-  setPortfolioMetric(state.portfolioMetric);
-  setSegment('portfolioView', state.portfolioView);
-  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioView));
-  const inRanking = state.portfolioView === 'ranking';
-  const toggle = $('snapshotToggle');
-  if (toggle) toggle.style.display = inRanking ? 'none' : '';
-  $('portfolioContext').textContent = inRanking
-    ? `${t('portfolio.ranking')} · ${t('common.current')} ${t('common.vs')} ${t('common.comparison')}`
-    : state.snapshot === 'movement'
-      ? `${t('portfolio.quadrantTitle')} · ${t('common.comparison')} → ${t('common.current')}`
-      : `${t('portfolio.quadrantTitle')} · ${state.snapshot === 'comparison' ? t('common.comparison') : t('common.current')}`;
-  if (inRanking) renderStoreRanking();
-  else renderProductivityQuadrant();
+  renderPortfolioStoreSearch();
+  setContributionMetric(state.contributionMetric);
+  setSegment('portfolioLens', state.portfolioLens);
+  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioLens));
+  const lensLabel = t(`portfolio.${state.portfolioLens === 'contribution' ? 'varianceContribution' : state.portfolioLens}`);
+  $('portfolioContext').textContent = state.portfolioLens === 'contribution'
+    ? `${lensLabel} · ${periodLabel('current')} ${t('common.vs')} ${periodLabel('comparison')}`
+    : `${lensLabel} · ${t('common.filteredPortfolio')}`;
+  if (state.portfolioLens === 'efficiency') {
+    renderEfficiencyPortfolio();
+    schedulePortfolioChartLayout('efficiencyChart');
+  } else if (state.portfolioLens === 'contribution') renderStoreRanking();
+  else {
+    renderPerformancePortfolio();
+    schedulePortfolioChartLayout('performanceChart');
+  }
 }
 function renderPortfolioEmpty() {
-  $('tierSummary').innerHTML = '';
-  $('quadrantSummary').innerHTML = '';
-  $('riskStoreBody').innerHTML = '';
+  $('performanceMeta').innerHTML = '';
+  $('performanceSummary').innerHTML = '';
+  $('performanceExclusions').innerHTML = '';
+  $('efficiencyMeta').innerHTML = '';
   $('positiveStores').innerHTML = '';
   $('negativeStores').innerHTML = '';
-  $('portfolioContext').textContent = t('portfolio.currentView');
-  const c = chart('productivityChart');
-  c.clear();
+  $('portfolioContext').textContent = t('portfolio.performance');
+  $('portfolioStoreSearch').value = '';
+  $('portfolioStoreSearch').disabled = true;
+  $('portfolioStoreOptions').innerHTML = '';
+  $('performanceSelectedNotice').hidden = true;
+  ['performanceChart', 'efficiencyChart'].forEach(id => { if (state.charts[id]) state.charts[id].clear(); });
 }
-function searchHit(store) { const text = state.search.trim().toLowerCase(); return text && (store.store.toLowerCase().includes(text) || store.terminal.toLowerCase().includes(text)); }
-const QUADRANT_ORDER = ProductivityQuadrant.QUADRANT_ORDER;
-const QUADRANT_COLORS = Object.freeze({
-  [ProductivityQuadrant.QUADRANTS.STAR]: '#347c68',
-  [ProductivityQuadrant.QUADRANTS.RISK]: '#b64f4f',
-  [ProductivityQuadrant.QUADRANTS.BALANCED_HIGH]: '#526d8c',
-  [ProductivityQuadrant.QUADRANTS.BALANCED_LOW]: '#92958f'
+const PERFORMANCE_STATES = StorePortfolio.PERFORMANCE_STATES;
+const PERFORMANCE_STATE_ORDER = StorePortfolio.PERFORMANCE_STATE_ORDER;
+const PERFORMANCE_COLORS = Object.freeze({
+  [PERFORMANCE_STATES.HEALTHY_GROWTH]: '#347c68',
+  [PERFORMANCE_STATES.HIGH_RETURN_DECLINE]: '#526d8c',
+  [PERFORMANCE_STATES.GROWTH_LOW_RETURN]: '#b79552',
+  [PERFORMANCE_STATES.PRIORITY_REVIEW]: '#b97846'
 });
-const MOVEMENT_COLORS = Object.freeze({
-  comparison: THEME.gold,
-  current: THEME.blue,
-  changed: THEME.orange,
-  same: THEME.neutral
+const SELECTED_STORE_MARKER = Object.freeze({
+  symbol: 'diamond',
+  borderColor: THEME.ink,
+  borderWidth: 3,
+  color: 'rgba(255,255,255,.08)'
 });
-function quadrantPointStyle(point) {
-  const store = point.store;
-  const highlighted = store.terminal === state.selectedStore || searchHit(store);
-  const isPriority = point.quadrant === ProductivityQuadrant.QUADRANTS.STAR || point.quadrant === ProductivityQuadrant.QUADRANTS.RISK;
-  return {
-    color: QUADRANT_COLORS[point.quadrant],
-    opacity: state.search ? (searchHit(store) ? 1 : .07) : isPriority ? .84 : .62,
-    borderColor: highlighted ? THEME.goldDark : '#fff',
-    borderWidth: highlighted ? 2 : 1
-  };
+function performanceStateLabel(key) { return t(`performanceState.${key}`); }
+function formatSignedPercent(value) {
+  if (!Number.isFinite(value)) return '—';
+  return `${value > 0 ? '+' : ''}${formatPct(value)}`;
 }
-function quadrantTooltip(data) {
-  const store = data.store;
-  return `<b>${esc(store.store)}</b><br>${esc(store.city)} · ${esc(store.region)}<br>${t('common.status')}: ${esc(store.status)}<br>${t('common.tier')}: ${esc(store.productivityTier)}<br>${t('metric.customerContribution')}: ${formatMoney(data.value[0])}<br>${t('metric.customerContributionPct')}: ${formatPct(store.metrics.customerContributionPct)}<br>${t('metric.apExpense')}: ${formatMoney(data.value[1])}<br>${t('metric.storeProductivity')}: ${formatMoney(store.storeProductivity)}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(data.quadrant))}<br>${t('metric.posNo')}: ${formatInt(store.cityPosNo)}`;
+function renderPerformanceSummary(model) {
+  $('performanceSummary').innerHTML = model.stateSummary.map(item => `<button class="portfolio-state-chip${state.performanceSelection === item.state ? ' active' : ''}" style="--state-color:${esc(PERFORMANCE_COLORS[item.state])}" type="button" data-performance-state="${esc(item.state)}"><span>${esc(performanceStateLabel(item.state))}</span><b>${item.count} ${esc(t('common.stores'))} · ${Math.round(item.share * 100)}%</b></button>`).join('');
 }
-function renderQuadrantSummary(model) {
-  $('quadrantSummaryLabel').textContent = t('portfolio.quadrantSummary');
-  const allActive = state.selectedQuadrant === 'all' || !QUADRANT_ORDER.includes(state.selectedQuadrant);
-  const buttons = [
-    `<button class="quadrant-chip${allActive ? ' active' : ''}" type="button" data-quadrant="all">${esc(t('common.all'))} <b>${model.points.length}</b></button>`,
-    ...QUADRANT_ORDER.map(quadrant => `<button class="quadrant-chip${state.selectedQuadrant === quadrant ? ' active' : ''}" type="button" data-quadrant="${esc(quadrant)}">${esc(quadrantLabel(quadrant))} <b>${model.counts[quadrant]}</b></button>`)
-  ];
-  $('quadrantSummary').innerHTML = buttons.join('');
+function exclusionReasonLabel(reason, count) {
+  if (reason === 'new-store') return t('portfolio.excludedNewStores', { count });
+  if (reason === 'missing-comparison' || reason === 'zero-comparison-base' || reason === 'invalid-comparison-base') return t('portfolio.excludedNoComparison', { count });
+  return t('portfolio.excludedMissingMetrics', { count });
 }
-function renderMovementSummary(summary) {
-  $('quadrantSummaryLabel').textContent = t('portfolio.movementSummary');
-  const items = [
-    [t('portfolio.matchedStores'), summary.matched],
-    [t('portfolio.changedQuadrant'), summary.changed],
-    [t('portfolio.stayedSame'), summary.stayed],
-    [`${quadrantLabel('Risk')} → ${quadrantLabel('Star')}`, summary.riskToStar],
-    [`${quadrantLabel('Risk')} → ${t('portfolio.nonRisk')}`, summary.riskToNonRisk],
-    [`${t('portfolio.nonRisk')} → ${quadrantLabel('Risk')}`, summary.nonRiskToRisk],
-    [`${quadrantLabel('Star')} → ${t('portfolio.nonStar')}`, summary.starToNonStar]
-  ];
-  $('quadrantSummary').innerHTML = items.map(([label, count]) => `<span class="quadrant-chip">${esc(label)} <b>${count}</b></span>`).join('');
+function renderPerformanceExclusions(model) {
+  const reasons = Object.entries(model.counts.excludedByReason);
+  $('performanceExclusions').innerHTML = model.counts.excluded
+    ? `<strong>${esc(t('portfolio.excludedCount', { count: model.counts.excluded }))}</strong><span>${reasons.map(([reason, count]) => esc(exclusionReasonLabel(reason, count))).join(' · ')}</span>`
+    : `<span>${esc(t('portfolio.noExclusions'))}</span>`;
 }
-function renderTierSummary(stores, role) {
-  const el = $('tierSummary');
-  if (!el) return;
-  const n = stores.length;
-  if (!n) { el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span>${esc(t('portfolio.noStoresScope'))}</span>`; return; }
-  const netSales = stores.reduce((a, s) => a + s.metrics.netSales, 0);
-  const grossMargin = stores.reduce((a, s) => a + s.metrics.grossMargin, 0);
-  const contribution = stores.reduce((a, s) => a + s.metrics.customerContribution, 0);
-  const productivityValues = stores.map(store => store.storeProductivity).filter(Number.isFinite);
-  const avgProd = productivityValues.length ? productivityValues.reduce((a, value) => a + value, 0) / productivityValues.length : null;
-  const posValues = stores.map(store => store.cityPosNo).filter(Number.isFinite);
-  const posCount = posValues.length ? posValues.reduce((a, value) => a + value, 0) : null;
-  const gmPct = netSales ? grossMargin / netSales : null;
-  const ccPct = netSales ? contribution / netSales : null;
-  el.innerHTML = `<span class="tier-summary-label">${periodLabel(role)}</span><span><b>${n}</b> ${esc(t('common.stores'))}</span><span><b>${formatInt(posCount)}</b> POS</span><span>${esc(t('portfolio.avgGrossMargin'))} <b>${gmPct != null ? formatPct(gmPct) : '—'}</b></span><span>${esc(t('portfolio.avgCustomerContribution'))} <b>${ccPct != null ? formatPct(ccPct) : '—'}</b></span><span>${esc(t('portfolio.avgProductivity'))} <b>${formatMoney(avgProd)}</b></span>`;
+function renderPerformanceSelectedNotice(model) {
+  const notice = $('performanceSelectedNotice');
+  const selectedInScope = portfolioStores('current').some(store => store.terminal === state.selectedStore);
+  const selectedEligible = model.eligible.some(record => record.terminal === state.selectedStore);
+  notice.hidden = !selectedInScope || selectedEligible;
+  notice.textContent = notice.hidden ? '' : t('portfolio.selectedStoreIneligible');
 }
-function renderMovementTierSummary(model) {
-  const el = $('tierSummary');
-  const stores = model.pairs.map(pair => pair.current);
-  if (!stores.length) { el.innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.movement'))}</span><span>${esc(t('portfolio.noMatchedScope'))}</span>`; return; }
-  const netSales = stores.reduce((sum, store) => sum + store.metrics.netSales, 0);
-  const grossMargin = stores.reduce((sum, store) => sum + store.metrics.grossMargin, 0);
-  const contribution = stores.reduce((sum, store) => sum + store.metrics.customerContribution, 0);
-  const productivityValues = stores.map(store => store.storeProductivity).filter(Number.isFinite);
-  const avgProd = productivityValues.length ? productivityValues.reduce((sum, value) => sum + value, 0) / productivityValues.length : null;
-  const posValues = stores.map(store => store.cityPosNo).filter(Number.isFinite);
-  const posCount = posValues.length ? posValues.reduce((sum, value) => sum + value, 0) : null;
-  el.innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.movement'))}</span><span><b>${model.summary.matched}</b> ${esc(t('portfolio.matchedStores'))}</span><span><b>${formatInt(posCount)}</b> POS</span><span>${esc(t('portfolio.avgGrossMargin'))} <b>${netSales ? formatPct(grossMargin / netSales) : '—'}</b></span><span>${esc(t('portfolio.avgCustomerContribution'))} <b>${netSales ? formatPct(contribution / netSales) : '—'}</b></span><span>${esc(t('portfolio.avgProductivity'))} <b>${formatMoney(avgProd)}</b></span>`;
+function performanceTooltip(record) {
+  const stateColor = PERFORMANCE_COLORS[record.businessState];
+  const stateMarker = `<i style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:${esc(stateColor)}"></i>`;
+  return `<b>${esc(record.store)}</b><br>${esc(record.city)} · ${esc(record.region)}<br>${t('metric.daHeadcount')}: ${formatInt(record.currentDAHeadcount)}<br>${periodLabel('current')} ${t('metric.storeProductivity')}: ${formatMoney(record.currentProductivity)}<br>${periodLabel('comparison')} ${t('metric.storeProductivity')}: ${formatMoney(record.lyProductivity)}<br>${t('metric.productivityEvolPct')}: ${formatSignedPercent(record.productivityEvolPct)}<br>${periodLabel('current')} ${t('metric.customerContributionPct')}: ${formatPct(record.currentCustomerContributionPct)}<br>${periodLabel('comparison')} ${t('metric.customerContributionPct')}: ${formatPct(record.lyCustomerContributionPct)}<br>${periodLabel('current')} ${t('metric.customerContribution')}: ${formatMoney(record.currentCustomerContributionAmount)}<br>${periodLabel('comparison')} ${t('metric.customerContribution')}: ${formatMoney(record.lyCustomerContributionAmount)}<br>${t('portfolio.businessState')}: ${stateMarker}<b>${esc(performanceStateLabel(record.businessState))}</b>`;
 }
-function renderRiskStores(stores, role) {
-  const capabilityRole = state.snapshot === 'movement' ? 'resolved' : role;
-  if (capabilityStatus('fullProductivityRisk', capabilityRole) !== 'available') {
-    const warning = capabilityWarning('fullProductivityRisk');
-    $('riskStoreSub').textContent = t('error.productivityFieldsIncomplete');
-    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(warning ? warning.title : t('error.productivityRiskUnavailable'))}</td></tr>`;
+function renderPerformancePortfolio() {
+  const model = state.service.getPerformancePortfolio(activeFilters());
+  renderPerformanceSummary(model);
+  renderPerformanceExclusions(model);
+  renderPerformanceSelectedNotice(model);
+  $('performanceMeta').innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.performance'))}</span><span><b>${model.counts.eligible}</b> ${esc(t('portfolio.eligibleStores'))}</span><span>${esc(t('portfolio.zeroThresholds'))}</span><span>${esc(t('portfolio.bubbleLegend'))}</span>`;
+  const chartElement = $('performanceChart');
+  chartElement.dataset.eligibleCount = String(model.counts.eligible);
+  chartElement.dataset.excludedCount = String(model.counts.excluded);
+  chartElement.dataset.xThreshold = '0';
+  chartElement.dataset.yThreshold = '0';
+  chartElement.dataset.stateColors = JSON.stringify(PERFORMANCE_COLORS);
+  chartElement.dataset.performanceSelection = state.performanceSelection || '';
+  chartElement.dataset.selectedStore = state.selectedStore || '';
+  if (!model.eligible.length) {
+    featureUnavailable('performanceChart', t('error.noEligiblePerformanceStores'), t('error.noComparisonProductivity'));
     return;
   }
-  const ranked = ProductivityQuadrant.buildRiskRanking(stores).slice(0, 8);
-  $('riskStoreSub').textContent = `${periodLabel(role)} · ${t('portfolio.priorityRiskSub')}`;
-  $('riskStoreBody').innerHTML = ranked.map((point, index) => {
-    const store = point.store;
-    return `<tr data-store="${esc(store.terminal)}"><td>${String(index + 1).padStart(2, '0')}</td><td title="${esc(store.store)}">${esc(store.store)}</td><td>${esc(store.region)} / ${esc(store.city)}</td><td>${formatKrmb(point.customerContribution)}</td><td>${formatPct(store.metrics.customerContributionPct)}</td><td>${formatKrmb(point.expenseMagnitude)}</td><td>${formatKrmb(store.storeProductivity)}</td><td><span class="risk-score">${Math.round(point.riskScore * 100)}</span></td><td class="row-action">›</td></tr>`;
-  }).join('') || `<tr><td colspan="9">${esc(t('portfolio.noRiskStores'))}</td></tr>`;
-}
-function bindStoreClick(c) { c.off('click'); c.on('click', params => { if (params.data?.store) openStoreDetail(params.data.store.terminal); }); }
-function renderProductivityQuadrant() {
-  // Productivity Quadrant 使用独立的 store dataset（Current/Comparison role + 正常页面 filters），
-  // 不消费 selectedDriver / portfolioMetric —— 02 带来的 Driver context 只属于 Store Variance Ranking。
-  if (state.snapshot === 'movement') {
-    renderProductivityMovement();
-    return;
-  }
-  const role = state.snapshot === 'comparison' ? 'comparison' : 'current';
-  if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
-    const warning = capabilityWarning('investmentQuadrant');
-    featureUnavailable('productivityChart', warning ? warning.title : t('error.investmentQuadrantUnavailable'), warning ? warning.detail : t('error.investmentQuadrantMissing'));
-    $('tierSummary').innerHTML = '';
-    $('quadrantSummary').innerHTML = '';
-    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(t('error.investmentQuadrantUnavailable'))}</td></tr>`;
-    return;
-  }
-  const stores = portfolioStores(role);
-  const c = chart('productivityChart');
-  const chartElement = $('productivityChart');
-  renderTierSummary(stores, role);
-  const model = ProductivityQuadrant.buildQuadrantModel(stores);
-  const visiblePoints = ProductivityQuadrant.filterQuadrantPoints(model.points, state.selectedQuadrant);
-  renderQuadrantSummary(model);
-  renderRiskStores(stores, role);
-  chartElement.dataset.pointCount = String(visiblePoints.length);
-  chartElement.dataset.scopePointCount = String(model.points.length);
-  chartElement.dataset.medianCc = Number.isFinite(model.medianCC) ? String(model.medianCC) : '';
-  chartElement.dataset.medianExpense = Number.isFinite(model.medianExpense) ? String(model.medianExpense) : '';
-  chartElement.dataset.quadrantCounts = JSON.stringify(model.counts);
-  chartElement.dataset.snapshotRole = role;
-  chartElement.dataset.searchMatchCount = String(model.points.filter(point => searchHit(point.store)).length);
-  if (!model.points.length) { c.clear(); return; }
-  const medianLines = {
-    silent: true,
-    symbol: 'none',
-    lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
-    label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
+  const visible = state.performanceSelection
+    ? model.eligible.filter(record => record.businessState === state.performanceSelection)
+    : model.eligible;
+  const productivities = model.eligible.map(record => record.currentProductivity);
+  const productivityMin = Math.min(...productivities);
+  const productivityMax = Math.max(...productivities);
+  const markLine = {
+    silent: true, symbol: 'none', lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .8 },
+    label: { show: false },
     data: [
-      { xAxis: model.medianCC, label: { formatter: `${t('portfolio.medianCC')}  ${formatMoney(model.medianCC)}`, position: 'insideEndTop' } },
-      { yAxis: model.medianExpense, label: { formatter: `${t('portfolio.medianAP')}  ${formatMoney(model.medianExpense)}`, position: 'insideEndTop' } }
+      { xAxis: 0 },
+      { yAxis: 0 }
     ]
   };
-  const series = QUADRANT_ORDER.map((quadrant, index) => ({
-    name: quadrantLabel(quadrant),
-    type: 'scatter',
-    symbolSize: 9,
-    itemStyle: { color: QUADRANT_COLORS[quadrant] },
-    data: visiblePoints.filter(point => point.quadrant === quadrant).map(point => ({
-      value: [point.customerContribution, point.expenseMagnitude],
-      store: point.store,
-      quadrant: point.quadrant,
-      itemStyle: quadrantPointStyle(point)
+  const markArea = { silent: true, itemStyle: { opacity: .035 }, data: [
+    [{ xAxis: 0, yAxis: 0, itemStyle: { color: PERFORMANCE_COLORS[PERFORMANCE_STATES.HEALTHY_GROWTH] } }, { xAxis: 'max', yAxis: 'max' }],
+    [{ xAxis: 0, yAxis: 'min', itemStyle: { color: PERFORMANCE_COLORS[PERFORMANCE_STATES.HIGH_RETURN_DECLINE] } }, { xAxis: 'max', yAxis: 0 }],
+    [{ xAxis: 'min', yAxis: 0, itemStyle: { color: PERFORMANCE_COLORS[PERFORMANCE_STATES.GROWTH_LOW_RETURN] } }, { xAxis: 0, yAxis: 'max' }],
+    [{ xAxis: 'min', yAxis: 'min', itemStyle: { color: PERFORMANCE_COLORS[PERFORMANCE_STATES.PRIORITY_REVIEW] } }, { xAxis: 0, yAxis: 0 }]
+  ] };
+  const series = PERFORMANCE_STATE_ORDER.map(businessState => ({
+    name: performanceStateLabel(businessState), type: 'scatter',
+    symbolSize: value => StorePortfolio.scaleBubbleSize(value[2], productivityMin, productivityMax, 10, 38),
+    itemStyle: { color: PERFORMANCE_COLORS[businessState] },
+    data: visible.filter(record => record.businessState === businessState).map(record => ({
+      value: [record.currentCustomerContributionPct, record.productivityEvolPct, record.currentProductivity], record,
+      itemStyle: { color: PERFORMANCE_COLORS[businessState], opacity: .76, borderColor: '#fff', borderWidth: 1 }
     })),
-    emphasis: { scale: 1, itemStyle: { opacity: 1, borderWidth: 2 } },
-    ...(index === 0 ? { markLine: medianLines } : {})
+    emphasis: { scale: 1.15, itemStyle: { opacity: 1, borderWidth: 2 } },
+    ...(businessState === PERFORMANCE_STATES.HEALTHY_GROWTH ? { markLine, markArea } : {})
   }));
+  const selectedRecord = model.eligible.find(record => record.terminal === state.selectedStore) || null;
+  if (selectedRecord) {
+    const selectedSize = StorePortfolio.scaleBubbleSize(
+      selectedRecord.currentProductivity,
+      productivityMin,
+      productivityMax,
+      10,
+      38
+    );
+    series.push({
+      name: t('portfolio.selectedStore'),
+      type: 'scatter',
+      symbol: SELECTED_STORE_MARKER.symbol,
+      symbolSize: selectedSize + 12,
+      z: 12,
+      data: [{
+        value: [selectedRecord.currentCustomerContributionPct, selectedRecord.productivityEvolPct, selectedRecord.currentProductivity],
+        record: selectedRecord,
+        selectedStoreMarker: true,
+        itemStyle: {
+          color: SELECTED_STORE_MARKER.color,
+          borderColor: SELECTED_STORE_MARKER.borderColor,
+          borderWidth: SELECTED_STORE_MARKER.borderWidth
+        }
+      }],
+      emphasis: { disabled: true }
+    });
+  }
+  const c = chart('performanceChart');
   c.clear();
   c.setOption({
     textStyle: baseText(),
-    ...chartNavigation(),
-    legend: { top: 8, left: 78, itemWidth: 8, itemHeight: 8, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: QUADRANT_ORDER.map(quadrantLabel) },
-    grid: { left: 88, right: 42, top: 64, bottom: 66 },
-    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => quadrantTooltip(params.data) },
-    xAxis: { type:'value', scale:true, name:t('metric.customerContribution'), nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
-    yAxis: { type:'value', min:0, name:t('metric.apExpenseSpend'), nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    legend: { top: 8, left: 78, itemWidth: 8, itemHeight: 8, itemGap: 16, textStyle: { color: THEME.muted, fontSize: 8 }, data: PERFORMANCE_STATE_ORDER.map(performanceStateLabel) },
+    grid: { left: 82, right: 42, top: 68, bottom: 66 },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => performanceTooltip(params.data.record) },
+    xAxis: { type: 'value', scale: true, min: value => Math.min(0, value.min), max: value => Math.max(0, value.max), name: t('metric.customerContributionPct'), nameLocation: 'middle', nameGap: 42, nameTextStyle: { color: THEME.muted, fontSize: 9 }, axisLine: { lineStyle: { color: THEME.axis } }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatPct }, splitLine: { lineStyle: { color: THEME.grid } } },
+    yAxis: { type: 'value', scale: true, min: value => Math.min(0, value.min), max: value => Math.max(0, value.max), name: t('metric.productivityEvolPct'), nameLocation: 'middle', nameGap: 54, nameTextStyle: { color: THEME.muted, fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatSignedPercent }, splitLine: { lineStyle: { color: THEME.grid } } },
     graphic: [
-      { type:'text', silent:true, left:94, top:72, style:{text:quadrantLabel('Risk'),fill:QUADRANT_COLORS.Risk,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, right:48, top:72, style:{text:quadrantLabel('Balanced High'),fill:QUADRANT_COLORS['Balanced High'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, left:94, bottom:72, style:{text:quadrantLabel('Balanced Low'),fill:QUADRANT_COLORS['Balanced Low'],font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} },
-      { type:'text', silent:true, right:48, bottom:72, style:{text:quadrantLabel('Star'),fill:QUADRANT_COLORS.Star,font:'600 9px Segoe UI, sans-serif',backgroundColor:'rgba(255,255,255,.76)',padding:[3,5]} }
-    ],
-    series
+      { type: 'text', silent: true, right: 48, top: 72, style: { text: performanceStateLabel(PERFORMANCE_STATES.HEALTHY_GROWTH), fill: PERFORMANCE_COLORS[PERFORMANCE_STATES.HEALTHY_GROWTH], font: '600 9px Segoe UI, sans-serif', backgroundColor: 'rgba(255,255,255,.82)', padding: [3,5] } },
+      { type: 'text', silent: true, right: 48, bottom: 72, style: { text: performanceStateLabel(PERFORMANCE_STATES.HIGH_RETURN_DECLINE), fill: PERFORMANCE_COLORS[PERFORMANCE_STATES.HIGH_RETURN_DECLINE], font: '600 9px Segoe UI, sans-serif', backgroundColor: 'rgba(255,255,255,.82)', padding: [3,5] } },
+      { type: 'text', silent: true, left: 88, top: 72, style: { text: performanceStateLabel(PERFORMANCE_STATES.GROWTH_LOW_RETURN), fill: PERFORMANCE_COLORS[PERFORMANCE_STATES.GROWTH_LOW_RETURN], font: '600 9px Segoe UI, sans-serif', backgroundColor: 'rgba(255,255,255,.82)', padding: [3,5] } },
+      { type: 'text', silent: true, left: 88, bottom: 72, style: { text: performanceStateLabel(PERFORMANCE_STATES.PRIORITY_REVIEW), fill: PERFORMANCE_COLORS[PERFORMANCE_STATES.PRIORITY_REVIEW], font: '600 9px Segoe UI, sans-serif', backgroundColor: 'rgba(255,255,255,.82)', padding: [3,5] } }
+    ], series
   }, { notMerge: true });
-  bindStoreClick(c);
-  requestAnimationFrame(() => c.resize());
+  c.off('click');
+  c.on('click', params => { if (params.data?.record) openStoreDetail(params.data.record.terminal); });
 }
-function movementTooltip(data) {
-  const pair = data.movement;
-  if (!pair) return '';
-  return `<b>${esc(pair.current.store)}</b><br>${periodLabel('comparison')}: ${formatMoney(pair.comparisonCC)} CC · ${formatMoney(pair.comparisonExpense)} ${esc(t('metric.apExpense'))}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(pair.comparisonQuadrant))}<br>${periodLabel('current')}: ${formatMoney(pair.currentCC)} CC · ${formatMoney(pair.currentExpense)} ${esc(t('metric.apExpense'))}<br>${t('portfolio.quadrantSummary')}: ${esc(quadrantLabel(pair.currentQuadrant))}<br>${t('portfolio.movement')}: <b>${esc(quadrantLabel(pair.comparisonQuadrant))} → ${esc(quadrantLabel(pair.currentQuadrant))}</b>`;
+function efficiencyTooltip(record, opportunity) {
+  const review = opportunity
+    ? `<br><b>${esc(t('portfolio.potentialReview'))}</b><br>${esc(t('portfolio.potentialReviewReason', { count: formatInt(opportunity.lowerHeadcount) }))}<br>${esc(t('portfolio.screeningNotice'))}`
+    : '';
+  return `<b>${esc(record.store)}</b><br>${esc(record.city)} · ${esc(record.region)}<br>${t('metric.daHeadcount')}: ${formatInt(record.currentDAHeadcount)}<br>${periodLabel('current')} ${t('metric.storeProductivity')}: ${formatMoney(record.currentProductivity)}<br>${periodLabel('comparison')} ${t('metric.storeProductivity')}: ${formatMoney(record.lyProductivity)}<br>${t('metric.productivityEvolPct')}: ${formatSignedPercent(record.productivityEvolPct)}<br>${periodLabel('current')} ${t('metric.customerContributionPct')}: ${formatPct(record.currentCustomerContributionPct)}${review}`;
 }
-function movementLineData(pairs, changed) {
-  return pairs.filter(pair => pair.changed === changed).map(pair => ({
-    coords: [[pair.comparisonCC, pair.comparisonExpense], [pair.currentCC, pair.currentExpense]],
-    movement: pair
-  }));
-}
-function renderProductivityMovement() {
-  // Movement filters are evaluated on Current store attributes, including Current Tier,
-  // then matched to Comparison strictly by terminal so both observations share one scope.
-  if (snapshotCapabilityStatus('investmentQuadrant') !== 'available') {
-    const warning = capabilityWarning('investmentQuadrant');
-    featureUnavailable('productivityChart', warning ? warning.title : t('error.investmentQuadrantUnavailable'), warning ? warning.detail : t('error.investmentQuadrantBothPeriods'));
-    $('tierSummary').innerHTML = '';
-    $('quadrantSummary').innerHTML = '';
-    $('riskStoreBody').innerHTML = `<tr><td colspan="9">${esc(t('error.movementUnavailable'))}</td></tr>`;
+function renderEfficiencyPortfolio() {
+  const model = state.service.getHeadcountEfficiency(activeFilters());
+  const distribution = model.distribution;
+  $('efficiencyMeta').innerHTML = `<span class="tier-summary-label">${esc(t('portfolio.efficiency'))}</span><span><b>${distribution.counts.eligible}</b> ${esc(t('portfolio.eligibleStores'))}</span><span><b>${distribution.reviewOpportunities.length}</b> ${esc(t('portfolio.potentialReviewCount'))}</span>`;
+  const chartElement = $('efficiencyChart');
+  chartElement.dataset.xMetric = 'productivity';
+  chartElement.dataset.yMetric = 'daHeadcount';
+  chartElement.dataset.groupCount = String(distribution.groups.length);
+  chartElement.dataset.eligibleCount = String(distribution.counts.eligible);
+  chartElement.dataset.excludedCount = String(distribution.counts.excluded);
+  chartElement.dataset.overlapCount = String(distribution.adjacentOverlaps.filter(item => item.overlaps).length);
+  chartElement.dataset.reviewOpportunityCount = String(distribution.reviewOpportunities.length);
+  chartElement.dataset.selectedStore = state.selectedStore || '';
+  chartElement.dataset.zoomMode = 'toolbox-only';
+  chartElement.dataset.defaultExtent = 'full';
+  if (!distribution.groups.length) {
+    featureUnavailable('efficiencyChart', t('error.noDaHeadcountData'), t('error.noEfficiencySample'));
     return;
   }
-  const currentAll = state.service.getStores('current', {});
-  const comparisonAll = state.service.getStores('comparison', {});
-  const model = ProductivityQuadrant.buildMovementModel(currentAll, comparisonAll, activeFilters());
-  const c = chart('productivityChart');
-  const chartElement = $('productivityChart');
-  renderMovementTierSummary(model);
-  renderMovementSummary(model.summary);
-  const currentRiskScope = ProductivityQuadrant.currentScopeStores(currentAll, activeFilters());
-  renderRiskStores(currentRiskScope, 'current');
-  chartElement.dataset.snapshotRole = 'movement';
-  chartElement.dataset.matchedCount = String(model.summary.matched);
-  chartElement.dataset.changedCount = String(model.summary.changed);
-  chartElement.dataset.pooledMedianCc = Number.isFinite(model.pooledMedianCC) ? String(model.pooledMedianCC) : '';
-  chartElement.dataset.pooledMedianExpense = Number.isFinite(model.pooledMedianExpense) ? String(model.pooledMedianExpense) : '';
-  chartElement.dataset.pointCount = String(model.pairs.length * 2);
-  chartElement.dataset.scopePointCount = String(model.pairs.length);
-  if (!model.pairs.length) { c.clear(); return; }
-  const pooledLines = {
-    silent: true,
-    symbol: 'none',
-    lineStyle: { color: THEME.goldDark, width: 1, type: 'dashed', opacity: .78 },
-    label: { show: true, color: THEME.goldDark, fontSize: 8, backgroundColor: 'rgba(255,255,255,.88)', padding: [3,5], borderRadius: 3 },
-    data: [
-      { xAxis: model.pooledMedianCC, label: { formatter: `${t('portfolio.pooledMedianCC')}  ${formatMoney(model.pooledMedianCC)}`, position: 'insideEndTop' } },
-      { yAxis: model.pooledMedianExpense, label: { formatter: `${t('portfolio.pooledMedianAP')}  ${formatMoney(model.pooledMedianExpense)}`, position: 'insideEndTop' } }
-    ]
-  };
-  const comparisonPoints = model.pairs.map(pair => ({
-    value: [pair.comparisonCC, pair.comparisonExpense], movement: pair, store: pair.current,
-    itemStyle: { color: '#fff', borderColor: MOVEMENT_COLORS.comparison, borderWidth: 1.5, opacity: pair.changed ? .9 : .35 }
+  const groups = distribution.groups;
+  const opportunities = new Map(distribution.reviewOpportunities.map(item => [item.terminal, item]));
+  const eligibleRecords = model.records.filter(record => Number.isFinite(record.currentDAHeadcount) && Number.isFinite(record.currentProductivity));
+  const headcounts = new Set(groups.map(group => group.daHeadcount));
+  const minimumHeadcount = Math.min(1, ...headcounts);
+  const maximumHeadcount = Math.max(6, ...headcounts);
+  const dots = eligibleRecords.map(record => ({
+    value: [record.currentProductivity, record.currentDAHeadcount + StorePortfolio.deterministicJitter(record.terminal, .14)], record,
+    opportunity: opportunities.get(record.terminal) || null,
+    symbolSize: opportunities.has(record.terminal) ? 11 : 8,
+    itemStyle: { color: THEME.blue, opacity: opportunities.has(record.terminal) ? .9 : .62, borderColor: opportunities.has(record.terminal) ? THEME.orange : '#fff', borderWidth: opportunities.has(record.terminal) ? 3 : 1 }
   }));
-  const currentPoints = model.pairs.map(pair => ({
-    value: [pair.currentCC, pair.currentExpense], movement: pair, store: pair.current,
-    itemStyle: { color: MOVEMENT_COLORS.current, borderColor: '#fff', borderWidth: 1, opacity: pair.changed ? .94 : .4 }
-  }));
+  const selectedRecord = eligibleRecords.find(record => record.terminal === state.selectedStore) || null;
+  const selectedData = selectedRecord ? [{
+    value: [selectedRecord.currentProductivity, selectedRecord.currentDAHeadcount + StorePortfolio.deterministicJitter(selectedRecord.terminal, .14)],
+    record: selectedRecord,
+    opportunity: opportunities.get(selectedRecord.terminal) || null,
+    selectedStoreMarker: true,
+    itemStyle: {
+      color: SELECTED_STORE_MARKER.color,
+      borderColor: SELECTED_STORE_MARKER.borderColor,
+      borderWidth: SELECTED_STORE_MARKER.borderWidth
+    }
+  }] : [];
+  chartElement.dataset.selectedCandidate = selectedRecord && opportunities.has(selectedRecord.terminal) ? 'true' : 'false';
+  const c = chart('efficiencyChart');
   c.clear();
   c.setOption({
-    textStyle: baseText(),
-    ...chartNavigation(),
-    legend: { top: 8, left: 78, itemWidth: 9, itemHeight: 9, itemGap: 18, textStyle: { color: THEME.muted, fontSize: 8 }, data: [periodLabel('comparison'), periodLabel('current'), t('portfolio.changedTrajectory'), t('portfolio.sameQuadrant')] },
-    grid: { left: 88, right: 42, top: 64, bottom: 66 },
-    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => movementTooltip(params.data) },
-    xAxis: { type:'value', scale:true, name:t('metric.customerContribution'), nameLocation:'middle', nameGap:42, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{lineStyle:{color:THEME.axis}}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
-    yAxis: { type:'value', min:0, name:t('metric.apExpenseSpend'), nameLocation:'middle', nameGap:62, nameTextStyle:{color:THEME.muted,fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:THEME.muted,fontSize:9,formatter:formatMoney}, splitLine:{lineStyle:{color:THEME.grid}} },
+    textStyle: baseText(), ...manualZoomToolbox({ x: true, y: false }),
+    grid: { left: 78, right: 36, top: 42, bottom: 62 },
+    tooltip: { ...tooltipStyle(), trigger: 'item', formatter: params => {
+      if (params.data?.record) return efficiencyTooltip(params.data.record, params.data.opportunity);
+      return '';
+    } },
+    xAxis: { type: 'value', min: value => Math.min(0, value.min), name: t('metric.storeProductivity'), nameLocation: 'middle', nameGap: 42, nameTextStyle: { color: THEME.muted, fontSize: 9 }, axisLine: { lineStyle: { color: THEME.axis } }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: formatMoney }, splitLine: { lineStyle: { color: 'rgba(80,86,92,.055)' } } },
+    yAxis: { type: 'value', min: Math.max(0, minimumHeadcount - 1), max: maximumHeadcount + 1, interval: 1, name: t('metric.daHeadcount'), nameLocation: 'middle', nameGap: 42, nameTextStyle: { color: THEME.muted, fontSize: 9 }, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: THEME.muted, fontSize: 9, formatter: value => Number.isInteger(value) && headcounts.has(value) ? formatInt(value) : '' }, splitLine: { show: true, lineStyle: { color: 'rgba(80,86,92,.06)', type: 'solid' } } },
     series: [
-      { name:t('portfolio.sameQuadrant'), type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:5, silent:false, lineStyle:{color:MOVEMENT_COLORS.same,width:.7,opacity:.1}, data:movementLineData(model.pairs,false) },
-      { name:t('portfolio.changedTrajectory'), type:'lines', coordinateSystem:'cartesian2d', polyline:false, symbol:['none','arrow'], symbolSize:7, silent:false, lineStyle:{color:MOVEMENT_COLORS.changed,width:1.4,opacity:.58}, data:movementLineData(model.pairs,true) },
-      { name:periodLabel('comparison'), type:'scatter', symbolSize:8, itemStyle:{color:'#fff',borderColor:MOVEMENT_COLORS.comparison,borderWidth:1.5}, data:comparisonPoints, emphasis:{scale:1.25}, markLine:pooledLines },
-      { name:periodLabel('current'), type:'scatter', symbolSize:9, itemStyle:{color:MOVEMENT_COLORS.current,borderColor:'#fff',borderWidth:1}, data:currentPoints, emphasis:{scale:1.25} }
+      { name: t('portfolio.storeDots'), type: 'scatter', symbolSize: (_value, params) => params.data.symbolSize || 8, data: dots, emphasis: { scale: 1.2, itemStyle: { opacity: 1, borderWidth: 3 } } },
+      { name: t('portfolio.selectedStore'), type: 'scatter', symbol: SELECTED_STORE_MARKER.symbol, symbolSize: 18, z: 12, data: selectedData, emphasis: { disabled: true } }
     ]
   }, { notMerge: true });
   c.off('click');
-  c.on('click', params => {
-    const pair = params.data?.movement;
-    if (pair && pair.current) openStoreDetail(pair.current.terminal);
-  });
-  requestAnimationFrame(() => c.resize());
+  c.on('click', params => { if (params.data?.record) openStoreDetail(params.data.record.terminal); });
 }
 function renderStoreRanking() {
   const key = rankingMetricKey();
@@ -1506,7 +1483,7 @@ function ensureSelectedStore() {
   if (!stores.length) { $('detailStoreSelect').innerHTML = `<option>${esc(t('common.noData'))}</option>`; return; }
   if (!stores.some(s => s.terminal === state.selectedStore)) state.selectedStore = stores[0].terminal;
   $('detailStoreSelect').innerHTML = stores.slice().sort((a, b) => a.store.localeCompare(b.store, 'zh-CN'))
-    .map(s => `<option value="${esc(s.terminal)}"${s.terminal === state.selectedStore ? ' selected' : ''}>${esc(s.store)} · ${esc(s.terminal)}</option>`).join('');
+    .map(s => `<option value="${esc(s.terminal)}"${s.terminal === state.selectedStore ? ' selected' : ''}>${esc(storeOptionLabel(s))}</option>`).join('');
 }
 function openStoreDetail(terminal) { state.selectedStore = terminal; switchTab('detail'); }
 function storeKpiCard(model) {
@@ -1577,23 +1554,29 @@ function renderDetail() {
   renderApCharts(current, comparison);
 }
 function renderStorePnl(current, ly) {
-  $('storePnlBody').innerHTML = STORE_PNL_LINES.map(line => {
-    const cv = Number.isFinite(current.pnl[line.field]) ? current.pnl[line.field] : null;
-    const lv = ly && Number.isFinite(ly.pnl[line.field]) ? ly.pnl[line.field] : null;
+  const rows = StoreDetailModel.buildStorePnlRows(current, ly, window.RetailDashboardData);
+  const reconciliation = StoreDetailModel.buildStorePnlReconciliation(
+    rows,
+    StoreDetailModel.STORE_PNL_AMOUNT_TOLERANCE_KRMB,
+    window.RetailDashboardData.constants.ratioReconciliationTolerance
+  );
+  const body = $('storePnlBody');
+  body.dataset.hierarchy = JSON.stringify(StoreDetailModel.STORE_PNL_HIERARCHIES);
+  body.dataset.reconciliation = JSON.stringify(reconciliation);
+  body.innerHTML = rows.map(line => {
+    const cv = line.currentAmount;
+    const lv = line.comparisonAmount;
     const hasLy = Number.isFinite(lv);
-    const ratioModel = StoreDetailModel.buildPnlRatioModel(
-      line.field,
-      cv,
-      current.pnl,
-      hasLy ? lv : null,
-      hasLy ? ly.pnl : null,
-      window.RetailDashboardData
-    );
-    const curShare = ratioModel.currentRatio;
-    const lyShare = ratioModel.comparisonRatio;
-    const variance = ratioModel.ratioVariance;
+    if (line.type === 'headcount') {
+      const movement = line.amountVariance;
+      const movementClass = Number.isFinite(movement) && movement !== 0 ? (movement > 0 ? 'cell-positive' : 'cell-negative') : '';
+      return `<tr class="${line.className}"><td>${esc(metricLabel('daHeadcount', line.label))}</td><td>${formatInt(cv)}</td><td>—</td><td>${hasLy ? formatInt(lv) : '—'}</td><td>—</td><td class="${movementClass}">${Number.isFinite(movement) ? formatSignedNumber(movement) : '—'}</td></tr>`;
+    }
+    const curShare = line.currentRatio;
+    const lyShare = line.comparisonRatio;
+    const variance = line.ratioVariance;
     const vCls = Number.isFinite(variance) && Math.abs(variance) > 1e-9 ? (variance > 0 ? 'cell-positive' : 'cell-negative') : '';
-    return `<tr class="${line.className || ''}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(pnlLabel(line.field, line.label))}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
+    return `<tr class="${line.className || ''}" data-pnl-detail-line="${esc(line.key)}"><td class="${line.indent ? `indent-${line.indent}` : ''}">${esc(pnlLabel(line.labelKey || line.key, line.label))}</td><td>${formatKrmb(cv)}</td><td>${Number.isFinite(curShare) ? formatPct(curShare) : '—'}</td><td>${hasLy ? formatKrmb(lv) : '—'}</td><td>${Number.isFinite(lyShare) ? formatPct(lyShare) : '—'}</td><td class="${vCls}">${Number.isFinite(variance) ? `${variance >= 0 ? '+' : ''}${formatPct(variance)}` : '—'}</td></tr>`;
   }).join('');
   $('storeReconcile').textContent = state.model ? state.model.metadata.reviewPeriod : '—';
   $('storeReconcile').className = 'reconcile';
@@ -1639,7 +1622,7 @@ function renderApCharts(current, ly) {
     return;
   }
   const componentModel = StoreDetailModel.buildApComponentModel(current, ly);
-  const labels = componentModel.components.map(component => componentLabel(component.key, component.label));
+  const labels = componentModel.components.map(component => pnlLabel(component.key, component.label));
   const currentValues = componentModel.components.map(component => component.current);
   const comparisonValues = componentModel.components.map(component => component.comparison);
   const currentLabel = periodLabel('current');
@@ -1647,15 +1630,24 @@ function renderApCharts(current, ly) {
   const comparisonChart = chart('apComparisonChart');
   const comparisonElement = $('apComparisonChart');
   comparisonElement.dataset.componentKeys = JSON.stringify(componentModel.components.map(component => component.key));
+  comparisonElement.dataset.componentMapping = 'store-pnl-specificAP';
   comparisonElement.dataset.formalTotal = componentModel.formalTotalKey;
   comparisonElement.dataset.currentPool = String(componentModel.currentPool);
   comparisonElement.dataset.canonicalCurrentSpend = String(componentModel.canonicalCurrentSpend);
+  comparisonElement.dataset.reconciliation = JSON.stringify(componentModel.reconciliation);
   comparisonChart.clear();
   comparisonChart.setOption({
     textStyle:baseText(),
-    grid:{left:172,right:28,top:38,bottom:48},
+    grid:{left:210,right:28,top:38,bottom:48},
     legend:{top:4,right:82,textStyle:{color:THEME.muted,fontSize:9}},
-    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{const index=params[0].dataIndex,component=componentModel.components[index];return `<b>${esc(componentLabel(component.key, component.label))}</b><br>${currentLabel}: ${formatMoney(component.current)} · ${formatPct(component.currentShare)} ${esc(t('detail.ofPool'))}<br>${comparisonLabel}: ${componentModel.hasComparison ? `${formatMoney(component.comparison)} · ${formatPct(component.comparisonShare)} ${esc(t('detail.ofPool'))}` : '—'}`;}},
+    tooltip:{...tooltipStyle(),trigger:'axis',axisPointer:{type:'shadow'},formatter:params=>{
+      const index=params[0].dataIndex,component=componentModel.components[index];
+      const sourceNote=status=>status==='structural-placeholder'?`<br><span style="color:${THEME.goldDark}">${esc(t('detail.structuralPlaceholder'))}</span>`:'';
+      const breakdown=(items,label)=>items.length?`<br><span style="color:${THEME.muted}">${esc(label)}: ${items.map(item=>`${esc(pnlLabel(item.key,item.key))} ${Number.isFinite(item.spend)?formatMoney(item.spend):'—'}`).join(' · ')}</span>`:'';
+      const currentBreakdown=breakdown(component.currentBreakdown,currentLabel);
+      const comparisonBreakdown=componentModel.hasComparison?breakdown(component.comparisonBreakdown,comparisonLabel):'';
+      return `<b>${esc(pnlLabel(component.key,component.label))}</b><br>${currentLabel}: ${Number.isFinite(component.current)?formatMoney(component.current):'—'} · ${Number.isFinite(component.currentShare)?formatPct(component.currentShare):'—'} ${esc(t('detail.ofPool'))}${sourceNote(component.currentSourceStatus)}${currentBreakdown}<br>${comparisonLabel}: ${componentModel.hasComparison?(Number.isFinite(component.comparison)?`${formatMoney(component.comparison)} · ${Number.isFinite(component.comparisonShare)?formatPct(component.comparisonShare):'—'} ${esc(t('detail.ofPool'))}`:'—'):'—'}${sourceNote(component.comparisonSourceStatus)}${comparisonBreakdown}`;
+    }},
     xAxis:{type:'value',min:0,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8,formatter:formatMoney},splitLine:{lineStyle:{color:THEME.grid}}},
     yAxis:{type:'category',inverse:true,data:labels,axisLine:{show:false},axisTick:{show:false},axisLabel:{color:THEME.muted,fontSize:8.5}},
     series:[
@@ -1734,12 +1726,10 @@ function disposeAllCharts() {
 
 function resetInteractionUi() {
   ['regionFilter','cityFilter','statusFilter','tierFilter'].forEach(id => { $(id).value = ''; });
-  $('storeSearch').value = '';
-  $('rankingMetric').value = state.portfolioMetric;
-  setSegment('snapshotToggle', state.snapshot);
-  setSegment('portfolioView', state.portfolioView);
+  $('rankingMetric').value = state.contributionMetric;
+  setSegment('portfolioLens', state.portfolioLens);
   setSegment('bridgeModeToggle', state.bridgeMode);
-  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioView));
+  document.querySelectorAll('.portfolio-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.portfolioPanel === state.portfolioLens));
 }
 
 function activateDataSource(candidate) {
@@ -1819,13 +1809,18 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   openPnlSnapshot(pnlLine.dataset.pnlLine);
 });
-$('portfolioView').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioView=button.dataset.value;setSegment('portfolioView',state.portfolioView);document.querySelectorAll('.portfolio-panel').forEach(panel=>panel.classList.toggle('active',panel.dataset.portfolioPanel===state.portfolioView));renderPortfolio();});
-$('snapshotToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.snapshot=button.dataset.value;setSegment('snapshotToggle',state.snapshot);renderPortfolio();});
+$('portfolioLens').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.portfolioLens=['performance','efficiency','contribution'].includes(button.dataset.value)?button.dataset.value:'performance';setSegment('portfolioLens',state.portfolioLens);renderPortfolio();});
 $('bridgeModeToggle').addEventListener('click',event=>{const button=event.target.closest('button[data-value]');if(!button)return;state.bridgeMode=button.dataset.value==='ratio'?'ratio':'amount';setSegment('bridgeModeToggle',state.bridgeMode);renderVariance();});
-$('quadrantSummary').addEventListener('click',event=>{const button=event.target.closest('button[data-quadrant]');if(!button||state.snapshot==='movement')return;const next=button.dataset.quadrant;state.selectedQuadrant=state.selectedQuadrant===next&&next!=='all'?'all':next;renderProductivityQuadrant();});
-$('storeSearch').addEventListener('input',event=>{state.search=event.target.value.trim().toLowerCase();if(state.portfolioView==='productivity')renderProductivityQuadrant();});
-$('rankingMetric').addEventListener('change',event=>{setPortfolioMetric(event.target.value);renderStoreRanking();});
+$('performanceSummary').addEventListener('click',event=>{const button=event.target.closest('button[data-performance-state]');if(!button)return;const next=button.dataset.performanceState;state.performanceSelection=state.performanceSelection===next?null:next;renderPerformancePortfolio();});
+$('rankingMetric').addEventListener('change',event=>{setContributionMetric(event.target.value);renderStoreRanking();});
 $('detailStoreSelect').addEventListener('change',event=>{state.selectedStore=event.target.value;renderDetail();});
+$('portfolioStoreSearch').addEventListener('change',event=>{selectPortfolioStore(event.target.value);});
+$('portfolioStoreSearch').addEventListener('keydown',event=>{
+  if(event.key!=='Enter')return;
+  event.preventDefault();
+  selectPortfolioStore(event.target.value);
+});
+$('portfolioStoreSearch').addEventListener('search',event=>{if(!event.target.value)renderPortfolioStoreSearch();});
 
 $('regionFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
 $('statusFilter').addEventListener('change',()=>{refreshCityOptions();renderAll();});
@@ -1916,7 +1911,7 @@ function rerenderLanguage() {
 window.addEventListener('retail:languagechange', rerenderLanguage);
 window.addEventListener('resize',()=>Object.values(state.charts).forEach(c=>c.resize()));
 window.addEventListener('pagehide',()=>{state.book=null;state.model=null;state.service=null;state.matrix=[];state.records=[];state.periods=[];state.headers=[];state.warnings=[];});
-if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle||!ProductivityQuadrant||!StoreDetailModel||!I18n){
+if(!window.XLSX||!window.echarts||!window.RetailDashboardData||!DataPreparationUI||!SourceLifecycle||!StorePortfolio||!StoreDetailModel||!I18n){
   if (window.RetailStartupGuard) window.RetailStartupGuard.fail('Spreadsheet, chart, or local application library unavailable');
   else setNotice('error',t('error.initialization'),t('error.libraryUnavailable'));
 } else if (IS_INTERNAL_EDGE) {

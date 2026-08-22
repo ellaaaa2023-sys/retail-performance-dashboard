@@ -24,9 +24,11 @@ Trace Customer Contribution movement from the P&L snapshot to a reconciled bridg
 
 ### Store Portfolio
 
-Compare store positioning and movement while surfacing quadrant transitions and portfolio risk context.
+Screen stores through Performance, Headcount Efficiency, and Variance Contribution lenses.
 
-![Store Portfolio movement view with trajectory chart and movement summary](docs/images/store-portfolio.jpg)
+![Store Portfolio preview from the prior interface](docs/images/store-portfolio.jpg)
+
+> Screenshot update needed: the current product uses the new three-lens Store Portfolio interface.
 
 ### Store Detail
 
@@ -46,8 +48,8 @@ The demo presents `2026 S1 vs 2025 S1` across 160 Current stores and 150 Compari
 
 - **Executive Overview** — Portfolio KPIs, period movement, and rule-based management signals.
 - **P&L Variance** — P&L snapshot, reconciled Customer Contribution bridge, and positive/negative driver ranking.
-- **Store Portfolio** — Current, Comparison, and Movement views; A&P × Customer Contribution quadrants; risk stores; and variance ranking.
-- **Store Detail** — Existing and New Store profiles with KPIs, detailed P&L, A&P composition, and component movement.
+- **Store Portfolio** — Zero-based CC% × Productivity Evolution performance map, horizontal Productivity × DA HC screening lanes, and existing store variance ranking.
+- **Store Detail** — Existing and New Store profiles with KPIs, detailed P&L including Current/LY DA HC, and A&P composition.
 - **Interactive filters** — Region, City, Status, and Store Productivity Tier.
 - **Source switching** — Replace the demo with an uploaded workbook, reset selections without changing the source, or clear the upload to return to Demo.
 - **Bilingual interface** — Switch between English and Chinese without changing the active page, filters, data source, portfolio view, or selected store.
@@ -129,7 +131,7 @@ pnpm run check
 pnpm test
 ```
 
-The suite covers Core Data, Cleaning, Data Preparation, Quadrant / Movement / Risk, Store Detail, the deterministic Demo artifact, and Demo / Upload source lifecycle.
+The suite covers Core Data, Finance contracts, Cleaning, Data Preparation, Store Portfolio performance/efficiency/contribution contracts, Store Detail, the deterministic Demo artifact, and Demo / Upload source lifecycle.
 
 Regenerate the Demo artifact with:
 
@@ -149,7 +151,7 @@ js/data/core-data.js
 js/data/data-preparation-ui.js
 js/data/source-lifecycle.js
 js/data/demo-data.js
-js/productivity-quadrant.js
+js/store-portfolio.js
 js/store-detail.js
 scripts/generate-demo-data.js
 sample_data/Retail_Performance_Dashboard_Mock_Data.xlsx

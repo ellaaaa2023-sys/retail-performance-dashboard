@@ -62,8 +62,9 @@ const runtimeSource = [fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8'),
 const referencedKeys = Array.from(indexSource.matchAll(/data-i18n(?:-aria-label|-placeholder)?="([^"]+)"/g), match => match[1])
   .concat(Array.from(runtimeSource.matchAll(/\bt\(['"]([^'"]+)['"]/g), match => match[1]));
 check(referencedKeys.every(key => Object.prototype.hasOwnProperty.call(translations.en, key)), 'Static HTML and literal runtime translation keys are complete');
-check(translations.en['quadrant.Star'] === 'Star' && translations.zh['quadrant.Star'] === '高效门店'
-  && translations.en['pnl.specificAP'] === 'Specific A&P' && translations.zh['pnl.specificAP'] === '专项广告及促销', 'Canonical finance and quadrant terminology is consistent');
+check(translations.en['performanceState.healthy-growth'] === 'Healthy Growth'
+  && translations.zh['performanceState.healthy-growth'] === '健康增长'
+  && translations.en['pnl.specificAP'] === 'Specific A&P' && translations.zh['pnl.specificAP'] === '专项广告及促销', 'Canonical finance and performance-state terminology is consistent');
 check(translations.zh['shell.path'].includes('损益表')
   && translations.zh['prep.summaryPnl'] === '损益汇总表'
   && translations.zh['pnl.netSales'] === '合并净销售额'
@@ -76,7 +77,9 @@ check(translations.zh['shell.path'].includes('损益表')
   && translations.zh['pnl.oca'] === '其他客户核销'
   && translations.zh['metric.storeProductivity'] === '门店总单产'
   && translations.zh['metric.productivityEvolPct'] === '门店单产变化率'
-  && translations.zh['metric.daHeadcount'] === '销售人员人数', 'Approved Chinese finance terminology is exact');
+  && translations.zh['metric.daHeadcount'] === '销售人员人数'
+  && translations.en['pnl.totalNonSpecificCosts'] === 'Total non-specific costs'
+  && translations.zh['pnl.totalNonSpecificCosts'] === '非专项费用合计', 'Approved Chinese finance terminology is exact');
 check(Object.prototype.hasOwnProperty.call(translations.zh, 'pnl.otherAP')
   && Object.prototype.hasOwnProperty.call(translations.zh, 'component.otherAP')
   && translations.zh['pnl.otherAP'] === '其他'

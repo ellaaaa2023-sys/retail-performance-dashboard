@@ -287,12 +287,12 @@ check(38, 'Missing productivityTier makes only the tier capability unavailable',
   assert.deepEqual(result.capabilities.tierFilter.missing, ['productivityTier']);
 });
 
-check(39, 'Missing storeProductivity preserves investment quadrant and partially supports risk', () => {
+check(39, 'Missing storeProductivity disables Performance and Headcount Efficiency without blocking cleaning', () => {
   const result = scanWithOptional(['Specific A&P'], [-50]);
-  assert.equal(result.capabilities.investmentQuadrant.status, 'available');
+  assert.equal(result.capabilities.performancePortfolio.status, 'unavailable');
   assert.equal(result.capabilities.productivitySummary.status, 'unavailable');
-  assert.equal(result.capabilities.fullProductivityRisk.status, 'partial');
-  assert.deepEqual(result.capabilities.fullProductivityRisk.missing, ['storeProductivity']);
+  assert.equal(result.capabilities.headcountEfficiency.status, 'unavailable');
+  assert.equal(result.capabilities.headcountEfficiency.missing.includes('storeProductivity'), true);
 });
 
 check(40, 'A partial A&P component set produces a partial capability', () => {

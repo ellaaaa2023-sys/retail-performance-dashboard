@@ -28,6 +28,9 @@ if (html.indexOf('./js/data/internal-mode.js') > html.indexOf('./js/i18n.js')) t
 if (!html.includes('Ready for local workbook')) throw new Error('Internal index is not Upload-first');
 if (/id="languageSwitch"|class="language-switch"/.test(html)) throw new Error('Internal index must not contain a language switch');
 if (!html.includes('id="bridgeModeToggle"')) throw new Error('Internal package is missing the Customer Contribution Bridge toggle');
+if (!html.includes('id="portfolioLens"') || !html.includes('data-value="performance"') || !html.includes('data-value="efficiency"') || !html.includes('data-value="contribution"')) throw new Error('Internal package is missing the three Page 03 lenses');
+if (html.includes('productivity-quadrant.js') || files.includes('js/productivity-quadrant.js')) throw new Error('Internal package must not include the obsolete quadrant helper');
+if (/id="(?:snapshotToggle|productivityChart|riskStoreBody|portfolioView)"/.test(html)) throw new Error('Internal package still contains obsolete Page 03 controls');
 if (!html.includes('id="apTotalSummary"')) throw new Error('Internal package is missing the formal Total A&P summary');
 if (html.includes('id="apMovementChart"')) throw new Error('Internal package must not render the removed A&P Movement Bridge');
 if (files.some(file => forbidden.some(pattern => pattern.test(file)))) throw new Error('Internal package contains a prohibited file');
